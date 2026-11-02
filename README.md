@@ -57,13 +57,40 @@ npx skills add silbaram/ai-agent-studio --skill '*' --agent codex --copy
 - 받아 둔 이 저장소의 로컬 사본(작업 중인 브랜치 등)으로 설치하려면 `silbaram/ai-agent-studio` 대신 그 폴더 경로를 쓴다.
 - Node.js 없이 설치하려면 이 저장소의 `skills/` 안 네 폴더를 위 표의 설치 위치로 그대로 복사한다.
 
-설치 후 도구는 설치 위치에서 실행한다. 예를 들어 Claude Code에서 게임 프로젝트의 데이터를 뷰어로 보려면 게임 프로젝트 폴더에서 다음을 실행한다(Windows는 `python` 대신 `py`).
+설치 후 도구는 설치 위치에서 실행한다. 예를 들어 Claude Code에서 게임 프로젝트의 데이터를 뷰어로 보려면 게임 프로젝트 폴더에서 다음을 실행한다(Windows는 아래 표 참고).
 
 ```bash
 python .claude/skills/studio-data/scripts/studio.py view .
 ```
 
 설치 직후처럼 데이터 파일이 아직 없어도 뷰어는 열린다. 화면에 지켜보는 위치가 안내되고, 컨셉 탐색 등으로 `design/concepts.json` 같은 파일이 생기면 새로고침 없이 자동으로 나타난다.
+
+### Windows에서 쓸 때 (PowerShell과 WSL)
+
+Windows에서는 어느 터미널을 쓰는지에 따라 명령이 다르다. 프롬프트가 `PS C:\...>`이면 PowerShell, `사용자@PC이름:/mnt/c/...$`이면 WSL(Windows 안의 리눅스)이다.
+
+| | PowerShell | WSL |
+| --- | --- | --- |
+| Python 실행 | `py` | `python3` |
+| 경로 구분자 | `\` (`/`도 대체로 된다) | `/`만. `\`는 경로로 읽히지 않는다 |
+| Python이 없을 때 | [python.org](https://www.python.org/downloads/)에서 설치 | `sudo apt install python3` |
+| 뷰어 열기 | 브라우저가 자동으로 열린다 | 자동으로 열리지 않을 수 있다. 아래처럼 `--no-browser`로 켜고 Windows 브라우저에서 `http://localhost:8765/`를 연다 |
+
+PowerShell:
+
+```bash
+py .claude\skills\studio-data\scripts\studio.py view .
+```
+
+WSL:
+
+```bash
+python3 .claude/skills/studio-data/scripts/studio.py view . --no-browser
+```
+
+- WSL2는 기본 설정에서 `localhost`를 Windows로 전달하므로 Windows 브라우저에서 바로 열린다. 열리지 않으면 `--port`로 다른 포트를 지정해 본다.
+- 설치(`npx skills add`)와 실행은 같은 쪽(PowerShell 또는 WSL)에서 하는 것이 헷갈리지 않는다. 같은 폴더라도 PowerShell에서는 `C:\Users\...`, WSL에서는 `/mnt/c/Users/...`로 보인다.
+- Claude Code나 Codex를 WSL에서 실행했다면, 에이전트가 도구를 실행할 때도 `python3`과 `/` 경로를 쓴다.
 
 ## 사용 예시
 
