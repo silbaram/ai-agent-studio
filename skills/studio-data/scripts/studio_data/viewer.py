@@ -13,9 +13,22 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from . import common as c
 from . import datasets
 
 PAGE = Path(__file__).resolve().parents[2] / "assets" / "viewer.html"
+
+
+def watched_folders(targets: list[Path]) -> list[str]:
+    """뷰어가 데이터 파일을 찾는 위치. 폴더는 그 자신과 design/·data/(아직 없어도 생기면 찾는다)."""
+    out = []
+    for t in (Path(x) for x in targets):
+        if t.is_dir():
+            out.append(str(t))
+            out.extend(str(t / s) for s in c.SUBFOLDERS)
+        else:
+            out.append(str(t))
+    return out
 
 
 def _version(entries: list[dict]) -> str:
@@ -24,7 +37,7 @@ def _version(entries: list[dict]) -> str:
 
 def snapshot(targets: list[Path]) -> dict:
     entries = datasets.validate_all(datasets.scan(targets))
-    return {"mode": "server", "version": _version(entries), "datasets": entries}
+    return {"mode": "server", "version": _version(entries), "watched": watched_folders(targets), "datasets": entries}
 
 
 class SnapshotCache:
@@ -44,7 +57,8 @@ class SnapshotCache:
             if key != self.key:
                 datasets.validate_all(entries)
                 self.validations += 1
-                self.body = json.dumps({"mode": "server", "version": key, "datasets": entries}, ensure_ascii=False).encode("utf-8")
+                self.body = json.dumps({"mode": "server", "version": key, "watched": watched_folders(self.targets),
+                                        "datasets": entries}, ensure_ascii=False).encode("utf-8")
                 self.key = key
             return self.body
 

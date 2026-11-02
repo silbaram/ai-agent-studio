@@ -3,7 +3,8 @@
 종료 코드
   0  통과
   1  오류, 또는 --strict 경고, 또는 --fail-on-assumed 가정 항목
-  2  사용법 오류(경로 없음, 읽을 수 없는 파일, 데이터 없음, 설정 오류, 서버를 열 수 없음)
+  2  사용법 오류(경로 없음, 읽을 수 없는 파일, check할 데이터 없음, 설정 오류, 서버를 열 수 없음)
+     view는 데이터가 아직 없어도 열리고, 파일이 생기면 화면에 자동으로 나타난다.
 """
 from __future__ import annotations
 
@@ -33,9 +34,6 @@ def cmd_view(args) -> int:
         return 2
     targets = [Path(p).resolve() for p in args.paths]
     found = datasets.discover(targets)
-    if not found:
-        print("컨셉·아이템·영구 강화·적 데이터 파일을 찾지 못했습니다.", file=sys.stderr)
-        return 2
     try:
         server = viewer.make_server(targets, args.host, args.port)
     except OSError as exc:
@@ -44,9 +42,15 @@ def cmd_view(args) -> int:
     if args.host not in ("127.0.0.1", "localhost"):
         print(f"주의: {args.host}에 열었습니다. 같은 네트워크의 다른 기기에서 접속할 수 있습니다.")
     print(f"데이터 뷰어: {viewer.url_of(server)}")
-    for f in found:
-        print(f"  - {f}")
-    print("파일을 고치면 화면이 자동으로 갱신됩니다. 종료: Ctrl+C")
+    if found:
+        for f in found:
+            print(f"  - {f}")
+        print("파일을 고치면 화면이 자동으로 갱신됩니다. 종료: Ctrl+C")
+    else:
+        print("아직 데이터 파일이 없습니다. 지켜보는 위치:")
+        for w in viewer.watched_folders(targets):
+            print(f"  - {w}")
+        print("design/concepts.json, data/items.json 같은 파일이 생기면 화면에 자동으로 나타납니다. 종료: Ctrl+C")
     viewer.serve(server, open_browser=not args.no_browser)
     return 0
 

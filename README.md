@@ -63,7 +63,7 @@ npx skills add silbaram/ai-agent-studio --skill '*' --agent codex --copy
 python .claude/skills/studio-data/scripts/studio.py view .
 ```
 
-뷰어는 프로젝트의 `design/`·`data/`에 데이터 파일이 하나 이상 있어야 열린다. 설치 직후에는 아직 파일이 없으므로, 컨셉 탐색 등으로 `design/concepts.json` 같은 파일이 생긴 뒤 실행한다.
+설치 직후처럼 데이터 파일이 아직 없어도 뷰어는 열린다. 화면에 지켜보는 위치가 안내되고, 컨셉 탐색 등으로 `design/concepts.json` 같은 파일이 생기면 새로고침 없이 자동으로 나타난다.
 
 ## 사용 예시
 
