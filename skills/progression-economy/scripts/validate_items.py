@@ -20,6 +20,10 @@ from pathlib import Path
 
 ID_PATTERN = re.compile(r"^[a-z0-9_]+$")
 STAT_PREFIX = "stat."
+STATUSES = ("proposed", "approved", "cut")
+PROVENANCE_KINDS = {"assumed": "assumed", "computed": "computed", "measured": "measured",
+                    "가정": "assumed", "계산": "computed", "측정": "measured"}
+TEXT_FIELDS = ("name", "effect", "intent")
 
 
 def load(path: Path) -> dict:
@@ -61,6 +65,9 @@ def _load_csv(path: Path) -> list[dict]:
                     item[key] = _num(raw) if raw else None
                 elif key == "unique_effect":
                     item[key] = raw.lower() in ("1", "true", "yes", "y")
+                elif key.startswith("provenance_"):
+                    if raw != "":
+                        item.setdefault("provenance", {})[key[len("provenance_"):]] = raw
                 elif raw != "":
                     item[key] = raw
             items.append(item)
@@ -103,9 +110,43 @@ def check_schema(items: list, errors: list) -> list[dict]:
         if not isinstance(stats, dict) or not all(isinstance(k, str) and _is_number(v) for k, v in stats.items()):
             errors.append({"code": "schema", "where": where, "message": "stats는 {이름: 수} 형태여야 합니다."})
             ok = False
+        for f in TEXT_FIELDS:
+            if f in item and not isinstance(item[f], str):
+                errors.append({"code": "schema", "where": where, "message": f"{f}는 문자열이어야 합니다."})
+                ok = False
+        status = item.get("status")
+        if status is not None and status not in STATUSES:
+            errors.append({"code": "schema", "where": where, "message": f"status는 {', '.join(STATUSES)} 중 하나입니다: {status!r}"})
+            ok = False
+        if not _check_provenance(item, where, errors):
+            ok = False
         if ok:
             valid.append(item)
     return valid
+
+
+def _check_provenance(item: dict, where: str, errors: list) -> bool:
+    prov = item.get("provenance")
+    if prov is None:
+        return True
+    if not isinstance(prov, dict):
+        errors.append({"code": "provenance", "where": where, "message": "provenance는 {kind, source, note} 객체여야 합니다."})
+        return False
+    kind = PROVENANCE_KINDS.get(prov.get("kind"))
+    if kind is None:
+        errors.append({"code": "provenance", "where": where, "message": f"provenance.kind는 assumed/computed/measured(가정/계산/측정) 중 하나입니다: {prov.get('kind')!r}"})
+        return False
+    source = prov.get("source")
+    if kind in ("computed", "measured") and not (isinstance(source, str) and source.strip()):
+        errors.append({"code": "provenance", "where": where, "message": f"provenance.kind가 {kind}이면 source가 필요합니다."})
+        return False
+    prov["kind"] = kind
+    return True
+
+
+def provenance_kind(item: dict) -> str:
+    prov = item.get("provenance")
+    return prov["kind"] if isinstance(prov, dict) and "kind" in prov else "unspecified"
 
 
 def budget(item: dict, weights: dict) -> float:
@@ -189,6 +230,7 @@ def check_drop_tables(tables: dict, items_by_id: dict, errors: list, warnings: l
             errors.append({"code": "schema", "where": tid, "message": "entries 배열이 필요합니다."})
             continue
         weights, bad = [], False
+        cut_refs = set()
         for n, e in enumerate(entries):
             w = e.get("weight") if isinstance(e, dict) else None
             if not (_is_number(w) and w > 0):
@@ -199,10 +241,14 @@ def check_drop_tables(tables: dict, items_by_id: dict, errors: list, warnings: l
             if ref is not None and ref not in items_by_id:
                 errors.append({"code": "unknown_item", "where": f"{tid}.entries[{n}]", "message": f"없는 아이템입니다: {ref}"})
                 bad = True
+            if ref is not None and items_by_id.get(ref, {}).get("status") == "cut":
+                cut_refs.add(ref)
             if ref is None and "rarity" not in e:
                 errors.append({"code": "schema", "where": f"{tid}.entries[{n}]", "message": "item 또는 rarity가 필요합니다."})
                 bad = True
             weights.append((e, w))
+        for ref in sorted(cut_refs):
+            warnings.append({"code": "cut_item_referenced", "where": tid, "message": f"삭제(cut) 상태의 아이템을 드랍합니다: {ref}"})
         if bad:
             continue
         total = sum(w for _, w in weights)
@@ -242,11 +288,22 @@ def validate(data: dict) -> dict:
     weights = data.get("stat_weights", {}) or {}
     items = check_schema(raw_items, errors)
     by_id = {i["id"]: i for i in items}
-    tier_summary = check_tiers(items, weights, warnings)
-    not_assessed = check_dominance(items, warnings)
+    active = [i for i in items if i.get("status") != "cut"]
+    tier_summary = check_tiers(active, weights, warnings)
+    not_assessed = check_dominance(active, warnings)
     drops = check_drop_tables(data.get("drop_tables", {}) or {}, by_id, errors, warnings)
+    status_counts = {s: 0 for s in STATUSES + ("unspecified",)}
+    for i in items:
+        status_counts[i.get("status") or "unspecified"] += 1
+    prov_counts = {k: 0 for k in ("assumed", "computed", "measured", "unspecified")}
+    for i in active:
+        prov_counts[provenance_kind(i)] += 1
     return {
         "items": len(items),
+        "status_counts": status_counts,
+        "provenance_counts": prov_counts,
+        "unverified_items": sorted(i["id"] for i in active if provenance_kind(i) in ("assumed", "unspecified")),
+        "item_scores": {i["id"]: round(budget(i, weights), 4) for i in items},
         "tier_mean_budget": tier_summary,
         "dominance_not_assessed": not_assessed,
         "drop_tables": drops,
@@ -263,6 +320,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="아이템 데이터와 드랍 테이블을 검사합니다.")
     ap.add_argument("path", help="items JSON 또는 CSV")
     ap.add_argument("--strict", action="store_true", help="경고도 실패로 처리합니다.")
+    ap.add_argument("--fail-on-assumed", action="store_true", help="삭제되지 않은 아이템 중 출처가 가정이거나 비어 있는 것이 있으면 실패합니다 (확정 판정 전 게이트).")
     ap.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
     ap.add_argument("--out", help="JSON 보고서를 이 경로에 저장합니다. 문서에서 [계산: 이 경로]로 인용합니다.")
     args = ap.parse_args(argv)
@@ -272,7 +330,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"입력을 읽을 수 없습니다: {exc}", file=sys.stderr)
         return 2
     result = validate(data)
-    failed = bool(result["errors"]) or (args.strict and bool(result["warnings"]))
+    gate_failed = args.fail_on_assumed and bool(result["unverified_items"])
+    failed = bool(result["errors"]) or (args.strict and bool(result["warnings"])) or gate_failed
     result["status"] = "fail" if failed else "pass"
     result["source"] = args.path
     if args.out:
@@ -293,6 +352,11 @@ def main(argv: list[str] | None = None) -> int:
             print(line)
         if result["dominance_not_assessed"]:
             print("열위 판정 제외(고유 효과): " + ", ".join(result["dominance_not_assessed"]))
+        if gate_failed:
+            print("gate: 출처가 가정이거나 비어 있는 아이템: " + ", ".join(result["unverified_items"]))
+        sc, pc = result["status_counts"], result["provenance_counts"]
+        print(f"상태: 제안 {sc['proposed']} · 승인 {sc['approved']} · 삭제 {sc['cut']} · 미지정 {sc['unspecified']}")
+        print(f"출처(삭제 제외): 가정 {pc['assumed']} · 계산 {pc['computed']} · 측정 {pc['measured']} · 미지정 {pc['unspecified']}")
         print(f"아이템 {result['items']}개 · 오류 {len(result['errors'])} · 경고 {len(result['warnings'])} → {result['status'].upper()}")
     return 1 if failed else 0
 

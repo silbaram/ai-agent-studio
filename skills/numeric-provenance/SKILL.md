@@ -25,6 +25,7 @@ description: "Tags every tunable number in game design documents as assumed, com
 4. **확정 판정 전 게이트.** "밸런스 확정", "난이도 OK" 같은 판정은 `--fail-on-assumed` 검사를 통과한 뒤에만 한다. 통과하지 못하면 남은 `[가정]` 목록과 함께 "미확정"으로 보고한다.
 5. **값을 바꾸면 태그도 다시 본다.** `[계산]`이나 `[측정]` 값을 손으로 고치면 근거가 사라지므로 `[가정]`으로 내린다.
 6. **사람의 판단은 `[가정]`이다.** 기획자가 의도적으로 정한 값도 검증 전에는 `[가정: 기획 의도]`로 표시한다. 의도를 존중하되 검증 상태와 섞지 않는다.
+7. **데이터 파일은 필드로 표시한다.** 아이템처럼 JSON/CSV 원본에 있는 수치는 md 태그 대신 항목의 `provenance` 필드(`assumed`/`computed`/`measured`)로 표시하고 [progression-economy](../progression-economy/SKILL.md)의 `--fail-on-assumed`로 검사한다. 같은 수치를 md에 옮겨 적지 않는다.
 
 ## 검사
 

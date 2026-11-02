@@ -25,6 +25,7 @@ def _load(name, rel):
 
 vi = _load("validate_items", "scripts/validate_items.py")
 sm = _load("simulate_meta", "scripts/simulate_meta.py")
+viewer = _load("view_items", "scripts/view_items.py")
 
 
 def item(iid, slot="weapon", tier=1, price=None, **stats):
@@ -113,6 +114,44 @@ class ItemBalance(unittest.TestCase):
         self.assertEqual(r["dominance_not_assessed"], ["charm"])
 
 
+class ItemMetadata(unittest.TestCase):
+    def test_status_and_provenance_are_validated(self):
+        bad_status = item("a"); bad_status["status"] = "maybe"
+        bad_kind = item("b"); bad_kind["provenance"] = {"kind": "guess"}
+        no_source = item("c"); no_source["provenance"] = {"kind": "measured"}
+        bad_name = item("d"); bad_name["name"] = 3
+        r = vi.validate({"items": [bad_status, bad_kind, no_source, bad_name]})
+        self.assertEqual(sorted(codes(r["errors"])), ["provenance", "provenance", "schema", "schema"])
+        self.assertEqual(r["items"], 0)
+
+    def test_korean_provenance_aliases(self):
+        a = item("a"); a["provenance"] = {"kind": "계산", "source": "sim/a.json"}
+        r = vi.validate({"items": [a]})
+        self.assertEqual(r["errors"], [])
+        self.assertEqual(r["provenance_counts"]["computed"], 1)
+
+    def test_cut_items_are_excluded_from_comparisons(self):
+        weak = item("weak", price=50, attack=5); weak["status"] = "cut"
+        low = item("low_t2", tier=2, attack=1); low["status"] = "cut"
+        r = vi.validate({"items": [weak, low, item("strong", price=40, attack=6)]})
+        self.assertEqual(r["warnings"], [])
+        self.assertEqual(r["status_counts"]["cut"], 2)
+
+    def test_dropping_a_cut_item_warns(self):
+        gone = item("gone"); gone["status"] = "cut"; gone["rarity"] = "rare"
+        r = vi.validate({"items": [gone], "drop_tables": {"t": {"entries": [{"item": "gone", "weight": 1}]}}})
+        self.assertEqual([(w["code"], w["where"]) for w in r["warnings"]], [("cut_item_referenced", "t")])
+
+    def test_unverified_items_exclude_cut_and_verified(self):
+        a = item("a"); a["provenance"] = {"kind": "assumed"}
+        b = item("b", attack=1); b["provenance"] = {"kind": "measured", "source": "playtest-1"}
+        c = item("c", attack=2)
+        d = item("d", attack=3); d["status"] = "cut"
+        r = vi.validate({"items": [a, b, c, d]})
+        self.assertEqual(r["unverified_items"], ["a", "c"])
+        self.assertEqual(r["provenance_counts"], {"assumed": 1, "computed": 0, "measured": 1, "unspecified": 1})
+
+
 class DropTables(unittest.TestCase):
     def test_capped_expected_draws_matches_closed_form(self):
         self.assertAlmostEqual(vi.capped_expected_draws(0.05, 30), (1 - 0.95 ** 30) / 0.05)
@@ -173,11 +212,101 @@ class ItemCli(unittest.TestCase):
             self.run_cli(str(path), "--out", str(report))
             self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["items"], 2)
 
+    def test_fail_on_assumed_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "items.json"
+            a = item("a"); a["provenance"] = {"kind": "assumed"}
+            path.write_text(json.dumps({"items": [a]}), encoding="utf-8")
+            self.assertEqual(self.run_cli(str(path))[0], 0)
+            code, out = self.run_cli(str(path), "--fail-on-assumed")
+            self.assertEqual(code, 1)
+            self.assertIn("gate", out)
+            a["provenance"] = {"kind": "computed", "source": "sim/x.json"}
+            path.write_text(json.dumps({"items": [a]}), encoding="utf-8")
+            self.assertEqual(self.run_cli(str(path), "--fail-on-assumed")[0], 0)
+
+    def test_csv_metadata_columns(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "items.csv"
+            path.write_text(
+                "id,name,slot,tier,status,provenance_kind,provenance_source,stat.attack\n"
+                "axe,도끼,weapon,1,proposed,measured,playtest-2,5\n", encoding="utf-8")
+            data = vi.load(path)
+            self.assertEqual(data["items"][0]["provenance"], {"kind": "measured", "source": "playtest-2"})
+            r = vi.validate(data)
+            self.assertEqual((r["errors"], r["status_counts"]["proposed"]), ([], 1))
+
     def test_unreadable_input_is_usage_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             bad = Path(tmp) / "bad.json"
             bad.write_text("{not json", encoding="utf-8")
             self.assertEqual(self.run_cli(str(bad))[0], 2)
+
+
+class Viewer(unittest.TestCase):
+    def setUp(self):
+        import threading
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "items.json"
+        self.path.write_text(json.dumps({"items": [item("a", attack=1)]}), encoding="utf-8")
+        self.server = viewer.make_server(self.path, port=0)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.base = "http://127.0.0.1:%d" % self.server.server_address[1]
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.tmp.cleanup()
+
+    def get(self, route):
+        import urllib.error
+        import urllib.request
+        try:
+            with urllib.request.urlopen(self.base + route, timeout=5) as res:
+                return res.status, res.headers.get("Content-Type"), res.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.headers.get("Content-Type"), exc.read()
+
+    def api(self):
+        status, ctype, body = self.get("/api/items")
+        self.assertEqual(status, 200)
+        self.assertIn("application/json", ctype)
+        return json.loads(body.decode("utf-8"))
+
+    def test_binds_to_loopback_by_default(self):
+        self.assertEqual(self.server.server_address[0], "127.0.0.1")
+
+    def test_page_is_served(self):
+        status, ctype, body = self.get("/")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", ctype)
+        self.assertIn("/api/items", body.decode("utf-8"))
+
+    def test_api_reads_the_file_fresh_on_every_request(self):
+        first = self.api()
+        self.assertTrue(first["ok"])
+        self.assertEqual([i["id"] for i in first["data"]["items"]], ["a"])
+        self.path.write_text(json.dumps({"items": [item("a", attack=1), item("b", attack=2)]}), encoding="utf-8")
+        second = self.api()
+        self.assertNotEqual(first["version"], second["version"])
+        self.assertEqual(second["report"]["items"], 2)
+
+    def test_api_includes_validation_report(self):
+        self.path.write_text(json.dumps({"items": [item("weak", price=9, attack=1), item("strong", price=5, attack=2)]}), encoding="utf-8")
+        self.assertEqual(codes(self.api()["report"]["warnings"]), ["dominated"])
+
+    def test_broken_file_returns_error_instead_of_crashing(self):
+        self.path.write_text("{ broken", encoding="utf-8")
+        snap = self.api()
+        self.assertFalse(snap["ok"])
+        self.assertIn("형식 오류", snap["error"])
+        self.path.write_text(json.dumps({"items": []}), encoding="utf-8")
+        self.assertTrue(self.api()["ok"])
+
+    def test_other_paths_are_not_served(self):
+        for route in ("/items.json", "/../../etc/passwd", "/assets/item-viewer.html"):
+            self.assertEqual(self.get(route)[0], 404, route)
 
 
 BASE = json.loads((SKILL / "assets/sample-meta.json").read_text(encoding="utf-8"))
