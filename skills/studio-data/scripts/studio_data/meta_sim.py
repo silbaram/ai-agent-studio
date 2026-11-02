@@ -57,7 +57,7 @@ def _load_upgrades_file(name, base_dir: Path | None) -> tuple[list, dict]:
     report = vu.validate(data)
     if report["errors"]:
         first = "; ".join(f"{e['where']}: {e['message']}" for e in report["errors"][:3])
-        raise ConfigError(f"강화 데이터에 오류가 있습니다 ({path}). validate_upgrades.py로 확인하세요. {first}")
+        raise ConfigError(f"강화 데이터에 오류가 있습니다 ({path}). `studio.py check`로 확인하세요. {first}")
     active = [u for u in data["upgrades"] if u.get("status") != "cut"]
     missing = [u["id"] for u in active if u.get("power") is None]
     if missing:

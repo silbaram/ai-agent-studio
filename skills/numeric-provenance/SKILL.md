@@ -38,7 +38,7 @@ python skills/studio-data/scripts/studio.py provenance design/
 - `--check-paths`: 출처가 경로처럼 보이면(슬래시 포함, 또는 `.py`/`.json`/`.csv` 등으로 끝남) 문서 폴더나 현재 폴더 기준으로 파일이 실제 있는지 확인한다.
 - `--json`: 결과를 JSON으로 출력한다.
 
-코드 블록과 인라인 코드 안의 태그는 검사하지 않는다. Python 3.9 이상, 표준 라이브러리만 쓴다.
+코드 블록과 인라인 코드 안의 태그는 검사하지 않는다. 검사 도구는 공용 스킬 [studio-data](../studio-data/SKILL.md)에 있으며 이 스킬과 함께 설치한다.
 
 ## 보고
 

@@ -1,16 +1,6 @@
 # 데이터 형식
 
-아이템, 영구 강화, 적을 종류별 파일 하나씩에 둔다. 권장 배치:
-
-```
-data/
-├─ items.json      ← studio.py check
-├─ upgrades.json   ← studio.py check, studio.py simulate(upgrades_file)
-├─ enemies.json    ← studio.py check (드랍 테이블은 items.json으로 확인)
-└─ meta.json       ← studio.py simulate 설정. 뷰어·check는 건너뛴다
-```
-
-종류는 JSON 최상위 키(`items` / `upgrades` / `enemies`)로 구분한다. CSV는 파일 이름에 `item` / `upgrade` / `enem`이 들어가야 한다.
+아이템, 영구 강화, 적을 종류별 파일 하나씩(`data/items.json`, `data/upgrades.json`, `data/enemies.json`)에 둔다. 프로젝트 배치와 종류 판별 규칙은 [studio-data](../../studio-data/SKILL.md#프로젝트-배치)를 따른다. CSV는 파일 이름에 `item` / `upgrade` / `enem`이 들어가야 종류를 알 수 있다.
 
 ## 공통 필드
 

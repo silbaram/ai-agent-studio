@@ -26,12 +26,7 @@ description: "Keeps items, permanent upgrades, and enemies in single-source JSON
 - 아이템, 영구 강화, 적의 수치·효과·의도·상태·출처는 **종류별 원본 파일 한 곳**에만 쓴다. 권장 배치는 `data/items.json`, `data/upgrades.json`, `data/enemies.json`. 형식은 [references/data-format.md](references/data-format.md).
 - 시뮬레이터 설정(`data/meta.json`)은 강화 목록을 직접 담지 않고 `"upgrades_file": "upgrades.json"`으로 원본을 가리킨다.
 - 기획 문서(md)는 항목을 `id`로만 언급한다. 공격력·가격·체력 같은 수치를 md에 옮겨 적지 않는다. 옮겨 적으면 원본을 고칠 때 어긋난다.
-- 보기 좋은 정리가 필요하면 문서를 생성하지 않고 뷰어로 원본을 본다.
-  ```bash
-  python skills/studio-data/scripts/studio.py view .
-  ```
-  - **서버 모드(기본)**: 브라우저가 열리고, 프로젝트의 `design/`·`data/` 데이터 파일을 매번 다시 읽고 검사기를 함께 돌린다. 원본을 고치거나 새 파일을 넣으면 화면이 자동으로 갱신된다. 시뮬레이터 설정과 관계없는 JSON은 건너뛴다. 기본으로 이 컴퓨터(127.0.0.1)에서만 열린다.
-  - **파일 모드(보조)**: `studio-data/assets/viewer.html`을 직접 열고 '불러오기'로 JSON을 고른다. 원본에 적힌 값만 보여 주며 검사·점수·확률 계산은 하지 않는다. 화면에 "검사 없음"이 표시된다. Chrome·Edge는 고른 파일이 바뀌면 다시 읽는다. 검사 규칙을 JavaScript로 복제하지 않기 위해 이렇게 나눴다.
+- 보기 좋은 정리가 필요하면 문서를 생성하지 않고 뷰어(`python skills/studio-data/scripts/studio.py view .`)로 원본을 본다. 뷰어 사용법은 [studio-data](../studio-data/SKILL.md#뷰어).
 
 ## 항목 추가·변경 요청
 

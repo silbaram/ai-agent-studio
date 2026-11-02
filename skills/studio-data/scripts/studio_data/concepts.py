@@ -6,12 +6,8 @@
 """
 from __future__ import annotations
 
-import json
-import re
-from pathlib import Path
+from .common import STATUSES, check_identity, is_active
 
-ID_PATTERN = re.compile(r"^[a-z0-9_]+$")
-STATUSES = ("proposed", "approved", "cut")
 STATUS_LABEL = {"proposed": "후보", "approved": "선택", "cut": "제외", "unspecified": "미지정"}
 REQUIRED_TEXT = ("name", "pitch", "core_verb", "decision", "state_read", "skill_expression", "risk")
 POLICY_RESULTS = ("dominates", "competitive", "loses", "unknown")
@@ -31,18 +27,6 @@ def _text(v) -> bool:
 
 def _status(c: dict) -> str:
     return c.get("status") or "unspecified"
-
-
-def _active(c: dict) -> bool:
-    return c.get("status") != "cut"
-
-
-def load(path: Path) -> dict:
-    with Path(path).open(encoding="utf-8") as fh:
-        data = json.load(fh)
-    if not isinstance(data, dict) or not isinstance(data.get("concepts"), list):
-        raise ValueError("컨셉 기록이 아닙니다 (최상위에 concepts 배열이 필요합니다).")
-    return data
 
 
 def check_concept(c: dict, where: str, errors: list, warnings: list) -> bool:
@@ -70,8 +54,8 @@ def check_concept(c: dict, where: str, errors: list, warnings: list) -> bool:
         stress = []
     for n, s in enumerate(stress):
         if not isinstance(s, dict) or not _text(s.get("policy")) or s.get("result") not in POLICY_RESULTS:
-            errors.append({"code": "schema", "where": f"{where}.stress[{n}]",
-                           "message": f"policy(문자열)와 result({', '.join(POLICY_RESULTS)})가 필요합니다."})
+            errors.append({"code": "schema", "where": where,
+                           "message": f"stress[{n}]: policy(문자열)와 result({', '.join(POLICY_RESULTS)})가 필요합니다."})
             ok = False
             continue
         if s["result"] != "unknown" and not _text(s.get("evidence")):
@@ -170,28 +154,15 @@ def validate(data: dict) -> dict:
     if not isinstance(raw, list):
         errors.append({"code": "schema", "where": "concepts", "message": "concepts 배열이 필요합니다."})
         raw = []
-    valid, seen = [], set()
-    for idx, c in enumerate(raw):
-        where = f"concepts[{idx}]"
-        if not isinstance(c, dict):
-            errors.append({"code": "schema", "where": where, "message": "컨셉은 객체여야 합니다."})
-            continue
-        cid = c.get("id")
-        if not isinstance(cid, str) or not ID_PATTERN.match(cid):
-            errors.append({"code": "schema", "where": where, "message": f"id는 소문자·숫자·밑줄만 씁니다: {cid!r}"})
-            continue
-        if cid in seen:
-            errors.append({"code": "duplicate_id", "where": cid, "message": "id가 중복됩니다."})
-            continue
-        seen.add(cid)
-        if check_concept(c, cid, errors, warnings):
-            valid.append(c)
+    valid = [c for _, c in check_identity(raw, "concepts", errors) if check_concept(c, c["id"], errors, warnings)]
     ids = {c["id"] for c in raw if isinstance(c, dict) and isinstance(c.get("id"), str)}
     for c in valid:
         origin = c.get("origin")
-        if origin is not None and origin != "root" and origin not in ids:
+        if origin is not None and not isinstance(origin, str):
+            errors.append({"code": "schema", "where": c["id"], "message": f"origin은 'root' 또는 원본 컨셉 id(문자열)여야 합니다: {origin!r}"})
+        elif origin is not None and origin != "root" and origin not in ids:
             errors.append({"code": "unknown_origin", "where": c["id"], "message": f"origin '{origin}'가 없습니다. 처음 만든 컨셉은 'root'로 둡니다."})
-    active = [c for c in valid if _active(c)]
+    active = [c for c in valid if is_active(c)]
     for c in active:
         if not _text(c.get("next_test")):
             warnings.append({"code": "next_test_missing", "where": c["id"], "message": "이 가설을 가장 싸게 확인할 다음 시험(next_test)이 없습니다."})
@@ -225,15 +196,25 @@ def table(data: dict, result: dict) -> str:
     """대화에 붙일 비교표(마크다운). 점수 합계 열은 일부러 두지 않는다."""
     rows = ["| id | 이름 | 상태 | 반복 결정 | 숙련 표현 | 단순 전략 결과 | 최대 위험 | 제작 부담(가정) | 다음 시험 |",
             "|---|---|---|---|---|---|---|---|---|"]
-    by_id = {c["id"]: c for c in data.get("concepts", []) if isinstance(c, dict) and isinstance(c.get("id"), str)}
+    by_id: dict = {}
+    for c in data.get("concepts") if isinstance(data.get("concepts"), list) else []:
+        if isinstance(c, dict) and isinstance(c.get("id"), str):
+            by_id.setdefault(c["id"], c)  # 검사기와 같이 첫 항목을 쓴다. 중복은 duplicate_id 오류로 보고된다.
     order = {"approved": 0, "proposed": 1, "unspecified": 2, "cut": 3}
-    for cid in sorted(result["stress_summary"], key=lambda i: (order[_status(by_id[i])], i)):
+    for cid in sorted(result["stress_summary"], key=lambda i: (order.get(_status(by_id[i]), 2), i)):
         c = by_id[cid]
         st = result["stress_summary"][cid]
         stress = " · ".join(f"{RESULT_LABEL[r]} {n}" for r, n in st.items() if n) or "–"
         cost = c.get("cost")
         cost_txt = f"{COST_LABEL[cost['level']]}: {cost['reason']}" if isinstance(cost, dict) and cost.get("level") in COST_LABEL else "–"
         rows.append("| " + " | ".join(_cell(x) for x in (
-            cid, c.get("name"), STATUS_LABEL[_status(c)], c.get("decision"), c.get("skill_expression"),
+            cid, c.get("name"), STATUS_LABEL.get(_status(c), _status(c)), c.get("decision"), c.get("skill_expression"),
             stress, c.get("risk"), cost_txt, c.get("next_test"))) + " |")
     return "\n".join(rows)
+
+
+def print_counts(report: dict) -> None:
+    sc = report["status_counts"]
+    print(f"컨셉 {report['count']}개 · 후보 {sc['proposed']} · 선택 {sc['approved']} · 제외 {sc['cut']}"
+          + (f" · 미지정 {sc['unspecified']}" if sc["unspecified"] else "")
+          + f" · 오류 {len(report['errors'])} · 경고 {len(report['warnings'])}")

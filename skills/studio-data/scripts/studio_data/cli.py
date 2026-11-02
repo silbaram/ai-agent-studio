@@ -14,10 +14,11 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from . import common as c
 from . import concepts, datasets, enemies, items, meta_sim, provenance, upgrades, viewer
 
 EXTRA_PRINTERS = {"items": items.print_extra, "upgrades": upgrades.print_extra, "enemies": enemies.print_extra}
+TABLE_PRINTERS = {"concepts": concepts.table}
+COUNT_PRINTERS = {"concepts": concepts.print_counts}
 
 
 def _missing(paths: list[str]) -> list[str]:
@@ -31,7 +32,7 @@ def cmd_view(args) -> int:
         print("경로를 찾을 수 없습니다: " + ", ".join(missing), file=sys.stderr)
         return 2
     targets = [Path(p).resolve() for p in args.paths]
-    found = c.discover(targets)
+    found = datasets.discover(targets)
     if not found:
         print("컨셉·아이템·영구 강화·적 데이터 파일을 찾지 못했습니다.", file=sys.stderr)
         return 2
@@ -51,14 +52,11 @@ def cmd_view(args) -> int:
 
 
 # ---------- check ----------
-def _print_counts(entry: dict) -> None:
+def _print_data_counts(entry: dict) -> None:
+    """출처 필드가 있는 데이터(아이템·영구 강화·적)의 개수 요약."""
     r = entry["report"]
     sc = r["status_counts"]
     tail = f"오류 {len(r['errors'])} · 경고 {len(r['warnings'])}"
-    if entry["kind"] == "concepts":
-        print(f"컨셉 {r['count']}개 · 후보 {sc['proposed']} · 선택 {sc['approved']} · 제외 {sc['cut']}"
-              + (f" · 미지정 {sc['unspecified']}" if sc["unspecified"] else "") + f" · {tail}")
-        return
     pc = r["provenance_counts"]
     print(f"상태: 제안 {sc['proposed']} · 승인 {sc['approved']} · 삭제 {sc['cut']} · 미지정 {sc['unspecified']}")
     print(f"출처(삭제 제외): 가정 {pc['assumed']} · 계산 {pc['computed']} · 측정 {pc['measured']} · 미지정 {pc['unspecified']}")
@@ -104,11 +102,14 @@ def cmd_check(args) -> int:
                 print(f"warning [{w['code']}] {w['where']}: {w['message']}")
             if d["kind"] in EXTRA_PRINTERS:
                 EXTRA_PRINTERS[d["kind"]](r)
-            if d["kind"] == "concepts" and args.table:
-                print(concepts.table(d["data"], r))
+            if args.table and d["kind"] in TABLE_PRINTERS:
+                print(TABLE_PRINTERS[d["kind"]](d["data"], r))
             if d["path"] in gated:
                 print("gate: 출처가 가정이거나 비어 있는 항목: " + ", ".join(gated[d["path"]]))
-            _print_counts(d)
+            if d["kind"] in COUNT_PRINTERS:
+                COUNT_PRINTERS[d["kind"]](r)
+            else:
+                _print_data_counts(d)
         print(f"전체: 파일 {len(entries)}개 · 오류 {errors} · 경고 {warnings}"
               + (f" · 읽기 실패 {len(unreadable)}" if unreadable else "") + f" → {status.upper()}")
     if unreadable:

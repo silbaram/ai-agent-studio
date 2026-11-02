@@ -110,4 +110,5 @@ def print_extra(result: dict) -> None:
     for z, ranks in result["zone_rank_mean_threat"].items():
         print(f"구역 {z}: " + " · ".join(f"{RANK_LABEL[r]} {m:g}" for r, m in ranks.items()))
     if result["drop_table_not_checked"]:
-        print("드랍 테이블 참조 미확인(--items 없음): " + ", ".join(result["drop_table_not_checked"]))
+        print("드랍 테이블 참조 미확인(아이템 데이터를 함께 검사하지 않음 — data/ 폴더나 items.json을 같이 넘기세요): "
+              + ", ".join(result["drop_table_not_checked"]))

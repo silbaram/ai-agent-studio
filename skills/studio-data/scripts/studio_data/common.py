@@ -47,8 +47,8 @@ def detect_kind(data, path: Path | None = None) -> str | None:
     if "rooms" in data and "difficulty" in data:
         return "meta"
     for kind in DATASET_KINDS:
-        if isinstance(data.get(kind), list):
-            return kind
+        if kind in data:
+            return kind  # 형식이 틀려도 종류로 인정해야 검사기가 형식 오류를 보고한다
     return None
 
 
@@ -105,35 +105,6 @@ def load_dataset(path: Path, expected: str | None = None) -> tuple[str | None, d
     if not isinstance(data, dict):
         raise ValueError("최상위는 객체여야 합니다.")
     return detect_kind(data, path), data
-
-
-def _candidate(path: Path) -> bool:
-    """폴더 탐색 시 데이터 파일로 볼지 정한다. 깨진 파일도 이름에 종류가 드러나면 포함해 오류를 보여 준다."""
-    try:
-        kind, _ = load_dataset(path)
-    except (OSError, ValueError, json.JSONDecodeError, UnicodeDecodeError):
-        return kind_from_filename(path) is not None
-    return kind in DATASET_KINDS
-
-
-def discover(targets: list[Path]) -> list[Path]:
-    """파일은 그대로, 폴더는 그 안과 design/·data/ 하위 폴더(한 단계)의 데이터 파일을 찾는다."""
-    files: list[Path] = []
-    for t in targets:
-        t = Path(t)
-        if t.is_dir():
-            for d in [t] + [t / s for s in SUBFOLDERS if (t / s).is_dir()]:
-                files.extend(f for f in sorted(d.iterdir())
-                             if f.is_file() and f.suffix.lower() in (".json", ".csv") and _candidate(f))
-        elif t.is_file():
-            files.append(t)
-    seen, out = set(), []
-    for f in files:
-        key = f.resolve()
-        if key not in seen:
-            seen.add(key)
-            out.append(f)
-    return out
 
 
 def check_common(entry: dict, where: str, errors: list) -> bool:

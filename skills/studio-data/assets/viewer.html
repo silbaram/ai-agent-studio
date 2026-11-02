@@ -191,6 +191,8 @@ const LABEL = {
 };
 const KIND_LABEL = { concepts: "컨셉", items: "아이템", upgrades: "영구 강화", enemies: "적" };
 const KIND_ORDER = ["concepts", "items", "upgrades", "enemies"];
+const DEFAULT_SEARCH = ["id", "name", "effect", "intent"];
+const statusLabels = (ds) => KINDS[ds.kind].statusLabels || LABEL.status;
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
 const RANK_ORDER = ["normal", "elite", "boss"];
 const orderOf = (list, v) => { const i = list.indexOf(v); return i < 0 ? list.length : i; };
@@ -217,6 +219,8 @@ const ui = (ds) => (state.ui[ds.path] ||= { q: "", group: "", status: "", onlyIs
 const KINDS = {
   concepts: {
     listKey: "concepts", groupName: "", custom: (ds, idx) => renderConcepts(ds, idx),
+    statusLabels: LABEL.conceptStatus,
+    searchFields: ["id", "name", "pitch", "core_verb", "decision", "state_read", "skill_expression", "risk", "next_test", "notes"],
     groupOf: () => "all", groupLabel: () => "", defaultSort: { key: "status", desc: false },
     columns: () => [], tieBreak: () => () => 0, groupMeta: () => null, extras: () => null,
   },
@@ -372,7 +376,7 @@ function renderSummary(ds, idx) {
     return;
   }
   const r = ds.report, s = r.status_counts, p = r.provenance_counts, errs = r.errors.length, warns = r.warnings.length;
-  const names = ds.kind === "concepts" ? LABEL.conceptStatus : LABEL.status;
+  const names = statusLabels(ds);
   const chips = [
     el("span", { class: "chip " + (errs ? "fail" : "pass") }, el("b", { text: errs ? "오류 있음" : "오류 없음" })),
     el("span", { class: "chip" }, "항목 ", el("b", { text: r.count })),
@@ -407,7 +411,8 @@ function matches(ds, e, issues) {
   if (u.status && status !== u.status) return false;
   if (u.onlyIssues && !(issues && issues.length)) return false;
   if (u.q) {
-    const hay = [e.id, e.name, e.effect, e.intent].filter(Boolean).join(" ").toLowerCase();
+    const fields = KINDS[ds.kind].searchFields || DEFAULT_SEARCH;
+    const hay = fields.map((f) => e[f]).filter((v) => typeof v === "string").join(" ").toLowerCase();
     if (!hay.includes(u.q.toLowerCase())) return false;
   }
   return true;
@@ -440,7 +445,7 @@ function renderControls(ds, groups) {
   box.hidden = groups.length === 0;
   box.setAttribute("aria-label", kind.groupName || "묶음");
   box.replaceChildren(btn("", "전체"), ...groups.map((g) => btn(g, kind.groupLabel(g, ds.data))));
-  const names = ds.kind === "concepts" ? LABEL.conceptStatus : LABEL.status;
+  const names = statusLabels(ds);
   for (const opt of document.getElementById("status").options) if (opt.value) opt.textContent = names[opt.value];
 }
 

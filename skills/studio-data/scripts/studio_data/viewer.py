@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -17,14 +18,43 @@ from . import datasets
 PAGE = Path(__file__).resolve().parents[2] / "assets" / "viewer.html"
 
 
+def _version(entries: list[dict]) -> str:
+    return hashlib.sha256("|".join(f"{d['path']}:{d['version']}" for d in entries).encode("utf-8")).hexdigest()[:16]
+
+
 def snapshot(targets: list[Path]) -> dict:
-    entries = datasets.collect(targets)
-    version = hashlib.sha256("|".join(f"{d['path']}:{d['version']}" for d in entries).encode("utf-8")).hexdigest()[:16]
-    return {"mode": "server", "version": version, "datasets": entries}
+    entries = datasets.validate_all(datasets.scan(targets))
+    return {"mode": "server", "version": _version(entries), "datasets": entries}
+
+
+class SnapshotCache:
+    """파일 목록과 내용 해시가 그대로면 이전 검사 결과를 다시 쓴다. 뷰어가 1.5초마다 물어도 검사는 바뀔 때만 돈다."""
+
+    def __init__(self, targets: list[Path]):
+        self.targets = targets
+        self.lock = threading.Lock()
+        self.key = None
+        self.body = b""
+        self.validations = 0
+
+    def body_bytes(self) -> bytes:
+        entries = datasets.scan(self.targets)
+        key = _version(entries)
+        with self.lock:
+            if key != self.key:
+                datasets.validate_all(entries)
+                self.validations += 1
+                self.body = json.dumps({"mode": "server", "version": key, "datasets": entries}, ensure_ascii=False).encode("utf-8")
+                self.key = key
+            return self.body
 
 
 def make_handler(targets: list[Path]):
+    cache = SnapshotCache(targets)
+
     class Handler(BaseHTTPRequestHandler):
+        snapshots = cache
+
         def _send(self, code: int, body: bytes, ctype: str) -> None:
             self.send_response(code)
             self.send_header("Content-Type", ctype)
@@ -42,8 +72,7 @@ def make_handler(targets: list[Path]):
                 except OSError:
                     self._send(500, "뷰어 페이지 파일이 없습니다.".encode("utf-8"), "text/plain; charset=utf-8")
             elif route == "/api/data":
-                body = json.dumps(snapshot(targets), ensure_ascii=False).encode("utf-8")
-                self._send(200, body, "application/json; charset=utf-8")
+                self._send(200, cache.body_bytes(), "application/json; charset=utf-8")
             else:
                 self._send(404, b"not found", "text/plain; charset=utf-8")
 
