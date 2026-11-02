@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """로그라이크 메타 성장을 추상 모델로 시뮬레이션한다.
 
 런마다 방을 순서대로 지나며, 방 r의 생존 확률은
@@ -7,21 +6,17 @@
 
 이 모델은 경제·성장 곡선의 구조(몇 번째 런에 무엇을 사고 어디까지 가는지, 진척이 멈추는 구간)를
 보기 위한 것이다. 실제 조작 난이도나 재미를 판정하지 않는다. 그 판단에는 플레이 기록이 필요하다.
-
-형식은 skills/progression-economy/references/meta-model.md를 따른다. 표준 라이브러리만 사용한다.
-
-종료 코드: 0 실행 완료, 2 설정 오류
+형식: progression-economy/references/meta-model.md
 """
 from __future__ import annotations
 
-import argparse
-import csv
 import hashlib
 import json
 import math
 import random
-import sys
 from pathlib import Path
+
+from . import upgrades as vu
 
 EVIDENCE_NOTE = (
     "computed: abstract model. Not a difficulty or fun verdict. "
@@ -52,9 +47,6 @@ def _load_upgrades_file(name, base_dir: Path | None) -> tuple[list, dict]:
     """영구 강화 데이터 파일(단일 원본)을 읽어 시뮬레이터용 목록으로 바꾼다. 삭제(cut) 항목은 뺀다."""
     if not isinstance(name, str) or not name:
         raise ConfigError("upgrades_file은 파일 경로 문자열이어야 합니다.")
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import validate_upgrades as vu
-
     path = Path(name)
     if not path.is_absolute():
         path = (base_dir or Path.cwd()) / path
@@ -65,7 +57,7 @@ def _load_upgrades_file(name, base_dir: Path | None) -> tuple[list, dict]:
     report = vu.validate(data)
     if report["errors"]:
         first = "; ".join(f"{e['where']}: {e['message']}" for e in report["errors"][:3])
-        raise ConfigError(f"강화 데이터에 오류가 있습니다 ({path}). validate_upgrades.py로 확인하세요. {first}")
+        raise ConfigError(f"강화 데이터에 오류가 있습니다 ({path}). `studio.py check`로 확인하세요. {first}")
     active = [u for u in data["upgrades"] if u.get("status") != "cut"]
     missing = [u["id"] for u in active if u.get("power") is None]
     if missing:
@@ -328,7 +320,7 @@ def simulate(cfg: dict) -> dict:
     }
 
 
-def _fmt(d: dict | None) -> str:
+def fmt_dist(d: dict | None) -> str:
     if d is None:
         return "-"
     def f(v):
@@ -336,54 +328,17 @@ def _fmt(d: dict | None) -> str:
     return f"도달 {d['reached_fraction']:.0%} · 런 p10 {f(d['p10'])} / 중앙 {f(d['median'])} / p90 {f(d['p90'])}"
 
 
-def main(argv: list[str] | None = None) -> int:
+def run_config(config_path) -> tuple[dict, dict]:
+    """설정 파일을 읽어 검사·시뮬레이션하고 (정규화된 설정, 결과)를 돌려준다. 잘못되면 ConfigError."""
+    path = Path(config_path)
     try:
-        sys.stdout.reconfigure(errors="replace")
-    except (AttributeError, ValueError):
-        pass
-    ap = argparse.ArgumentParser(description="로그라이크 메타 성장을 추상 모델로 시뮬레이션합니다.")
-    ap.add_argument("config", help="모델 설정 JSON")
-    ap.add_argument("--out", help="결과 JSON 저장 경로. 문서에서 [계산: 이 경로]로 인용합니다.")
-    ap.add_argument("--csv", help="런별 중앙값 곡선을 CSV로 저장합니다.")
-    ap.add_argument("--json", action="store_true", help="결과 JSON을 표준 출력으로 냅니다.")
-    args = ap.parse_args(argv)
-    try:
-        raw = Path(args.config).read_bytes()
-        cfg = normalize(json.loads(raw.decode("utf-8")), Path(args.config).resolve().parent)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError, ConfigError) as exc:
-        print(f"설정 오류: {exc}", file=sys.stderr)
-        return 2
+        raw = path.read_bytes()
+        cfg = normalize(json.loads(raw.decode("utf-8")), path.resolve().parent)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ConfigError(str(exc))
     result = simulate(cfg)
-    result["config"] = args.config
+    result["config"] = str(config_path)
     result["config_sha256"] = hashlib.sha256(raw).hexdigest()
     if "upgrades_file" in cfg:
         result["upgrades_file"] = cfg["upgrades_file"]
-    if args.out:
-        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    if args.csv:
-        Path(args.csv).parent.mkdir(parents=True, exist_ok=True)
-        with open(args.csv, "w", encoding="utf-8", newline="") as fh:
-            w = csv.DictWriter(fh, fieldnames=["run", "median_depth", "median_bank", "median_meta_power"])
-            w.writeheader()
-            w.writerows(result["curve"])
-    if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 0
-    print(f"시행 {cfg['trials']} · 최대 런 {cfg['max_runs']} · 구매 정책 {cfg['purchase_policy']} · seed {cfg['seed']}")
-    for mid, d in result["milestones"].items():
-        print(f"마일스톤 {mid}: {_fmt(d)}")
-    for uid, d in result["upgrades"].items():
-        print(f"강화 {uid}: {_fmt(d)}")
-    if result["all_upgrades_bought"]:
-        print(f"전체 강화 구매: {_fmt(result['all_upgrades_bought'])}")
-    s = result["longest_stall_runs"]
-    print(f"가장 긴 정체(목표가 남은 상태에서 구매도 최고 기록 갱신도 없는 연속 런): 중앙 {s['median']} / p90 {s['p90']} / 최대 {s['max']}")
-    print("주의: 추상 모델 결과입니다. 실제 난이도·재미 판정이 아닙니다.")
-    if args.out:
-        print(f"문서 인용: [계산: {args.out}]")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    return cfg, result

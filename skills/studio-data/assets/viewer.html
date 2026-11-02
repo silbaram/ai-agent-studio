@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>게임 데이터</title>
+<title>게임 설계 데이터</title>
 <style>
   :root {
     --bg: #f6f7f9; --panel: #ffffff; --on-accent: #ffffff; --text: #1d2330; --muted: #667085; --line: #e4e7ec;
@@ -102,13 +102,29 @@
   .bar .track { height: 8px; background: var(--head); border-radius: 4px; overflow: hidden; }
   .bar .fill { height: 100%; background: var(--accent); }
   footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+  .doc { padding: 14px 16px 16px; }
+  .doc .pitch { font-size: 15px; margin: 0 0 8px; }
+  .doc blockquote { margin: 0 0 14px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--head); border-radius: 0 8px 8px 0; }
+  .doc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px 20px; }
+  .doc h3 { font-size: 13px; color: var(--muted); margin: 10px 0 4px; font-weight: 600; }
+  .doc ul, .doc ol { margin: 0; padding-left: 20px; }
+  .doc li { margin: 2px 0; }
+  .doc .test { color: var(--muted); }
+  .doc dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0; }
+  .doc dt { color: var(--muted); }
+  .doc dd { margin: 0; }
+  .doc table td, .doc table th { white-space: normal; }
+  .res { display: inline-block; font-size: 11px; border-radius: 4px; padding: 0 5px; margin: 0 4px 2px 0; border: 1px solid var(--line); }
+  .res.dominates { color: var(--err); border-color: var(--err); } .res.loses { color: var(--ok); border-color: var(--ok); }
+  .res.competitive { color: var(--warn); border-color: var(--warn); } .res.unknown { color: var(--muted); border-style: dashed; }
+  .sig { display: inline-block; font-size: 11px; background: var(--head); border-radius: 4px; padding: 0 5px; margin: 0 4px 2px 0; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>게임 데이터</h1>
+    <h1>게임 설계 데이터</h1>
     <span class="mode" id="mode"></span>
     <span class="live"><span class="dot idle" id="dot"></span><span id="live">불러오는 중…</span></span>
   </header>
@@ -122,7 +138,7 @@
     </div>
     <div class="note" id="file-note">
       파일 모드는 원본에 적힌 값만 보여 줍니다. 검사(열위·역전·참조)와 계산(점수·위협도·확률)은 하지 않습니다.
-      검사 결과까지 보려면 서버로 실행하세요: <span class="mono">python skills/progression-economy/scripts/view_data.py data/</span>
+      검사 결과까지 보려면 서버로 실행하세요: <span class="mono">python skills/studio-data/scripts/studio.py view .</span>
     </div>
   </section>
 
@@ -157,18 +173,30 @@ const LABEL = {
   rarity: { common: "일반", uncommon: "고급", rare: "희귀", epic: "영웅", legendary: "전설" },
   rank: { normal: "일반", elite: "정예", boss: "보스" },
   status: { proposed: "제안", approved: "승인", cut: "삭제", unspecified: "미지정" },
+  conceptStatus: { proposed: "후보", approved: "선택", cut: "제외", unspecified: "미지정" },
+  result: { dominates: "지배", competitive: "대등", loses: "짐", unknown: "미확인" },
+  cost: { small: "작음", medium: "중간", large: "큼" },
+  constraint: { note: "메모", platform: "플랫폼·입력", session: "한 판 길이", feeling: "원하는 감정", team: "제작 규모",
+                engines: "엔진 후보", avoid: "피할 것", references: "참고 게임", assumed: "가정으로 둔 값" },
   prov: { assumed: "가정", computed: "계산", measured: "측정", unspecified: "미지정" },
   code: { dominated: "열위", tier_inversion: "티어 역전", schema: "형식", duplicate_id: "중복 id", unknown_item: "없는 아이템",
           provenance: "출처", pity_target_missing: "천장 대상 없음", cut_item_referenced: "삭제 아이템 드랍",
           unknown_requirement: "없는 선행 조건", requirement_cycle: "선행 순환", requires_cut: "삭제된 선행 조건",
           cost_inversion: "비용 역전", power_missing: "power 없음", zone_inversion: "구역 역전", rank_inversion: "등급 역전",
-          unknown_drop_table: "없는 드랍 테이블" },
+          unknown_drop_table: "없는 드랍 테이블", missing_field: "빈 항목", signature_too_small: "구조 축 부족",
+          evidence_missing: "근거 없음", reject_unsupported: "탈락 근거 부족", unknown_origin: "없는 출신",
+          brief_missing: "브리프 없음", brief_incomplete: "브리프 불완전", near_duplicate: "구조 중복",
+          axis_collapse: "축 쏠림", dominant_policy: "단순 전략 지배", next_test_missing: "다음 시험 없음",
+          rejected_but_active: "탈락인데 활성" },
 };
-const KIND_LABEL = { items: "아이템", upgrades: "영구 강화", enemies: "적" };
+const KIND_LABEL = { concepts: "컨셉", items: "아이템", upgrades: "영구 강화", enemies: "적" };
+const KIND_ORDER = ["concepts", "items", "upgrades", "enemies"];
+const DEFAULT_SEARCH = ["id", "name", "effect", "intent"];
+const statusLabels = (ds) => KINDS[ds.kind].statusLabels || LABEL.status;
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
 const RANK_ORDER = ["normal", "elite", "boss"];
 const orderOf = (list, v) => { const i = list.indexOf(v); return i < 0 ? list.length : i; };
-const SERVER_HINT = "python skills/progression-economy/scripts/view_data.py data/";
+const SERVER_HINT = "python skills/studio-data/scripts/studio.py view .";
 
 const state = { mode: null, snap: null, active: null, ui: {}, sort: {}, file: { handles: null, texts: [] } };
 
@@ -189,6 +217,13 @@ const ui = (ds) => (state.ui[ds.path] ||= { q: "", group: "", status: "", onlyIs
 
 /* ---------- 종류별 정의 (보여 주기만, 검사 규칙 없음) ---------- */
 const KINDS = {
+  concepts: {
+    listKey: "concepts", groupName: "", custom: (ds, idx) => renderConcepts(ds, idx),
+    statusLabels: LABEL.conceptStatus,
+    searchFields: ["id", "name", "pitch", "core_verb", "decision", "state_read", "skill_expression", "risk", "next_test", "notes"],
+    groupOf: () => "all", groupLabel: () => "", defaultSort: { key: "status", desc: false },
+    columns: () => [], tieBreak: () => () => 0, groupMeta: () => null, extras: () => null,
+  },
   items: {
     listKey: "items", groupName: "부위",
     groupOf: (e) => e.slot || "(부위 없음)",
@@ -341,13 +376,14 @@ function renderSummary(ds, idx) {
     return;
   }
   const r = ds.report, s = r.status_counts, p = r.provenance_counts, errs = r.errors.length, warns = r.warnings.length;
+  const names = statusLabels(ds);
   const chips = [
     el("span", { class: "chip " + (errs ? "fail" : "pass") }, el("b", { text: errs ? "오류 있음" : "오류 없음" })),
     el("span", { class: "chip" }, "항목 ", el("b", { text: r.count })),
-    el("span", { class: "chip" }, `제안 ${s.proposed} · 승인 ${s.approved} · 삭제 ${s.cut}` + (s.unspecified ? ` · 상태 미지정 ${s.unspecified}` : "")),
-    el("span", { class: "chip" }, `출처 가정 ${p.assumed} · 계산 ${p.computed} · 측정 ${p.measured}` + (p.unspecified ? ` · 미지정 ${p.unspecified}` : "")),
+    el("span", { class: "chip" }, `${names.proposed} ${s.proposed} · ${names.approved} ${s.approved} · ${names.cut} ${s.cut}` + (s.unspecified ? ` · 상태 미지정 ${s.unspecified}` : "")),
+    p ? el("span", { class: "chip" }, `출처 가정 ${p.assumed} · 계산 ${p.computed} · 측정 ${p.measured}` + (p.unspecified ? ` · 미지정 ${p.unspecified}` : "")) : null,
     el("span", { class: "chip" }, `오류 ${errs} · 경고 ${warns}`),
-  ];
+  ].filter(Boolean);
   if (r.totals) chips.push(el("span", { class: "chip" }, `활성 강화 ${r.totals.active}개 · 총비용 ${fmt(r.totals.cost)} · 총 power ${fmt(r.totals.power)}`));
   if (r.drop_table_not_checked && r.drop_table_not_checked.length) chips.push(el("span", { class: "chip none", text: "드랍 테이블 참조 미확인 (아이템 데이터 없음)" }));
   box.replaceChildren(...chips);
@@ -362,7 +398,7 @@ function renderSummary(ds, idx) {
 }
 
 function focusTarget(where) {
-  const target = document.querySelector(`tr[data-id="${CSS.escape(where)}"]`) || document.getElementById("group-" + where) || document.getElementById("drop-" + where.split(".")[0]);
+  const target = document.querySelector(`tr[data-id="${CSS.escape(where)}"]`) || document.getElementById("brief-" + where) || document.getElementById("group-" + where) || document.getElementById("group-all") || document.getElementById("drop-" + where.split(".")[0]);
   if (!target) return;
   target.scrollIntoView({ behavior: "smooth", block: "center" });
   target.classList.add("flash");
@@ -375,7 +411,8 @@ function matches(ds, e, issues) {
   if (u.status && status !== u.status) return false;
   if (u.onlyIssues && !(issues && issues.length)) return false;
   if (u.q) {
-    const hay = [e.id, e.name, e.effect, e.intent].filter(Boolean).join(" ").toLowerCase();
+    const fields = KINDS[ds.kind].searchFields || DEFAULT_SEARCH;
+    const hay = fields.map((f) => e[f]).filter((v) => typeof v === "string").join(" ").toLowerCase();
     if (!hay.includes(u.q.toLowerCase())) return false;
   }
   return true;
@@ -405,12 +442,21 @@ function renderControls(ds, groups) {
   const btn = (value, text) => el("button", { class: u.group === value ? "on" : "", type: "button",
     onclick: () => { u.group = value; render(); } }, text);
   const box = document.getElementById("groups");
-  box.setAttribute("aria-label", kind.groupName);
+  box.hidden = groups.length === 0;
+  box.setAttribute("aria-label", kind.groupName || "묶음");
   box.replaceChildren(btn("", "전체"), ...groups.map((g) => btn(g, kind.groupLabel(g, ds.data))));
+  const names = statusLabels(ds);
+  for (const opt of document.getElementById("status").options) if (opt.value) opt.textContent = names[opt.value];
 }
 
 function renderSections(ds, idx) {
   const kind = KINDS[ds.kind];
+  if (kind.custom) {
+    renderControls(ds, []);
+    document.getElementById("sections").replaceChildren(...kind.custom(ds, idx));
+    document.getElementById("extras").replaceChildren();
+    return;
+  }
   const list = (Array.isArray(ds.data[kind.listKey]) ? ds.data[kind.listKey] : []).filter((e) => e && typeof e === "object");
   let groups = [...new Set(list.map(kind.groupOf))];
   if (kind.groupSort) groups.sort(kind.groupSort);
@@ -444,6 +490,97 @@ function renderSections(ds, idx) {
   document.getElementById("sections").replaceChildren(...(out.length ? out : [el("p", { class: "muted", text: "조건에 맞는 항목이 없습니다." })]));
   const extra = kind.extras(ds, idx);
   document.getElementById("extras").replaceChildren(...(extra ? [extra] : []));
+}
+
+function conceptStatusPill(e) {
+  const s = e.status || "unspecified";
+  return el("span", { class: "pill st-" + s, text: LABEL.conceptStatus[s] || s });
+}
+
+function renderBrief(e, issues) {
+  const b = e.brief || {};
+  const list = (items, ordered) => (Array.isArray(items) && items.length
+    ? el(ordered ? "ol" : "ul", {}, items.map((x) => el("li", { text: String(x) }))) : dash());
+  const section = (title, body) => el("div", {}, el("h3", { text: title }), body);
+  const pillars = Array.isArray(b.pillars) && b.pillars.length
+    ? el("ul", {}, b.pillars.map((p) => el("li", {}, el("span", { class: "strong", text: (p && p.name) || "(이름 없음)" }),
+        el("div", { class: "test", text: (p && p.test) || "설계 테스트 없음" })))) : dash();
+  const loop = b.loop || {};
+  const hyps = Array.isArray(b.hypotheses) && b.hypotheses.length
+    ? el("div", { class: "tw" }, el("table", {}, el("thead", {}, el("tr", {}, el("th", {}, "주장"), el("th", {}, "틀렸다는 신호"), el("th", {}, "확인 방법"))),
+        el("tbody", {}, b.hypotheses.map((h) => el("tr", {}, el("td", { text: (h && h.claim) || "–" }),
+          el("td", { text: (h && h.failure_signal) || "–" }), el("td", { text: (h && h.test) || "–" })))))) : dash();
+  const proto = b.prototype || {};
+  const badges = issues.map((x) => el("span", { class: "tag " + x.level, title: x.message, text: LABEL.code[x.code] || x.code }));
+  return el("section", { class: "panel", id: "brief-" + e.id },
+    el("div", { class: "ph" }, el("h2", {}, "선택한 컨셉 · " + (e.name || e.id), el("span", { class: "mono muted", text: e.id })),
+      badges.length ? el("div", { class: "badges" }, badges) : null),
+    el("div", { class: "doc" },
+      el("p", { class: "pitch", text: e.pitch || "" }),
+      e.brief ? null : el("p", { class: "group-note", style: "padding:0", text: "브리프가 아직 없습니다." }),
+      b.experience ? el("blockquote", { text: b.experience }) : null,
+      el("div", { class: "doc-grid" },
+        section("필러 · 설계 테스트", pillars),
+        section("안티필러 (하지 않을 것)", list(b.anti_pillars)),
+        section("루프", el("dl", {}, el("dt", {}, "30초"), el("dd", { text: loop.moment || "–" }),
+          el("dt", {}, "한 판"), el("dd", { text: loop.run || "–" }), el("dt", {}, "판 사이"), el("dd", { text: loop.meta || "–" }))),
+        section("가장 작은 프로토타입", el("dl", {}, el("dt", {}, "종류"), el("dd", { text: proto.kind || "–" }),
+          el("dt", {}, "범위"), el("dd", { text: proto.scope || "–" }),
+          el("dt", {}, "기간"), el("dd", { text: proto.duration_days !== undefined ? proto.duration_days + "일" : "–" }),
+          el("dt", {}, "성공 기준"), el("dd", { text: proto.success_criteria || "–" })))),
+      section("가설", hyps),
+      el("div", { class: "doc-grid" },
+        section("MVP (위험한 것부터)", list(b.mvp, true)),
+        section("범위 밖", list(b.out_of_scope)))));
+}
+
+function renderConcepts(ds, idx) {
+  const out = [];
+  const list = (Array.isArray(ds.data.concepts) ? ds.data.concepts : []).filter((e) => e && typeof e === "object");
+  const names = Object.fromEntries(list.filter((e) => e.id).map((e) => [e.id, e.name || e.id]));
+  const ids = new Set(list.map((e) => e.id));
+  const cons = ds.data.constraints;
+  if (cons && typeof cons === "object" && Object.keys(cons).length) {
+    out.push(el("section", { class: "panel" }, el("div", { class: "ph" }, el("h2", {}, "제약")),
+      el("div", { class: "doc" }, el("dl", {}, Object.entries(cons).flatMap(([k, v]) => [
+        el("dt", { text: LABEL.constraint[k] || k }), el("dd", { text: Array.isArray(v) ? v.join(", ") : (typeof v === "object" ? JSON.stringify(v) : String(v)) })])))));
+  }
+  const visible = list.filter((e) => matches(ds, e, idx.byEntry[e.id]));
+  for (const e of visible.filter((x) => x.status === "approved")) out.push(renderBrief(e, idx.byEntry[e.id] || []));
+  const order = { approved: 0, proposed: 1, unspecified: 2, cut: 3 };
+  const rows = visible.slice().sort((a, b) => (order[a.status || "unspecified"] - order[b.status || "unspecified"]) || String(a.id).localeCompare(String(b.id)))
+    .map((e) => {
+      const issues = idx.byEntry[e.id] || [];
+      const hasErr = issues.some((x) => x.level === "err"), hasWarn = issues.some((x) => x.level === "warn");
+      const stress = Array.isArray(e.stress) && e.stress.length ? e.stress.map((s) => el("span", {
+        class: "res " + (s && s.result), title: (s && s.evidence) || "근거 없음 (미확인)",
+        text: `${(s && s.policy) || "?"}: ${LABEL.result[s && s.result] || (s && s.result) || "?"}` })) : dash();
+      const sig = e.signature && typeof e.signature === "object" ? Object.entries(e.signature).map(([k, v]) => el("span", { class: "sig", text: `${k}: ${v}` })) : dash();
+      const origin = !e.origin || e.origin === "root" ? "처음" : (ids.has(e.origin) ? `${names[e.origin]}에서 변이` : e.origin);
+      const memo = e.hard_reject && e.hard_reject.reason ? "탈락: " + e.hard_reject.reason : (e.notes || "");
+      const cost = e.cost && e.cost.level ? `${LABEL.cost[e.cost.level] || e.cost.level}: ${e.cost.reason || ""}` : "";
+      return el("tr", { "data-id": e.id || "", class: [e.status === "cut" ? "cut" : "", hasErr ? "has-err" : hasWarn ? "has-warn" : ""].join(" ").trim() },
+        el("td", { class: "name" }, el("div", {}, el("span", { class: "nm", text: e.name || e.id })), el("div", { class: "mono muted", text: e.id }),
+          issues.length ? el("div", { class: "badges" }, issues.map((x) => el("span", { class: "tag " + x.level, title: x.message, text: LABEL.code[x.code] || x.code }))) : null),
+        el("td", {}, conceptStatusPill(e)),
+        el("td", { class: "text" }, e.decision || dash()),
+        el("td", { class: "text" }, e.skill_expression || dash()),
+        el("td", { class: "text" }, stress),
+        el("td", { class: "text" }, sig),
+        el("td", { class: "text" }, e.risk || dash()),
+        el("td", { class: "text" }, cost || dash()),
+        el("td", { class: "text" }, e.next_test || dash()),
+        el("td", {}, origin),
+        el("td", { class: "text" }, memo || dash()));
+    });
+  const groupNotes = idx.all.filter((x) => !ids.has(x.where)).map((x) => el("div", { class: "group-note", text: "⚠ " + x.message }));
+  out.push(el("section", { class: "panel", id: "group-all" },
+    el("div", { class: "ph" }, el("h2", {}, "후보 비교", el("span", { class: "muted", text: `${visible.length} / ${list.length}` }),
+      el("span", { class: "group-meta", text: "합계 점수는 없습니다. 재미를 점수로 매기지 않습니다." }))),
+    ...groupNotes,
+    el("div", { class: "tw" }, el("table", {}, el("thead", {}, el("tr", {}, ...["이름 (id)", "상태", "반복 결정", "숙련 표현", "단순 전략", "구조", "최대 위험", "제작 부담(가정)", "다음 시험", "출신", "메모"].map((h) => el("th", {}, h)))),
+      el("tbody", {}, rows.length ? rows : [el("tr", {}, el("td", { colspan: "11", class: "muted", text: "조건에 맞는 컨셉이 없습니다." }))])))));
+  return out;
 }
 
 function dropTables(ds, idx) {
@@ -500,7 +637,7 @@ function render() {
 
 function applySnapshot(snap) {
   const prev = state.snap;
-  const rank = (d) => { const i = ["items", "upgrades", "enemies"].indexOf(d.kind); return i < 0 ? 3 : i; };
+  const rank = (d) => { const i = KIND_ORDER.indexOf(d.kind); return i < 0 ? KIND_ORDER.length : i; };
   snap.datasets.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   state.snap = snap;
   if (prev && state.active && !snap.datasets.some((d) => d.path === state.active)) state.active = null;
@@ -537,7 +674,7 @@ async function pollServer() {
 function detectKind(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   if ("rooms" in data && "difficulty" in data) return null;
-  return ["items", "upgrades", "enemies"].find((k) => Array.isArray(data[k])) || null;
+  return KIND_ORDER.find((k) => Array.isArray(data[k])) || null;
 }
 
 async function loadFileTexts(named) {
@@ -546,7 +683,7 @@ async function loadFileTexts(named) {
     if (!name.toLowerCase().endsWith(".json")) { ds.error = "파일 모드에서는 JSON만 읽습니다. CSV는 서버 모드로 보세요."; return ds; }
     try {
       const data = JSON.parse(text), kind = detectKind(data);
-      if (!kind) ds.error = "아이템·영구 강화·적 데이터가 아닙니다 (최상위에 items / upgrades / enemies 배열이 필요합니다).";
+      if (!kind) ds.error = "컨셉·아이템·영구 강화·적 데이터가 아닙니다 (최상위에 concepts / items / upgrades / enemies 배열이 필요합니다).";
       else Object.assign(ds, { ok: true, kind, data });
     } catch (e) { ds.error = "JSON 형식 오류: " + e.message; }
     return ds;

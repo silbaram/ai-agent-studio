@@ -1,21 +1,9 @@
-#!/usr/bin/env python3
-"""영구 강화(메타 성장) 데이터를 결정적으로 검사한다.
-
-입력: JSON({"upgrades": [...]}) 또는 upgrades CSV(requires는 ;로 구분).
-형식은 skills/progression-economy/references/data-format.md를 따른다. 표준 라이브러리만 사용한다.
-simulate_meta.py는 설정의 upgrades_file로 이 파일을 그대로 읽는다.
-
-종료 코드: 0 통과, 1 오류(또는 --strict 경고, --fail-on-assumed 가정), 2 사용법 오류
-"""
+"""영구 강화(메타 성장) 데이터를 결정적으로 검사한다. 형식: progression-economy/references/data-format.md"""
 from __future__ import annotations
 
-import argparse
-import json
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import _common as c  # noqa: E402
+from . import common as c
 
 
 def load(path: Path) -> dict:
@@ -118,31 +106,8 @@ def validate(data: dict) -> dict:
     }
 
 
-def _print_extra(result: dict) -> None:
+def print_extra(result: dict) -> None:
     t = result["totals"]
     print(f"활성 강화 {t['active']}개 · 총비용 {t['cost']:g} · 총 power {t['power']:g}")
     for name, tr in result["tracks"].items():
         print(f"  트랙 {name}: {tr['count']}개 · 비용 {tr['total_cost']:g} · power {tr['total_power']:g}")
-
-
-def main(argv: list[str] | None = None) -> int:
-    try:
-        sys.stdout.reconfigure(errors="replace")
-    except (AttributeError, ValueError):
-        pass
-    ap = argparse.ArgumentParser(description="영구 강화 데이터를 검사합니다.")
-    ap.add_argument("path", help="upgrades JSON 또는 CSV")
-    c.add_common_args(ap)
-    args = ap.parse_args(argv)
-    try:
-        data = load(Path(args.path))
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        print(f"입력을 읽을 수 없습니다: {exc}", file=sys.stderr)
-        return 2
-    result = validate(data)
-    result["source"] = args.path
-    return c.finish_cli(result, args, "강화", _print_extra)
-
-
-if __name__ == "__main__":
-    sys.exit(main())

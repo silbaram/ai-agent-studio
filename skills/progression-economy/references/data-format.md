@@ -1,16 +1,6 @@
 # 데이터 형식
 
-아이템, 영구 강화, 적을 종류별 파일 하나씩에 둔다. 권장 배치:
-
-```
-data/
-├─ items.json      ← validate_items.py
-├─ upgrades.json   ← validate_upgrades.py, simulate_meta.py(upgrades_file)
-├─ enemies.json    ← validate_enemies.py (--items data/items.json)
-└─ meta.json       ← simulate_meta.py 설정. 뷰어는 건너뛴다
-```
-
-종류는 JSON 최상위 키(`items` / `upgrades` / `enemies`)로 구분한다. CSV는 파일 이름에 `item` / `upgrade` / `enem`이 들어가야 한다.
+아이템, 영구 강화, 적을 종류별 파일 하나씩(`data/items.json`, `data/upgrades.json`, `data/enemies.json`)에 둔다. 프로젝트 배치와 종류 판별 규칙은 [studio-data](../../studio-data/SKILL.md#프로젝트-배치)를 따른다. CSV는 파일 이름에 `item` / `upgrade` / `enem`이 들어가야 종류를 알 수 있다.
 
 ## 공통 필드
 
@@ -153,11 +143,11 @@ data/
 
 | 코드 | 수준 | 조건 |
 |---|---|---|
-| `unknown_drop_table` | 오류 | 아이템 데이터에 없는 드랍 테이블을 가리킴 (`--items`를 주었거나 뷰어에서 아이템 파일을 함께 본 경우) |
+| `unknown_drop_table` | 오류 | 아이템 데이터에 없는 드랍 테이블을 가리킴 (`check`나 뷰어가 아이템 파일을 함께 읽은 경우) |
 | `zone_inversion` | 경고 | 같은 등급의 평균 위협도가 다음 구역에서 줄어듦 |
 | `rank_inversion` | 경고 | 같은 구역에서 상위 등급 평균 위협도가 하위 등급보다 높지 않음 |
 
-`--items` 없이 검사하면 드랍 테이블 참조는 `drop_table_not_checked`에 "미확인"으로 남는다.
+아이템 파일 없이 적 파일만 검사하면 드랍 테이블 참조는 `drop_table_not_checked`에 "미확인"으로 남는다.
 
 ## CSV
 

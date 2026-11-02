@@ -17,12 +17,21 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 
 | 스킬 | 하는 일 |
 | --- | --- |
+| [studio-data](skills/studio-data/SKILL.md) | **공용 도구.** 실행 파일 `studio.py` 하나로 검사(check)·뷰어(view)·시뮬레이션(simulate)·수치 출처 검사(provenance). 다른 스킬과 함께 설치 |
+| [concept-exploration](skills/concept-exploration/SKILL.md) | 막연한 방향을 구조가 다른 게임 가설로 펼치고, 단순 전략으로 반증하고, 고른 안을 필러·가설·최소 프로토타입이 있는 브리프로 정리 |
 | [numeric-provenance](skills/numeric-provenance/SKILL.md) | 기획 수치를 `[가정]` / `[계산: 출처]` / `[측정: 출처]`로 표시하고, 확정 판정 전에 스크립트로 검사 |
 | [progression-economy](skills/progression-economy/SKILL.md) | 아이템·영구 강화·적 데이터의 단일 원본 관리와 뷰어, 티어 역전·완전 열위·드랍 천장·강화 사슬·적 위협도 진행 검사, 로그라이크 메타 성장 시뮬레이션 |
 
 첫 대상은 **액션 로그라이크 + 메타 성장형** 게임이다. 데이터는 JSON/CSV로 다뤄 Godot·Unity·Unreal·Roblox 어디에도 묶이지 않는다.
 
 ## 사용 예시
+
+보통 순서: 컨셉 탐색 → 프로토타입으로 가설 확인 → 데이터·수치 관리.
+
+```text
+$concept-exploration으로 액션 로그라이크에 성장 요소가 있는 게임 컨셉을 찾아줘.
+1인 개발, 한 판 20분 안팎. 재미 점수로 고르지 말고 구조가 다른 후보를 비교표로 보여줘.
+```
 
 ```text
 $numeric-provenance로 design/economy.md의 모든 수치에 출처 태그를 달아줘.
@@ -34,20 +43,18 @@ $progression-economy로 2구역에 나올 정예 적을 하나 추가해줘.
 제안 상태로 넣고 검사 경고가 있으면 알려줘. 바뀐 행만 보여줘.
 ```
 
-도구를 직접 실행할 수도 있다. Python 3.9 이상, 추가 설치는 필요 없다.
+도구는 모두 `studio.py` 하나로 실행한다. Python 3.9 이상, 추가 설치는 필요 없다. 예시 프로젝트로 바로 해 볼 수 있다.
 
 ```bash
-python skills/numeric-provenance/scripts/check_provenance.py design/
-python skills/progression-economy/scripts/view_data.py skills/progression-economy/assets/
-python skills/progression-economy/scripts/validate_items.py skills/progression-economy/assets/sample-items.json
-python skills/progression-economy/scripts/validate_upgrades.py skills/progression-economy/assets/sample-upgrades.json
-python skills/progression-economy/scripts/validate_enemies.py skills/progression-economy/assets/sample-enemies.json --items skills/progression-economy/assets/sample-items.json
-python skills/progression-economy/scripts/simulate_meta.py skills/progression-economy/assets/sample-meta.json
+python skills/studio-data/scripts/studio.py view skills/studio-data/assets/sample-project
+python skills/studio-data/scripts/studio.py check skills/studio-data/assets/sample-project --table
+python skills/studio-data/scripts/studio.py simulate skills/studio-data/assets/sample-project/data/meta.json
+python skills/studio-data/scripts/studio.py provenance design/
 ```
 
-`view_data.py`는 폴더 안의 아이템·영구 강화·적 데이터를 브라우저에서 탭과 표로 보여 주는 읽기 전용 뷰어다. 문서를 따로 생성하지 않으므로 동기화할 것이 없고, 원본을 고치면 화면이 자동으로 갱신된다. Python 없이 `skills/progression-economy/assets/data-viewer.html`을 직접 열어 '불러오기'로 볼 수도 있지만, 그때는 검사·계산 없이 원본 값만 보인다.
+`view`는 프로젝트의 `design/`·`data/`에 있는 컨셉·아이템·영구 강화·적 데이터를 브라우저에서 탭으로 보여 주는 읽기 전용 뷰어다. 문서를 따로 생성하지 않으므로 동기화할 것이 없고, 원본을 고치면 화면이 자동으로 갱신된다. Python 없이 `skills/studio-data/assets/viewer.html`을 직접 열어 '불러오기'로 볼 수도 있지만, 그때는 검사·계산 없이 원본 값만 보인다.
 
-확정 판정 직전에는 `check_provenance.py`에 `--fail-on-assumed`를 붙인다. `[가정]`이 하나라도 남으면 실패한다.
+확정 판정 직전에는 `check`와 `provenance`에 `--fail-on-assumed`를 붙인다. 가정인 수치가 하나라도 남으면 실패한다.
 시뮬레이터는 추상 모델이다. 결과는 경제·성장 곡선의 구조를 보는 용도이며 실제 난이도나 재미 판정이 아니다.
 
 ## 개발

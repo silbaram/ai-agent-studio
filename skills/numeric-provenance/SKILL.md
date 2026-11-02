@@ -25,12 +25,12 @@ description: "Tags every tunable number in game design documents as assumed, com
 4. **확정 판정 전 게이트.** "밸런스 확정", "난이도 OK" 같은 판정은 `--fail-on-assumed` 검사를 통과한 뒤에만 한다. 통과하지 못하면 남은 `[가정]` 목록과 함께 "미확정"으로 보고한다.
 5. **값을 바꾸면 태그도 다시 본다.** `[계산]`이나 `[측정]` 값을 손으로 고치면 근거가 사라지므로 `[가정]`으로 내린다.
 6. **사람의 판단은 `[가정]`이다.** 기획자가 의도적으로 정한 값도 검증 전에는 `[가정: 기획 의도]`로 표시한다. 의도를 존중하되 검증 상태와 섞지 않는다.
-7. **데이터 파일은 필드로 표시한다.** 아이템·영구 강화·적처럼 JSON/CSV 원본에 있는 수치는 md 태그 대신 항목의 `provenance` 필드(`assumed`/`computed`/`measured`)로 표시하고 [progression-economy](../progression-economy/SKILL.md)의 `--fail-on-assumed`로 검사한다. 같은 수치를 md에 옮겨 적지 않는다.
+7. **데이터 파일은 필드로 표시한다.** 아이템·영구 강화·적처럼 JSON/CSV 원본에 있는 수치는 md 태그 대신 항목의 `provenance` 필드(`assumed`/`computed`/`measured`)로 표시하고 `python skills/studio-data/scripts/studio.py check data/ --fail-on-assumed`로 검사한다([progression-economy](../progression-economy/SKILL.md)). 같은 수치를 md에 옮겨 적지 않는다.
 
 ## 검사
 
 ```bash
-python skills/numeric-provenance/scripts/check_provenance.py design/
+python skills/studio-data/scripts/studio.py provenance design/
 ```
 
 - 기본: 형식 오류, `[계산]`·`[측정]`의 출처 누락, 출처 열의 태그 누락을 찾는다. 오류가 있으면 종료 코드 1.
@@ -38,7 +38,7 @@ python skills/numeric-provenance/scripts/check_provenance.py design/
 - `--check-paths`: 출처가 경로처럼 보이면(슬래시 포함, 또는 `.py`/`.json`/`.csv` 등으로 끝남) 문서 폴더나 현재 폴더 기준으로 파일이 실제 있는지 확인한다.
 - `--json`: 결과를 JSON으로 출력한다.
 
-코드 블록과 인라인 코드 안의 태그는 검사하지 않는다. Python 3.9 이상, 표준 라이브러리만 쓴다.
+코드 블록과 인라인 코드 안의 태그는 검사하지 않는다. 검사 도구는 공용 스킬 [studio-data](../studio-data/SKILL.md)에 있으며 이 스킬과 함께 설치한다.
 
 ## 보고
 

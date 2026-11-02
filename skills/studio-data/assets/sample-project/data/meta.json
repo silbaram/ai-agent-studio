@@ -29,7 +29,7 @@
     "keep_on_death": 1.0
   },
   "purchase_policy": "listed_order",
-  "upgrades_file": "sample-upgrades.json",
+  "upgrades_file": "upgrades.json",
   "milestones": [
     {
       "id": "boss_1",
