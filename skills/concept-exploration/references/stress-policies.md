@@ -18,6 +18,12 @@
 | `one_build` | 매 판 같은 조합만 고른다 |
 | `random` | 무작위로 선택한다 |
 
+목록에 없는 전략이 꼭 필요하면(예: 빛을 계속 돌리기 `spin`) 짧은 영문 이름을 붙이고, 그 stress 항목에 `definition`(어떻게 행동하는지)을 적는다. 목록에도 없고 `definition`도 없는 이름은 오타일 수 있어 검사기가 경고(`unknown_policy`)한다.
+
+```json
+{ "policy": "spin", "definition": "빛을 멈추지 않고 계속 돌린다", "result": "unknown" }
+```
+
 ## 결과 기록
 
 | result | 뜻 |

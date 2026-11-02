@@ -1,6 +1,7 @@
 """설계 문서(md)의 수치 출처 태그를 검사한다. 규약: numeric-provenance/SKILL.md"""
 from __future__ import annotations
 
+import difflib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +16,14 @@ KINDS = {
 }
 SOURCE_REQUIRED = {"computed", "measured"}
 PROVENANCE_HEADERS = {"출처", "source", "provenance"}
+NEAR_HEADER = re.compile(r"출처|\bsource\b|\bprovenance\b", re.IGNORECASE)
+SOURCE_EXAMPLE = {"computed": "reports/meta.json", "measured": "playtest-2026-11-02"}
+# 본문에서 조정 가능한 값으로 보이는 '숫자 + 단위'. 경고만 낸다(추정이므로 오류로 막지 않는다).
+NUMBER_UNIT = re.compile(
+    r"(?<![\w.])\d+(?:\.\d+)?\s?(?:%|％|퍼센트|초|분|시간|일|주|배|칸|타일|프레임|회|번|개|종|명|골드|코인|레벨|층|방|웨이브|판|런|스택"
+    r"|(?:px|ms|hp|HP|fps)(?![A-Za-z]))")
+NAMED_BRACKET = re.compile(r"\[([^\[\]:：\s]{1,12})\s*[:：]")
+LINK_TARGET = re.compile(r"\]\([^)]*\)")
 
 _KIND_ALT = "|".join(sorted(KINDS, key=len, reverse=True))
 STRICT_TAG = re.compile(rf"\[({_KIND_ALT})(?:\s*[:：]\s*([^\]]*))?\]")
@@ -49,6 +58,10 @@ class FileReport:
     @property
     def errors(self) -> int:
         return sum(1 for f in self.findings if f.level == "error")
+
+    @property
+    def warnings(self) -> int:
+        return sum(1 for f in self.findings if f.level == "warning")
 
 
 def _split_row(line: str) -> list[str]:
@@ -101,7 +114,7 @@ def _parse_tags(text: str, line: int, report: FileReport, base_dirs: list[Path],
         source = (m.group(2) or "").strip()
         strict_spans.append(m.span())
         if kind in SOURCE_REQUIRED and not source:
-            report.findings.append(Finding("error", line, f"'{m.group(0)}' 태그에 출처가 없습니다. 예: [{m.group(1)}: sim/run-001.json]"))
+            report.findings.append(Finding("error", line, f"'{m.group(0)}' 태그에 출처가 없습니다. 예: [{m.group(1)}: {SOURCE_EXAMPLE[kind]}]"))
             continue
         if check_paths and kind in SOURCE_REQUIRED and PATHLIKE.search(source):
             target = source.split("#", 1)[0].strip()
@@ -112,6 +125,32 @@ def _parse_tags(text: str, line: int, report: FileReport, base_dirs: list[Path],
     for m in LOOSE_TAG.finditer(text):
         if not any(s <= m.start() < e for s, e in strict_spans):
             report.findings.append(Finding("error", line, f"태그 형식이 잘못되었습니다: '{m.group(0)}'. 콜론으로 출처를 구분하세요. 예: [가정: 메모]"))
+    for m in NAMED_BRACKET.finditer(text):
+        guess = _tag_typo(m.group(1))
+        if guess:
+            report.findings.append(Finding("error", line, f"알 수 없는 태그 이름 '[{m.group(1)}:'. '{guess}'의 오타인가요?"))
+
+
+def _tag_typo(name: str) -> str | None:
+    """태그 이름이 아닌데 태그 이름과 비슷하면(예: 게산) 가장 비슷한 이름을 돌려준다."""
+    if name in KINDS:
+        return None
+    close = difflib.get_close_matches(name, list(KINDS), n=1, cutoff=0.5)
+    return close[0] if close else None
+
+
+def _has_tag(text: str) -> bool:
+    return bool(STRICT_TAG.search(text) or LOOSE_TAG.search(text))
+
+
+def _check_body_numbers(text: str, line: int, report: FileReport) -> None:
+    """표 밖 문장에서 태그 없는 '숫자 + 단위'를 경고한다. 제목 줄과 태그가 이미 있는 줄은 보지 않는다."""
+    if text.lstrip().startswith("#") or _has_tag(text):
+        return
+    found = [m.group(0).replace(" ", "") for m in NUMBER_UNIT.finditer(LINK_TARGET.sub("]", text))]
+    if found:
+        shown = ", ".join(dict.fromkeys(found[:5]))
+        report.findings.append(Finding("warning", line, f"태그 없는 수치: {shown}. 조정할 수 있는 값이면 [가정] / [계산: 출처] / [측정: 출처]를 붙이세요."))
 
 
 def check_text(text: str, path: str = "<text>", base_dirs: list[Path] | None = None, check_paths: bool = False) -> FileReport:
@@ -125,12 +164,19 @@ def check_text(text: str, path: str = "<text>", base_dirs: list[Path] | None = N
         stripped = visible.strip()
         if not stripped.startswith("|"):
             in_table, prov_col = False, None
+            _check_body_numbers(stripped, no, report)
             continue
         nxt = lines[idx + 1] if idx + 1 < len(lines) else None
         if not in_table and nxt and nxt[0] == no + 1 and _is_separator(nxt[2]):
             in_table = True
             headers = [c.strip().lower() for c in _split_row(stripped)]
             prov_col = next((i for i, h in enumerate(headers) if h in PROVENANCE_HEADERS), None)
+            if prov_col is None:
+                for h in headers:
+                    if NEAR_HEADER.search(h):
+                        report.findings.append(Finding("warning", no, f"헤더 '{h}'는 출처 열로 인식되지 않아 이 표는 검사하지 않습니다. "
+                                                                      "수치 표면 헤더를 정확히 '출처'(또는 source, provenance)로 쓰세요."))
+                        break
             continue
         if _is_separator(stripped):
             continue
@@ -139,7 +185,8 @@ def check_text(text: str, path: str = "<text>", base_dirs: list[Path] | None = N
             cell = cells[prov_col] if prov_col < len(cells) else ""
             if not STRICT_TAG.search(cell):
                 label = cells[0] if cells and cells[0] else f"{no}행"
-                report.findings.append(Finding("error", no, f"출처 열에 태그가 없습니다: '{label}'. [가정] / [계산: 출처] / [측정: 출처] 중 하나를 쓰세요."))
+                if not any(_tag_typo(m.group(1)) for m in NAMED_BRACKET.finditer(cell)):  # 오타는 위에서 이미 보고했다
+                    report.findings.append(Finding("error", no, f"출처 열에 태그가 없습니다: '{label}'. [가정] / [계산: 출처] / [측정: 출처] 중 하나를 쓰세요."))
     return report
 
 
@@ -171,4 +218,5 @@ def summarize(reports: list[FileReport]) -> dict:
         for k, v in r.counts.items():
             total[k] += v
     errors = sum(r.errors for r in reports)
-    return {"files": len(reports), "counts": total, "errors": errors}
+    warnings = sum(r.warnings for r in reports)
+    return {"files": len(reports), "counts": total, "errors": errors, "warnings": warnings}

@@ -63,12 +63,17 @@ class Check(unittest.TestCase):
         data = json.loads(out)
         self.assertEqual(sorted(d["kind"] for d in data["datasets"]), ["concepts", "enemies", "items", "upgrades"])
 
-    def test_assumption_gate_applies_to_data_not_concepts(self):
+    def test_assumption_gate_applies_to_data_and_brief_criteria(self):
         code, out = run_cli("check", self.root, "--fail-on-assumed")
         self.assertEqual(code, 1)
-        self.assertEqual(out.count("gate:"), 3)
-        code, _ = run_cli("check", self.root / "design", "--fail-on-assumed")
-        self.assertEqual(code, 0)
+        self.assertEqual(out.count("gate:"), 4)
+        code, out = run_cli("check", self.root / "design", "--fail-on-assumed")
+        self.assertEqual(code, 1)
+        self.assertIn("parry_tempo.brief.hypotheses[0].failure_signal", out)
+        # 브리프의 판정 기준을 측정값으로 올리면 게이트를 통과한다.
+        path = self.root / "design/concepts.json"
+        path.write_text(path.read_text(encoding="utf-8").replace("[가정]", "[측정: playtest-1]"), encoding="utf-8")
+        self.assertEqual(run_cli("check", self.root / "design", "--fail-on-assumed")[0], 0)
 
     def test_table_only_for_concepts(self):
         _, out = run_cli("check", self.root, "--table")

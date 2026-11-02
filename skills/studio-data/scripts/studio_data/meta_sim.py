@@ -24,6 +24,9 @@ EVIDENCE_NOTE = (
 )
 
 
+POLICIES = ("listed_order", "cheapest_first")
+
+
 class ConfigError(ValueError):
     pass
 
@@ -142,8 +145,8 @@ def normalize(cfg: dict, base_dir: Path | None = None) -> dict:
     out["upgrades"] = list(seen.values())
 
     policy = cfg.get("purchase_policy", "listed_order")
-    if policy not in ("listed_order", "cheapest_first"):
-        raise ConfigError("purchase_policy는 listed_order 또는 cheapest_first입니다.")
+    if policy not in POLICIES:
+        raise ConfigError(f"purchase_policy는 {' 또는 '.join(POLICIES)}입니다.")
     out["purchase_policy"] = policy
 
     ms = cfg.get("milestones", []) or []
@@ -328,15 +331,21 @@ def fmt_dist(d: dict | None) -> str:
     return f"도달 {d['reached_fraction']:.0%} · 런 p10 {f(d['p10'])} / 중앙 {f(d['median'])} / p90 {f(d['p90'])}"
 
 
-def run_config(config_path) -> tuple[dict, dict]:
-    """설정 파일을 읽어 검사·시뮬레이션하고 (정규화된 설정, 결과)를 돌려준다. 잘못되면 ConfigError."""
+def run_config(config_path, policy: str | None = None) -> tuple[dict, dict]:
+    """설정 파일을 읽어 검사·시뮬레이션하고 (정규화된 설정, 결과)를 돌려준다. 잘못되면 ConfigError.
+    policy를 주면 파일을 고치지 않고 구매 정책만 바꿔 실행한다(결과에 policy_override로 남는다)."""
     path = Path(config_path)
     try:
         raw = path.read_bytes()
-        cfg = normalize(json.loads(raw.decode("utf-8")), path.resolve().parent)
+        data = json.loads(raw.decode("utf-8"))
+        if policy is not None and isinstance(data, dict):
+            data["purchase_policy"] = policy
+        cfg = normalize(data, path.resolve().parent)
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ConfigError(str(exc))
     result = simulate(cfg)
+    if policy is not None:
+        result["policy_override"] = policy
     result["config"] = str(config_path)
     result["config_sha256"] = hashlib.sha256(raw).hexdigest()
     if "upgrades_file" in cfg:

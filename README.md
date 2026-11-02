@@ -60,7 +60,7 @@ npx skills add silbaram/ai-agent-studio --skill '*' --agent codex --copy
 설치 후 도구는 설치 위치에서 실행한다. 예를 들어 Claude Code에서 게임 프로젝트의 데이터를 뷰어로 보려면 게임 프로젝트 폴더에서 다음을 실행한다(Windows는 아래 표 참고).
 
 ```bash
-python .claude/skills/studio-data/scripts/studio.py view .
+python3 .claude/skills/studio-data/scripts/studio.py view .
 ```
 
 설치 직후처럼 데이터 파일이 아직 없어도 뷰어는 열린다. 화면에 지켜보는 위치가 안내되고, 컨셉 탐색 등으로 `design/concepts.json` 같은 파일이 생기면 새로고침 없이 자동으로 나타난다.
@@ -111,13 +111,15 @@ $progression-economy로 2구역에 나올 정예 적을 하나 추가해줘.
 제안 상태로 넣고 검사 경고가 있으면 알려줘. 바뀐 행만 보여줘.
 ```
 
-도구는 모두 `studio.py` 하나로 실행한다. 아래는 이 저장소를 받은 폴더에서 예시 프로젝트로 바로 해 보는 명령이다. 게임 프로젝트에 설치했다면 경로 앞부분을 설치 위치(`.claude/skills/...` 또는 `.agents/skills/...`)로 바꾼다.
+도구는 모두 `studio.py` 하나로 실행한다. 아래는 이 저장소를 받은 폴더에서 예시 프로젝트로 바로 해 보는 명령이다. 게임 프로젝트에 설치했다면 경로 앞부분을 설치 위치(`.claude/skills/...` 또는 `.agents/skills/...`)로 바꾼다. Windows PowerShell은 `python3` 대신 `py`.
+
+스킬 문서(SKILL.md)의 명령은 게임 프로젝트에 Claude Code로 설치한 기준(`python3 .claude/skills/studio-data/scripts/studio.py`)으로 적혀 있다.
 
 ```bash
-python skills/studio-data/scripts/studio.py view skills/studio-data/assets/sample-project
-python skills/studio-data/scripts/studio.py check skills/studio-data/assets/sample-project --table
-python skills/studio-data/scripts/studio.py simulate skills/studio-data/assets/sample-project/data/meta.json
-python skills/studio-data/scripts/studio.py provenance design/
+python3 skills/studio-data/scripts/studio.py view skills/studio-data/assets/sample-project
+python3 skills/studio-data/scripts/studio.py check skills/studio-data/assets/sample-project --table
+python3 skills/studio-data/scripts/studio.py simulate skills/studio-data/assets/sample-project/data/meta.json
+python3 skills/studio-data/scripts/studio.py provenance design/
 ```
 
 `view`는 프로젝트의 `design/`·`data/`에 있는 컨셉·아이템·영구 강화·적 데이터를 브라우저에서 탭으로 보여 주는 읽기 전용 뷰어다. 문서를 따로 생성하지 않으므로 동기화할 것이 없고, 원본을 고치면 화면이 자동으로 갱신된다. Python 없이 `skills/studio-data/assets/viewer.html`을 직접 열어 '불러오기'로 볼 수도 있지만, 그때는 검사·계산 없이 원본 값만 보인다.

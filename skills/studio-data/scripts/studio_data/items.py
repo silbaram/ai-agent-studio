@@ -104,7 +104,9 @@ def capped_expected_draws(p: float, guarantee_after: int | None) -> float | None
     return (1.0 - (1.0 - p) ** guarantee_after) / p
 
 
-def check_drop_tables(tables: dict, items_by_id: dict, errors: list, warnings: list) -> dict:
+def check_drop_tables(tables: dict, items_by_id: dict, errors: list, warnings: list, invalid_ids: set | None = None) -> dict:
+    """invalid_ids: 파일에는 있지만 형식 오류로 검사에서 빠진 아이템. '없는 아이템'으로 잘못 보고하지 않는다."""
+    invalid_ids = invalid_ids or set()
     report: dict = {}
     if not isinstance(tables, dict):
         errors.append({"code": "schema", "where": "drop_tables", "message": "drop_tables는 객체여야 합니다."})
@@ -122,7 +124,11 @@ def check_drop_tables(tables: dict, items_by_id: dict, errors: list, warnings: l
                 bad = True
                 continue
             ref = e.get("item")
-            if ref is not None and ref not in items_by_id:
+            if ref is not None and ref in invalid_ids:
+                warnings.append({"code": "item_unchecked", "where": f"{tid}.entries[{n}]",
+                                 "message": f"아이템 '{ref}'에 형식 오류가 있어 이 테이블의 확률을 계산하지 않았습니다. '{ref}'의 오류를 먼저 고치세요."})
+                bad = True
+            elif ref is not None and ref not in items_by_id:
                 errors.append({"code": "unknown_item", "where": f"{tid}.entries[{n}]", "message": f"없는 아이템입니다: {ref}"})
                 bad = True
             if ref is not None and items_by_id.get(ref, {}).get("status") == "cut":
@@ -173,9 +179,11 @@ def validate(data: dict) -> dict:
     items = check_schema(raw_items, errors)
     by_id = {i["id"]: i for i in items}
     active = [i for i in items if c.is_active(i)]
-    tier_summary = check_tiers(active, weights, warnings)
+    # 고유 효과는 스탯 예산에 들어가지 않으므로 티어 비교와 열위 판정 모두에서 뺀다(판정 제외로 표시).
+    tier_summary = check_tiers([i for i in active if not i.get("unique_effect")], weights, warnings)
     not_assessed = check_dominance(active, warnings)
-    drops = check_drop_tables(data.get("drop_tables", {}) or {}, by_id, errors, warnings)
+    invalid = {i["id"] for i in raw_items if isinstance(i, dict) and isinstance(i.get("id"), str)} - set(by_id)
+    drops = check_drop_tables(data.get("drop_tables", {}) or {}, by_id, errors, warnings, invalid)
     return {
         "kind": "items",
         "count": len(items),
@@ -197,4 +205,4 @@ def print_extra(result: dict) -> None:
             line += f" | {pity['target_rarity']} 기대 시도 {pity['expected_draws_with_pity']} (천장 {pity['guarantee_after']})"
         print(line)
     if result["dominance_not_assessed"]:
-        print("열위 판정 제외(고유 효과): " + ", ".join(result["dominance_not_assessed"]))
+        print("티어·열위 판정 제외(고유 효과): " + ", ".join(result["dominance_not_assessed"]))

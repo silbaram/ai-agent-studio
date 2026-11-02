@@ -30,7 +30,14 @@ def read(path: Path) -> dict:
         return entry
     if kind not in c.DATASET_KINDS:
         entry["meta"] = kind == "meta"
-        entry["error"] = NOT_DATA
+        named = path.stem.lower()
+        if kind is None and named in c.DATASET_KINDS:
+            # 이름이 concepts.json 같은데 최상위 키가 없으면 건너뛰지 않고 이유를 알린다(예: 제약만 적은 직후).
+            entry["kind"] = named
+            entry["error"] = (f"최상위에 \"{named}\" 배열이 없어 {c.KIND_LABELS[named]} 파일로 읽지 못했습니다. "
+                              f"아직 항목이 없으면 \"{named}\": []를 넣으세요.")
+        else:
+            entry["error"] = NOT_DATA
         return entry
     entry.update({"ok": True, "kind": kind, "label": c.KIND_LABELS[kind], "data": data})
     return entry
@@ -74,6 +81,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
     """읽은 항목들에 검사 결과(report)를 붙인다. 적의 드랍 테이블은 함께 읽은 아이템 데이터로 확인한다.
     검사기가 예상하지 못한 예외를 내면 그 파일만 오류로 표시하고 나머지는 계속 검사한다."""
     loaded_items = [d for d in entries if d["ok"] and d["kind"] == "items"]
+    broken_items = [d for d in entries if not d["ok"] and d.get("kind") == "items"]
     drop_tables = None
     if loaded_items:
         drop_tables = {}
@@ -86,9 +94,10 @@ def validate_all(entries: list[dict]) -> list[dict]:
             continue
         try:
             if d["kind"] == "enemies":
-                d["report"] = enemies.validate(d["data"], drop_tables)
+                d["report"] = enemies.validate(d["data"], drop_tables, items_unreadable=bool(broken_items))
             else:
                 d["report"] = VALIDATORS[d["kind"]].validate(d["data"])
+            c.apply_acknowledged(d["kind"], d["data"], d["report"])
         except Exception as exc:  # noqa: BLE001 - 한 파일의 예외가 뷰어·검사 전체를 멈추지 않게 한다
             d.update({"ok": False, "error": f"검사기가 처리하지 못한 형식입니다 ({type(exc).__name__}: {exc}). 이 파일의 형식을 확인하세요."})
             d.pop("report", None)
