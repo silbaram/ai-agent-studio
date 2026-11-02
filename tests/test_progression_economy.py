@@ -25,7 +25,10 @@ def _load(name, rel):
 
 vi = _load("validate_items", "scripts/validate_items.py")
 sm = _load("simulate_meta", "scripts/simulate_meta.py")
-viewer = _load("view_items", "scripts/view_items.py")
+vu = _load("validate_upgrades", "scripts/validate_upgrades.py")
+ve = _load("validate_enemies", "scripts/validate_enemies.py")
+common = _load("_common", "scripts/_common.py")
+viewer = _load("view_data", "scripts/view_data.py")
 
 
 def item(iid, slot="weapon", tier=1, price=None, **stats):
@@ -50,7 +53,7 @@ class ItemSchema(unittest.TestCase):
         ]})
         self.assertEqual(codes(r["errors"]).count("schema"), 5)
         self.assertIn("duplicate_id", codes(r["errors"]))
-        self.assertEqual(r["items"], 1)
+        self.assertEqual(r["count"], 1)
 
     def test_missing_items_array_is_error(self):
         self.assertIn("schema", codes(vi.validate({})["errors"]))
@@ -122,7 +125,7 @@ class ItemMetadata(unittest.TestCase):
         bad_name = item("d"); bad_name["name"] = 3
         r = vi.validate({"items": [bad_status, bad_kind, no_source, bad_name]})
         self.assertEqual(sorted(codes(r["errors"])), ["provenance", "provenance", "schema", "schema"])
-        self.assertEqual(r["items"], 0)
+        self.assertEqual(r["count"], 0)
 
     def test_korean_provenance_aliases(self):
         a = item("a"); a["provenance"] = {"kind": "계산", "source": "sim/a.json"}
@@ -148,7 +151,7 @@ class ItemMetadata(unittest.TestCase):
         c = item("c", attack=2)
         d = item("d", attack=3); d["status"] = "cut"
         r = vi.validate({"items": [a, b, c, d]})
-        self.assertEqual(r["unverified_items"], ["a", "c"])
+        self.assertEqual(r["unverified"], ["a", "c"])
         self.assertEqual(r["provenance_counts"], {"assumed": 1, "computed": 0, "measured": 1, "unspecified": 1})
 
 
@@ -210,7 +213,7 @@ class ItemCli(unittest.TestCase):
             self.assertIn("dominated", out)
             report = Path(tmp) / "out" / "report.json"
             self.run_cli(str(path), "--out", str(report))
-            self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["items"], 2)
+            self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["count"], 2)
 
     def test_fail_on_assumed_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -243,78 +246,15 @@ class ItemCli(unittest.TestCase):
             self.assertEqual(self.run_cli(str(bad))[0], 2)
 
 
-class Viewer(unittest.TestCase):
-    def setUp(self):
-        import threading
-        self.tmp = tempfile.TemporaryDirectory()
-        self.path = Path(self.tmp.name) / "items.json"
-        self.path.write_text(json.dumps({"items": [item("a", attack=1)]}), encoding="utf-8")
-        self.server = viewer.make_server(self.path, port=0)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
-        self.thread.start()
-        self.base = "http://127.0.0.1:%d" % self.server.server_address[1]
-
-    def tearDown(self):
-        self.server.shutdown()
-        self.server.server_close()
-        self.tmp.cleanup()
-
-    def get(self, route):
-        import urllib.error
-        import urllib.request
-        try:
-            with urllib.request.urlopen(self.base + route, timeout=5) as res:
-                return res.status, res.headers.get("Content-Type"), res.read()
-        except urllib.error.HTTPError as exc:
-            return exc.code, exc.headers.get("Content-Type"), exc.read()
-
-    def api(self):
-        status, ctype, body = self.get("/api/items")
-        self.assertEqual(status, 200)
-        self.assertIn("application/json", ctype)
-        return json.loads(body.decode("utf-8"))
-
-    def test_binds_to_loopback_by_default(self):
-        self.assertEqual(self.server.server_address[0], "127.0.0.1")
-
-    def test_page_is_served(self):
-        status, ctype, body = self.get("/")
-        self.assertEqual(status, 200)
-        self.assertIn("text/html", ctype)
-        self.assertIn("/api/items", body.decode("utf-8"))
-
-    def test_api_reads_the_file_fresh_on_every_request(self):
-        first = self.api()
-        self.assertTrue(first["ok"])
-        self.assertEqual([i["id"] for i in first["data"]["items"]], ["a"])
-        self.path.write_text(json.dumps({"items": [item("a", attack=1), item("b", attack=2)]}), encoding="utf-8")
-        second = self.api()
-        self.assertNotEqual(first["version"], second["version"])
-        self.assertEqual(second["report"]["items"], 2)
-
-    def test_api_includes_validation_report(self):
-        self.path.write_text(json.dumps({"items": [item("weak", price=9, attack=1), item("strong", price=5, attack=2)]}), encoding="utf-8")
-        self.assertEqual(codes(self.api()["report"]["warnings"]), ["dominated"])
-
-    def test_broken_file_returns_error_instead_of_crashing(self):
-        self.path.write_text("{ broken", encoding="utf-8")
-        snap = self.api()
-        self.assertFalse(snap["ok"])
-        self.assertIn("형식 오류", snap["error"])
-        self.path.write_text(json.dumps({"items": []}), encoding="utf-8")
-        self.assertTrue(self.api()["ok"])
-
-    def test_other_paths_are_not_served(self):
-        for route in ("/items.json", "/../../etc/passwd", "/assets/item-viewer.html"):
-            self.assertEqual(self.get(route)[0], 404, route)
-
-
 BASE = json.loads((SKILL / "assets/sample-meta.json").read_text(encoding="utf-8"))
+BASE["upgrades_file"] = str(SKILL / "assets" / BASE["upgrades_file"])
 
 
 def cfg(**changes):
     c = copy.deepcopy(BASE)
     c.update({"trials": 40, "max_runs": 30})
+    if "upgrades" in changes:
+        c.pop("upgrades_file", None)
     for k, v in changes.items():
         c[k] = v
     return c
@@ -437,6 +377,286 @@ class MetaCli(unittest.TestCase):
             conf.write_text(json.dumps(cfg(rooms=0)), encoding="utf-8")
             with redirect_stderr(io.StringIO()):
                 self.assertEqual(sm.main([str(conf)]), 2)
+
+
+def upgrade(uid, cost, power=1.0, requires=None, **extra):
+    d = {"id": uid, "cost": cost, "power": power}
+    if requires is not None:
+        d["requires"] = requires
+    d.update(extra)
+    return d
+
+
+def enemy(eid, rank="normal", zone=1, **stats):
+    return {"id": eid, "rank": rank, "zone": zone, "stats": stats}
+
+
+class Upgrades(unittest.TestCase):
+    def test_sample_passes(self):
+        r = vu.validate(vu.load(SKILL / "assets/sample-upgrades.json"))
+        self.assertEqual((r["errors"], r["warnings"]), ([], []))
+        self.assertEqual(r["status_counts"]["cut"], 1)
+
+    def test_schema_errors(self):
+        r = vu.validate({"upgrades": [
+            {"id": "a", "cost": -1}, {"id": "b", "cost": 1, "power": "big"},
+            {"id": "c", "cost": 1, "requires": "a"}, {"id": "d", "cost": 1, "level": 1.5},
+            {"id": "e"},
+        ]})
+        self.assertEqual(codes(r["errors"]), ["schema"] * 5)
+
+    def test_missing_requires_field_is_fine(self):
+        r = vu.validate({"upgrades": [upgrade("a", 1)]})
+        self.assertEqual(r["errors"], [])
+        self.assertEqual(r["depth"], {"a": 0})
+
+    def test_unknown_requirement_and_cycle(self):
+        r = vu.validate({"upgrades": [upgrade("a", 1, requires=["ghost"])]})
+        self.assertEqual(codes(r["errors"]), ["unknown_requirement"])
+        r = vu.validate({"upgrades": [upgrade("a", 1, requires=["b"]), upgrade("b", 2, requires=["a"])]})
+        self.assertIn("requirement_cycle", codes(r["errors"]))
+        self.assertEqual(r["depth"], {})
+
+    def test_requires_cut_is_error(self):
+        gone = upgrade("base", 10, status="cut")
+        r = vu.validate({"upgrades": [gone, upgrade("child", 20, requires=["base"])]})
+        self.assertEqual(codes(r["errors"]), ["requires_cut"])
+
+    def test_cost_inversion_and_missing_power_warn(self):
+        r = vu.validate({"upgrades": [upgrade("a", 50), {"id": "b", "cost": 20, "requires": ["a"]}]})
+        self.assertEqual(sorted((w["code"], w["where"]) for w in r["warnings"]),
+                         [("cost_inversion", "b"), ("power_missing", "b")])
+
+    def test_totals_tracks_depth_and_efficiency_exclude_cut(self):
+        r = vu.validate({"upgrades": [
+            upgrade("a", 10, 2, track="hp"), upgrade("b", 30, 3, requires=["a"], track="hp"),
+            upgrade("c", 99, 9, track="hp", status="cut"),
+        ]})
+        self.assertEqual(r["totals"], {"active": 2, "cost": 40, "power": 5})
+        self.assertEqual(r["tracks"]["hp"]["count"], 2)
+        self.assertEqual(r["depth"], {"a": 0, "b": 1, "c": 0})
+        self.assertEqual(r["efficiency"]["a"], 0.2)
+
+    def test_csv_requires_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "upgrades.csv"
+            path.write_text("id,cost,power,requires,status\na,10,1,,approved\nb,20,2,a;c,proposed\nc,5,1,,\n", encoding="utf-8")
+            data = vu.load(path)
+            self.assertEqual(data["upgrades"][1]["requires"], ["a", "c"])
+            r = vu.validate(data)
+            self.assertEqual([(w["code"], w["where"]) for w in r["warnings"]], [])
+
+    def test_cli_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "u.json"
+            path.write_text(json.dumps({"upgrades": [upgrade("a", 1, provenance={"kind": "assumed"})]}), encoding="utf-8")
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(vu.main([str(path)]), 0)
+                self.assertEqual(vu.main([str(path), "--fail-on-assumed"]), 1)
+            path.write_text(json.dumps({"items": []}), encoding="utf-8")
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(vu.main([str(path)]), 2)
+
+
+class Enemies(unittest.TestCase):
+    def test_sample_passes_with_items(self):
+        items = vi.load(SKILL / "assets/sample-items.json")
+        r = ve.validate(ve.load(SKILL / "assets/sample-enemies.json"), items["drop_tables"])
+        self.assertEqual((r["errors"], r["warnings"]), ([], []))
+        self.assertEqual(r["drop_table_not_checked"], [])
+
+    def test_schema_errors(self):
+        r = ve.validate({"enemies": [
+            {"id": "a", "rank": "miniboss", "zone": 1, "stats": {}}, {"id": "b", "rank": "normal", "zone": 0, "stats": {}},
+            {"id": "c", "rank": "normal", "zone": 1, "reward": -1}, {"id": "d", "rank": "normal", "zone": 1, "drop_table": 3},
+        ]})
+        self.assertEqual(codes(r["errors"]), ["schema"] * 4)
+
+    def test_threat_uses_weights(self):
+        r = ve.validate({"threat_weights": {"hp": 0.1}, "enemies": [enemy("a", hp=50, damage=3)]})
+        self.assertEqual(r["scores"]["a"], 8.0)
+
+    def test_zone_inversion(self):
+        r = ve.validate({"enemies": [enemy("a", zone=1, damage=10), enemy("b", zone=2, damage=5)]})
+        self.assertEqual([(w["code"], w["where"]) for w in r["warnings"]], [("zone_inversion", "zone_2")])
+
+    def test_rank_inversion_including_ties(self):
+        r = ve.validate({"enemies": [enemy("n", "normal", damage=10), enemy("e", "elite", damage=10), enemy("b", "boss", damage=30)]})
+        self.assertEqual([(w["code"], w["where"]) for w in r["warnings"]], [("rank_inversion", "zone_1")])
+
+    def test_cut_enemies_are_ignored(self):
+        weak_boss = enemy("b", "boss", damage=1); weak_boss["status"] = "cut"
+        weak_boss["drop_table"] = "nowhere"
+        r = ve.validate({"enemies": [enemy("n", damage=10), weak_boss]}, {})
+        self.assertEqual((r["errors"], r["warnings"]), ([], []))
+
+    def test_drop_table_reference(self):
+        e = enemy("a", damage=1); e["drop_table"] = "chest"
+        self.assertEqual(ve.validate({"enemies": [e]})["drop_table_not_checked"], ["a"])
+        self.assertEqual(codes(ve.validate({"enemies": [e]}, {"other": {}})["errors"]), ["unknown_drop_table"])
+        self.assertEqual(ve.validate({"enemies": [e]}, {"chest": {}})["errors"], [])
+
+    def test_cli_with_items_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            e = enemy("a", damage=1); e["drop_table"] = "chest"
+            ep, ip = Path(tmp) / "enemies.json", Path(tmp) / "items.json"
+            ep.write_text(json.dumps({"enemies": [e]}), encoding="utf-8")
+            ip.write_text(json.dumps({"items": [], "drop_tables": {"other": {"entries": [{"rarity": "x", "weight": 1}]}}}), encoding="utf-8")
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(ve.main([str(ep)]), 0)
+                self.assertEqual(ve.main([str(ep), "--items", str(ip)]), 1)
+
+
+class CommonLoading(unittest.TestCase):
+    def test_kind_detection(self):
+        self.assertEqual(common.detect_kind({"rooms": 3, "difficulty": {}, "upgrades": []}, Path("x.json")), "meta")
+        self.assertEqual(common.detect_kind({"enemies": []}, Path("x.json")), "enemies")
+        self.assertIsNone(common.detect_kind({"foo": 1}, Path("x.json")))
+        self.assertEqual(common.kind_from_filename(Path("Boss_Enemies.csv")), "enemies")
+
+    def test_csv_without_kind_hint_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "data.csv"
+            path.write_text("id\na\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                common.load_dataset(path)
+
+
+class MetaUpgradesFile(unittest.TestCase):
+    def test_sample_meta_reads_upgrades_file_and_skips_cut(self):
+        c = sm.normalize(json.loads((SKILL / "assets/sample-meta.json").read_text(encoding="utf-8")), SKILL / "assets")
+        ids = [u["id"] for u in c["upgrades"]]
+        self.assertNotIn("lucky_start", ids)
+        self.assertEqual(ids, ["vitality_1", "weapon_1", "vitality_2", "weapon_2", "relic_slot", "weapon_3"])
+        self.assertEqual(len(c["upgrades_file"]["sha256"]), 64)
+
+    def test_file_and_inline_give_identical_results(self):
+        data = vu.load(SKILL / "assets/sample-upgrades.json")
+        inline = [{"id": u["id"], "cost": u["cost"], "power": u["power"], "requires": u.get("requires", [])}
+                  for u in data["upgrades"] if u.get("status") != "cut"]
+        a = sm.simulate(sm.normalize(cfg()))
+        b = sm.simulate(sm.normalize(cfg(upgrades=inline)))
+        self.assertEqual(a["milestones"], b["milestones"])
+        self.assertEqual(a["upgrades"], b["upgrades"])
+
+    def test_upgrades_file_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            both = cfg(); both["upgrades"] = []
+            with self.assertRaises(sm.ConfigError):
+                sm.normalize(both)
+            with self.assertRaises(sm.ConfigError):
+                sm.normalize(cfg(upgrades_file=str(d / "missing.json")))
+            (d / "bad.json").write_text(json.dumps({"upgrades": [upgrade("a", 1, requires=["ghost"])]}), encoding="utf-8")
+            with self.assertRaises(sm.ConfigError):
+                sm.normalize(cfg(upgrades_file="bad.json"), d)
+            # 시뮬레이터 자체 검사로는 잡히지 않는 데이터 오류도 거부해야 한다 (측정인데 근거 없음).
+            (d / "unsourced.json").write_text(json.dumps({"upgrades": [upgrade("a", 1, provenance={"kind": "measured"})]}), encoding="utf-8")
+            with self.assertRaisesRegex(sm.ConfigError, "오류"):
+                sm.normalize(cfg(upgrades_file="unsourced.json"), d)
+            (d / "nopower.json").write_text(json.dumps({"upgrades": [{"id": "a", "cost": 1}]}), encoding="utf-8")
+            with self.assertRaisesRegex(sm.ConfigError, "power"):
+                sm.normalize(cfg(upgrades_file="nopower.json"), d)
+            (d / "ok.json").write_text(json.dumps({"upgrades": [upgrade("a", 1)]}), encoding="utf-8")
+            self.assertEqual([u["id"] for u in sm.normalize(cfg(upgrades_file="ok.json"), d)["upgrades"]], ["a"])
+
+
+class Viewer(unittest.TestCase):
+    def setUp(self):
+        import threading
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.write("items.json", {"items": [item("a", attack=1)], "drop_tables": {"chest": {"entries": [{"rarity": "x", "weight": 1}]}}})
+        self.write("upgrades.json", {"upgrades": [upgrade("u1", 10)]})
+        self.write("enemies.json", {"enemies": [dict(enemy("e1", damage=1), drop_table="chest")]})
+        self.write("meta.json", {"rooms": 3, "difficulty": {"base": 1, "rate": 1}, "upgrades_file": "upgrades.json"})
+        self.write("notes.json", {"hello": "world"})
+        self.server = viewer.make_server([self.dir], port=0)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.base = "http://127.0.0.1:%d" % self.server.server_address[1]
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.tmp.cleanup()
+
+    def write(self, name, data):
+        (self.dir / name).write_text(data if isinstance(data, str) else json.dumps(data), encoding="utf-8")
+
+    def get(self, route):
+        import urllib.error
+        import urllib.request
+        try:
+            with urllib.request.urlopen(self.base + route, timeout=5) as res:
+                return res.status, res.headers.get("Content-Type"), res.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.headers.get("Content-Type"), exc.read()
+
+    def api(self):
+        status, ctype, body = self.get("/api/data")
+        self.assertEqual(status, 200)
+        self.assertIn("application/json", ctype)
+        snap = json.loads(body.decode("utf-8"))
+        return snap, {d["name"]: d for d in snap["datasets"]}
+
+    def test_binds_to_loopback_by_default(self):
+        self.assertEqual(self.server.server_address[0], "127.0.0.1")
+
+    def test_page_is_served(self):
+        status, ctype, body = self.get("/")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", ctype)
+        self.assertIn("/api/data", body.decode("utf-8"))
+
+    def test_directory_discovery_skips_meta_and_unrelated_json(self):
+        snap, by = self.api()
+        self.assertEqual(sorted(by), ["enemies.json", "items.json", "upgrades.json"])
+        self.assertEqual({d["kind"] for d in snap["datasets"]}, {"items", "upgrades", "enemies"})
+        self.assertTrue(all(d["ok"] and "report" in d for d in snap["datasets"]))
+
+    def test_cross_file_drop_table_check(self):
+        _, by = self.api()
+        self.assertEqual(by["enemies.json"]["report"]["errors"], [])
+        self.write("enemies.json", {"enemies": [dict(enemy("e1", damage=1), drop_table="missing")]})
+        _, by = self.api()
+        self.assertEqual(codes(by["enemies.json"]["report"]["errors"]), ["unknown_drop_table"])
+        (self.dir / "items.json").unlink()
+        _, by = self.api()
+        self.assertEqual(by["enemies.json"]["report"]["drop_table_not_checked"], ["e1"])
+
+    def test_reads_fresh_and_picks_up_new_files(self):
+        first, _ = self.api()
+        self.write("upgrades.json", {"upgrades": [upgrade("u1", 10), upgrade("u2", 5, requires=["u1"])]})
+        second, by = self.api()
+        self.assertNotEqual(first["version"], second["version"])
+        self.assertEqual(codes(by["upgrades.json"]["report"]["warnings"]), ["cost_inversion"])
+        self.write("boss_enemies.json", {"enemies": [enemy("boss", "boss", damage=9)]})
+        _, by = self.api()
+        self.assertIn("boss_enemies.json", by)
+
+    def test_broken_dataset_reports_error(self):
+        self.write("items.json", "{ broken")
+        _, by = self.api()
+        self.assertFalse(by["items.json"]["ok"])
+        self.assertIn("형식 오류", by["items.json"]["error"])
+        self.assertEqual(by["items.json"]["kind"], "items")
+
+    def test_explicit_non_data_file_reports_error(self):
+        snap = viewer.snapshot([self.dir / "notes.json"])
+        self.assertFalse(snap["datasets"][0]["ok"])
+        self.assertIn("데이터가 아닙니다", snap["datasets"][0]["error"])
+
+    def test_other_paths_are_not_served(self):
+        for route in ("/items.json", "/../../etc/passwd", "/assets/data-viewer.html", "/api/items"):
+            self.assertEqual(self.get(route)[0], 404, route)
+
+    def test_cli_requires_existing_data(self):
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(viewer.main([str(self.dir / "nope"), "--no-browser"]), 2)
+            empty = Path(self.tmp.name) / "empty"
+            empty.mkdir()
+            self.assertEqual(viewer.main([str(empty), "--no-browser"]), 2)
 
 
 if __name__ == "__main__":

@@ -48,8 +48,35 @@ def _req(cfg: dict, key: str, kind, where: str = ""):
     return val
 
 
-def normalize(cfg: dict) -> dict:
-    """설정을 검사하고 기본값을 채운다."""
+def _load_upgrades_file(name, base_dir: Path | None) -> tuple[list, dict]:
+    """영구 강화 데이터 파일(단일 원본)을 읽어 시뮬레이터용 목록으로 바꾼다. 삭제(cut) 항목은 뺀다."""
+    if not isinstance(name, str) or not name:
+        raise ConfigError("upgrades_file은 파일 경로 문자열이어야 합니다.")
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import validate_upgrades as vu
+
+    path = Path(name)
+    if not path.is_absolute():
+        path = (base_dir or Path.cwd()) / path
+    try:
+        data = vu.load(path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise ConfigError(f"upgrades_file을 읽을 수 없습니다 ({path}): {exc}")
+    report = vu.validate(data)
+    if report["errors"]:
+        first = "; ".join(f"{e['where']}: {e['message']}" for e in report["errors"][:3])
+        raise ConfigError(f"강화 데이터에 오류가 있습니다 ({path}). validate_upgrades.py로 확인하세요. {first}")
+    active = [u for u in data["upgrades"] if u.get("status") != "cut"]
+    missing = [u["id"] for u in active if u.get("power") is None]
+    if missing:
+        raise ConfigError("power가 없는 강화는 시뮬레이션할 수 없습니다: " + ", ".join(missing))
+    ups = [{"id": u["id"], "cost": u["cost"], "power": u["power"], "requires": list(u.get("requires") or [])} for u in active]
+    info = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    return ups, info
+
+
+def normalize(cfg: dict, base_dir: Path | None = None) -> dict:
+    """설정을 검사하고 기본값을 채운다. upgrades_file의 상대 경로는 base_dir(설정 파일 폴더) 기준이다."""
     if not isinstance(cfg, dict):
         raise ConfigError("설정 최상위는 객체여야 합니다.")
     out = {
@@ -95,7 +122,12 @@ def normalize(cfg: dict) -> dict:
         raise ConfigError("currency.keep_on_death는 0~1 사이여야 합니다.")
     out["currency"] = {"per_room": _req(c, "per_room", float, "currency."), "bonus_rooms": bonus, "keep_on_death": keep}
 
-    ups = cfg.get("upgrades", []) or []
+    if "upgrades_file" in cfg:
+        if "upgrades" in cfg:
+            raise ConfigError("upgrades와 upgrades_file 중 하나만 쓰세요. 단일 원본은 upgrades_file입니다.")
+        ups, out["upgrades_file"] = _load_upgrades_file(cfg["upgrades_file"], base_dir)
+    else:
+        ups = cfg.get("upgrades", []) or []
     if not isinstance(ups, list):
         raise ConfigError("upgrades는 배열이어야 합니다.")
     seen: dict = {}
@@ -317,13 +349,15 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         raw = Path(args.config).read_bytes()
-        cfg = normalize(json.loads(raw.decode("utf-8")))
+        cfg = normalize(json.loads(raw.decode("utf-8")), Path(args.config).resolve().parent)
     except (OSError, json.JSONDecodeError, UnicodeDecodeError, ConfigError) as exc:
         print(f"설정 오류: {exc}", file=sys.stderr)
         return 2
     result = simulate(cfg)
     result["config"] = args.config
     result["config_sha256"] = hashlib.sha256(raw).hexdigest()
+    if "upgrades_file" in cfg:
+        result["upgrades_file"] = cfg["upgrades_file"]
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")

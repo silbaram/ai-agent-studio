@@ -1,0 +1,134 @@
+{
+  "track_labels": {
+    "vitality": "생명력",
+    "weapon": "무기",
+    "utility": "편의"
+  },
+  "stat_labels": {
+    "max_hp": "최대 체력",
+    "attack": "공격력",
+    "relic_slots": "유물 슬롯"
+  },
+  "upgrades": [
+    {
+      "id": "vitality_1",
+      "name": "강인함 I",
+      "track": "vitality",
+      "level": 1,
+      "cost": 20,
+      "power": 1.5,
+      "stats": {
+        "max_hp": 10
+      },
+      "intent": "첫 런 이후 바로 살 수 있는 체감 강화",
+      "status": "approved",
+      "provenance": {
+        "kind": "assumed",
+        "note": "기획 의도"
+      }
+    },
+    {
+      "id": "weapon_1",
+      "name": "무기 숙련 I",
+      "track": "weapon",
+      "level": 1,
+      "cost": 40,
+      "power": 2.0,
+      "stats": {
+        "attack": 2
+      },
+      "status": "approved",
+      "provenance": {
+        "kind": "assumed"
+      }
+    },
+    {
+      "id": "vitality_2",
+      "name": "강인함 II",
+      "track": "vitality",
+      "level": 2,
+      "cost": 70,
+      "power": 2.0,
+      "requires": [
+        "vitality_1"
+      ],
+      "stats": {
+        "max_hp": 15
+      },
+      "status": "approved",
+      "provenance": {
+        "kind": "assumed"
+      }
+    },
+    {
+      "id": "weapon_2",
+      "name": "무기 숙련 II",
+      "track": "weapon",
+      "level": 2,
+      "cost": 110,
+      "power": 2.5,
+      "requires": [
+        "weapon_1"
+      ],
+      "stats": {
+        "attack": 3
+      },
+      "status": "approved",
+      "provenance": {
+        "kind": "assumed"
+      }
+    },
+    {
+      "id": "relic_slot",
+      "name": "유물 슬롯 +1",
+      "track": "utility",
+      "level": 1,
+      "cost": 160,
+      "power": 3.0,
+      "requires": [
+        "weapon_2"
+      ],
+      "stats": {
+        "relic_slots": 1
+      },
+      "effect": "유물을 하나 더 장착",
+      "intent": "중반 빌드 다양성",
+      "status": "approved",
+      "provenance": {
+        "kind": "assumed"
+      }
+    },
+    {
+      "id": "weapon_3",
+      "name": "무기 숙련 III",
+      "track": "weapon",
+      "level": 3,
+      "cost": 240,
+      "power": 3.0,
+      "requires": [
+        "weapon_2"
+      ],
+      "stats": {
+        "attack": 4
+      },
+      "status": "approved",
+      "provenance": {
+        "kind": "assumed"
+      }
+    },
+    {
+      "id": "lucky_start",
+      "name": "행운의 시작",
+      "track": "utility",
+      "level": 1,
+      "cost": 60,
+      "power": 0.5,
+      "effect": "런 시작 시 일반 상자 1개",
+      "intent": "초반 변수 늘리기",
+      "status": "cut",
+      "provenance": {
+        "kind": "assumed"
+      }
+    }
+  ]
+}

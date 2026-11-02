@@ -30,10 +30,7 @@
   "survival": { "slope": 0.35, "floor": 0.0, "ceiling": 0.995 },
   "currency": { "per_room": 2, "bonus_rooms": { "10": 15, "20": 30, "30": 60 }, "keep_on_death": 1.0 },
   "purchase_policy": "listed_order",
-  "upgrades": [
-    { "id": "vitality_1", "cost": 20, "power": 1.5 },
-    { "id": "vitality_2", "cost": 70, "power": 2.0, "requires": ["vitality_1"] }
-  ],
+  "upgrades_file": "upgrades.json",
   "milestones": [ { "id": "boss_1", "clear_room": 10 } ]
 }
 ```
@@ -45,7 +42,8 @@
 | `player.base_power` | 예 | `power_per_room`, `skill`, `skill_spread`는 기본 0 |
 | `survival.slope` | 예 | 클수록 힘 차이에 민감. `floor`·`ceiling` 기본 0·1 |
 | `currency.per_room` | 예 | `bonus_rooms` 기본 없음, `keep_on_death` 기본 1 |
-| `upgrades` | 아니오 | `requires`에 없는 id나 순환이 있으면 오류 |
+| `upgrades_file` | 아니오 | 영구 강화 원본 파일 경로(설정 파일 폴더 기준). **권장.** `validate_upgrades.py` 검사에서 오류가 있거나 활성 강화에 `power`가 없으면 실행을 거부한다. `cut` 강화는 빠지고, 목록 순서는 파일 순서다. 결과에 파일 경로와 해시가 남는다 |
+| `upgrades` | 아니오 | 빠른 실험용 인라인 목록(`id`, `cost`, `power`, `requires`). `upgrades_file`과 함께 쓸 수 없다. `requires`에 없는 id나 순환이 있으면 오류 |
 | `milestones` | 아니오 | `clear_room`은 1 ~ `rooms` |
 
 ## 출력

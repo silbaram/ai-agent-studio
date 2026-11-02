@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>게임 데이터</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --on-accent: #ffffff; --text: #1d2330; --muted: #667085; --line: #e4e7ec;
+    --head: #f2f4f7; --accent: #3b5bdb; --err: #c92a2a; --err-bg: #fff0f0; --warn: #b35c00; --warn-bg: #fff6e5;
+    --ok: #2b8a3e; --ok-bg: #ebfbee; --flash: #fff3bf; --info-bg: #edf2ff;
+    --r-common: #868e96; --r-uncommon: #2f9e44; --r-rare: #1c7ed6; --r-epic: #9c36b5; --r-legendary: #e8590c;
+    --rk-normal: #868e96; --rk-elite: #b35c00; --rk-boss: #c92a2a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1a1f27; --on-accent: #0d1426; --text: #e6e9ef; --muted: #98a2b3; --line: #2a313c;
+      --head: #202631; --accent: #7c9cff; --err: #ff8787; --err-bg: #3a1f22; --warn: #ffb347; --warn-bg: #3a2c14;
+      --ok: #69db7c; --ok-bg: #1d3323; --flash: #4a3f12; --info-bg: #1e2740;
+      --r-common: #adb5bd; --r-uncommon: #69db7c; --r-rare: #74c0fc; --r-epic: #e599f7; --r-legendary: #ffa94d;
+      --rk-normal: #adb5bd; --rk-elite: #ffb347; --rk-boss: #ff8787;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 16px; margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  .muted { color: var(--muted); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+  .mode { font-size: 12px; border-radius: 999px; padding: 2px 10px; border: 1px solid var(--line); background: var(--panel); }
+  .mode.server { color: var(--ok); border-color: var(--ok); }
+  .mode.file { color: var(--warn); border-color: var(--warn); }
+  .live { margin-left: auto; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .dot.off { background: var(--err); } .dot.idle { background: var(--muted); }
+  .filebar { display: none; background: var(--info-bg); border: 1px dashed var(--accent); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+  .filebar.show { display: block; }
+  .filebar.drag { background: var(--flash); }
+  .filebar .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .btn { border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); border-radius: 8px; padding: 6px 12px; cursor: pointer; font: inherit; font-weight: 600; }
+  .btn.ghost { background: transparent; color: var(--accent); }
+  .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .tab { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 10px; padding: 6px 12px; cursor: pointer; font: inherit; text-align: left; }
+  .tab.on { border-color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+  .tab .fn { display: block; font-size: 11px; color: var(--muted); }
+  .tab .cnt { font-size: 11px; margin-left: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 16px; }
+  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+  .chip b { font-weight: 600; }
+  .chip.fail { color: var(--err); border-color: var(--err); }
+  .chip.pass { color: var(--ok); border-color: var(--ok); }
+  .chip.none { color: var(--warn); border-color: var(--warn); }
+  .banner { border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; background: var(--err-bg); color: var(--err); border: 1px solid var(--err); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 16px; }
+  .panel > .ph { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  details.panel > summary { padding: 10px 14px; cursor: pointer; font-weight: 600; }
+  .issues { list-style: none; margin: 0; padding: 0 14px 10px; }
+  .issues li { padding: 4px 0; border-top: 1px dashed var(--line); cursor: pointer; }
+  .issues li:first-child { border-top: 0; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 4px; padding: 0 6px; margin-right: 6px; }
+  .tag.err { background: var(--err-bg); color: var(--err); }
+  .tag.warn { background: var(--warn-bg); color: var(--warn); }
+  .tag.info { background: var(--head); color: var(--muted); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 16px; }
+  .controls input[type=search] { flex: 1 1 220px; min-width: 0; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  .controls select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  .seg { display: flex; flex-wrap: wrap; gap: 4px; }
+  .seg button { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 999px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+  .seg button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+  label.check { display: flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
+  .tw { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; white-space: nowrap; }
+  th { background: var(--head); font-weight: 600; font-size: 12px; color: var(--muted); }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sorted::after { content: " ▲"; }
+  th.sorted.desc::after { content: " ▼"; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.text { white-space: normal; min-width: 220px; max-width: 360px; }
+  tr.cut td { opacity: .5; }
+  tr.cut td.name .nm { text-decoration: line-through; }
+  tr.flash td { background: var(--flash); }
+  tr.has-err td:first-child { box-shadow: inset 3px 0 0 var(--err); }
+  tr.has-warn td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+  .nm { font-weight: 600; }
+  .empty { color: var(--muted); }
+  .pill { display: inline-block; border-radius: 999px; padding: 0 8px; font-size: 12px; border: 1px solid currentColor; }
+  .st-proposed { color: var(--accent); } .st-approved { color: var(--ok); } .st-cut { color: var(--muted); } .st-unspecified { color: var(--muted); border-style: dashed; }
+  .pv-assumed { color: var(--warn); } .pv-computed { color: var(--accent); } .pv-measured { color: var(--ok); } .pv-unspecified { color: var(--muted); border-style: dashed; }
+  .strong { font-weight: 600; }
+  .badges { margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .intent { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .group-note { font-size: 12px; color: var(--warn); padding: 8px 14px 0; }
+  .group-meta { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .drops { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; padding: 12px 14px 14px; }
+  .drop { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .bar { display: grid; grid-template-columns: 96px 1fr 64px; gap: 8px; align-items: center; font-size: 12px; margin: 4px 0; }
+  .bar .track { height: 8px; background: var(--head); border-radius: 4px; overflow: hidden; }
+  .bar .fill { height: 100%; background: var(--accent); }
+  footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>게임 데이터</h1>
+    <span class="mode" id="mode"></span>
+    <span class="live"><span class="dot idle" id="dot"></span><span id="live">불러오는 중…</span></span>
+  </header>
+
+  <section class="filebar" id="filebar" aria-label="파일 불러오기">
+    <div class="row">
+      <button class="btn" id="pick" type="button">불러오기</button>
+      <button class="btn ghost" id="reload" type="button" hidden>다시 불러오기</button>
+      <span>JSON 파일을 고르거나 여기로 끌어다 놓으세요. 여러 개를 함께 고를 수 있습니다.</span>
+      <input type="file" id="file-input" accept=".json,application/json" multiple hidden>
+    </div>
+    <div class="note" id="file-note">
+      파일 모드는 원본에 적힌 값만 보여 줍니다. 검사(열위·역전·참조)와 계산(점수·위협도·확률)은 하지 않습니다.
+      검사 결과까지 보려면 서버로 실행하세요: <span class="mono">python skills/progression-economy/scripts/view_data.py data/</span>
+    </div>
+  </section>
+
+  <div id="banner" class="banner" hidden></div>
+  <nav class="tabs" id="tabs" aria-label="데이터 종류"></nav>
+  <div class="chips" id="summary"></div>
+  <details class="panel" id="issues-panel" hidden>
+    <summary id="issues-title"></summary>
+    <ul class="issues" id="issues"></ul>
+  </details>
+  <div class="controls" id="controls" hidden>
+    <input type="search" id="q" placeholder="이름·id·효과 검색" aria-label="검색">
+    <div class="seg" id="groups" role="group"></div>
+    <select id="status" aria-label="상태">
+      <option value="">상태 전체</option>
+      <option value="proposed">제안</option>
+      <option value="approved">승인</option>
+      <option value="cut">삭제</option>
+      <option value="unspecified">미지정</option>
+    </select>
+    <label class="check" id="only-issues-wrap"><input type="checkbox" id="only-issues"> 문제 있는 것만</label>
+  </div>
+  <div id="sections"></div>
+  <div id="extras"></div>
+  <footer id="footer"></footer>
+</main>
+<script>
+"use strict";
+const LABEL = {
+  slot: { weapon: "무기", armor: "방어구", relic: "유물", accessory: "장신구", consumable: "소모품" },
+  track: {},
+  rarity: { common: "일반", uncommon: "고급", rare: "희귀", epic: "영웅", legendary: "전설" },
+  rank: { normal: "일반", elite: "정예", boss: "보스" },
+  status: { proposed: "제안", approved: "승인", cut: "삭제", unspecified: "미지정" },
+  prov: { assumed: "가정", computed: "계산", measured: "측정", unspecified: "미지정" },
+  code: { dominated: "열위", tier_inversion: "티어 역전", schema: "형식", duplicate_id: "중복 id", unknown_item: "없는 아이템",
+          provenance: "출처", pity_target_missing: "천장 대상 없음", cut_item_referenced: "삭제 아이템 드랍",
+          unknown_requirement: "없는 선행 조건", requirement_cycle: "선행 순환", requires_cut: "삭제된 선행 조건",
+          cost_inversion: "비용 역전", power_missing: "power 없음", zone_inversion: "구역 역전", rank_inversion: "등급 역전",
+          unknown_drop_table: "없는 드랍 테이블" },
+};
+const KIND_LABEL = { items: "아이템", upgrades: "영구 강화", enemies: "적" };
+const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
+const RANK_ORDER = ["normal", "elite", "boss"];
+const orderOf = (list, v) => { const i = list.indexOf(v); return i < 0 ? list.length : i; };
+const SERVER_HINT = "python skills/progression-economy/scripts/view_data.py data/";
+
+const state = { mode: null, snap: null, active: null, ui: {}, sort: {}, file: { handles: null, texts: [] } };
+
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") n.className = v; else if (k === "text") n.textContent = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat()) if (c !== null && c !== undefined && c !== false) n.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  return n;
+}
+const fmt = (v) => (typeof v === "number" ? (Number.isInteger(v) ? String(v) : String(+v.toFixed(4))) : String(v));
+const dash = (t = "–") => el("span", { class: "empty", text: t });
+const label = (kind, key, data) => ((data && data[kind + "_labels"] && data[kind + "_labels"][key]) || LABEL[kind]?.[key] || key);
+const ui = (ds) => (state.ui[ds.path] ||= { q: "", group: "", status: "", onlyIssues: false });
+
+/* ---------- 종류별 정의 (보여 주기만, 검사 규칙 없음) ---------- */
+const KINDS = {
+  items: {
+    listKey: "items", groupName: "부위",
+    groupOf: (e) => e.slot || "(부위 없음)",
+    groupLabel: (g, data) => label("slot", g, data),
+    defaultSort: { key: "tier", desc: false },
+    columns: (ds, statKeys) => [
+      { key: "tier", label: "티어", sort: (e) => e.tier, cell: (e) => (e.tier !== undefined ? "T" + e.tier : dash()) },
+      nameColumn(ds),
+      { label: "희귀도", cell: (e) => e.rarity ? el("span", { class: "strong", style: RARITY_ORDER.includes(e.rarity) ? `color: var(--r-${e.rarity})` : null, text: label("rarity", e.rarity, ds.data) }) : dash() },
+      numColumn("price", "가격", (e) => e.price),
+      ...statColumns(ds, statKeys),
+      ...(ds.report ? [numColumn("score", "점수", (e) => ds.report.scores?.[e.id], (e, v) => fmt(v) + (e.unique_effect ? "*" : ""))] : []),
+      ...tailColumns(),
+    ],
+    tieBreak: (ds) => (a, b) => (ds.report ? (ds.report.scores?.[b.id] ?? 0) - (ds.report.scores?.[a.id] ?? 0) : 0),
+    groupMeta: () => null,
+    extras: (ds, idx) => dropTables(ds, idx),
+  },
+  upgrades: {
+    listKey: "upgrades", groupName: "트랙",
+    groupOf: (e) => e.track || "(트랙 없음)",
+    groupLabel: (g, data) => label("track", g, data),
+    defaultSort: { key: "level", desc: false },
+    columns: (ds, statKeys) => {
+      const names = Object.fromEntries((ds.data.upgrades || []).filter((u) => u && u.id).map((u) => [u.id, u.name || u.id]));
+      return [
+        { key: "level", label: "Lv", sort: (e) => e.level, cell: (e) => (e.level !== undefined ? "Lv" + e.level : dash()) },
+        nameColumn(ds),
+        numColumn("cost", "비용", (e) => e.cost),
+        numColumn("power", "power", (e) => e.power),
+        ...(ds.report ? [numColumn("eff", "효율", (e) => ds.report.efficiency?.[e.id])] : []),
+        ...statColumns(ds, statKeys),
+        { label: "선행 조건", cell: (e) => (Array.isArray(e.requires) && e.requires.length ? e.requires.map((r) => names[r] || r).join(", ") : dash()) },
+        ...tailColumns(),
+      ];
+    },
+    tieBreak: () => (a, b) => (a.cost ?? 0) - (b.cost ?? 0),
+    groupMeta: (ds, g) => {
+      const t = ds.report?.tracks?.[g];
+      return t ? `${t.count}개 · 총비용 ${fmt(t.total_cost)} · power ${fmt(t.total_power)} (삭제 제외)` : null;
+    },
+    extras: () => null,
+  },
+  enemies: {
+    listKey: "enemies", groupName: "구역",
+    groupOf: (e) => (e.zone !== undefined ? "zone_" + e.zone : "(구역 없음)"),
+    groupLabel: (g, data) => {
+      const z = g.startsWith("zone_") ? g.slice(5) : null;
+      const name = z && data.zone_labels && data.zone_labels[z];
+      return z ? `구역 ${z}` + (name ? ` · ${name}` : "") : g;
+    },
+    groupSort: (a, b) => (parseInt(a.slice(5)) || 0) - (parseInt(b.slice(5)) || 0),
+    defaultSort: { key: "rank", desc: false },
+    columns: (ds, statKeys) => [
+      { key: "rank", label: "등급", sort: (e) => orderOf(RANK_ORDER, e.rank),
+        cell: (e) => e.rank ? el("span", { class: "strong", style: RANK_ORDER.includes(e.rank) ? `color: var(--rk-${e.rank})` : null, text: label("rank", e.rank, ds.data) }) : dash() },
+      nameColumn(ds),
+      ...statColumns(ds, statKeys),
+      ...(ds.report ? [numColumn("threat", "위협도", (e) => ds.report.scores?.[e.id])] : []),
+      numColumn("reward", "보상", (e) => e.reward),
+      { label: "드랍", cell: (e) => (e.drop_table ? el("span", { class: "mono", text: e.drop_table }) : dash()) },
+      ...tailColumns(),
+    ],
+    tieBreak: (ds) => (a, b) => ds.report ? (ds.report.scores?.[a.id] ?? 0) - (ds.report.scores?.[b.id] ?? 0) : 0,
+    groupMeta: (ds, g) => {
+      const m = ds.report?.zone_rank_mean_threat?.[g.slice(5)];
+      return m ? "평균 위협도 " + RANK_ORDER.filter((r) => r in m).map((r) => `${LABEL.rank[r]} ${fmt(m[r])}`).join(" · ") : null;
+    },
+    extras: () => null,
+  },
+};
+
+function nameColumn(ds) {
+  return { label: "이름 (id)", tdClass: "name", cell: (e, issues) => {
+    const badges = [];
+    if (e.unique_effect) badges.push(el("span", { class: "tag info", text: "고유 효과" }));
+    for (const x of issues) badges.push(el("span", { class: "tag " + x.level, title: x.message, text: LABEL.code[x.code] || x.code }));
+    return [el("div", {}, el("span", { class: "nm", text: e.name || e.id || "(id 없음)" })),
+            e.name ? el("div", { class: "mono muted", text: e.id }) : null,
+            badges.length ? el("div", { class: "badges" }, badges) : null];
+  } };
+}
+function numColumn(key, text, get, show) {
+  return { key, label: text, num: true, sort: get, cell: (e) => { const v = get(e); return v === undefined || v === null ? dash() : (show ? show(e, v) : fmt(v)); } };
+}
+function statColumns(ds, statKeys) {
+  return statKeys.map((k) => numColumn("stat:" + k, label("stat", k, ds.data), (e) => (e.stats || {})[k]));
+}
+function tailColumns() {
+  return [
+    { label: "상태", cell: (e) => { const s = e.status || "unspecified"; return el("span", { class: "pill st-" + s, text: LABEL.status[s] || s }); } },
+    { label: "출처", cell: (e) => {
+      const p = (e.provenance && e.provenance.kind) || "unspecified";
+      return [el("span", { class: "pill pv-" + p, title: e.provenance ? [e.provenance.source, e.provenance.note].filter(Boolean).join(" · ") : "", text: LABEL.prov[p] || p }),
+              e.provenance && e.provenance.source ? el("div", { class: "mono muted", text: e.provenance.source }) : null];
+    } },
+    { label: "효과 · 의도", tdClass: "text", cell: (e) => (e.effect || e.intent)
+      ? [e.effect ? el("div", { text: e.effect }) : null, e.intent ? el("div", { class: "intent", text: "의도: " + e.intent }) : null] : dash() },
+  ];
+}
+
+/* ---------- 검사 결과 위치 찾기 (서버 모드) ---------- */
+function indexIssues(ds) {
+  const res = { all: [], byEntry: {}, byGroup: {}, byTable: {} };
+  if (!ds.report) return res;
+  const kind = KINDS[ds.kind], list = Array.isArray(ds.data[kind.listKey]) ? ds.data[kind.listKey] : [];
+  const groups = new Set(list.filter((e) => e && typeof e === "object").map(kind.groupOf));
+  const tables = new Set(Object.keys(ds.data.drop_tables || {}));
+  for (const [level, items] of [["err", ds.report.errors], ["warn", ds.report.warnings]]) {
+    for (const it of items) {
+      let where = it.where;
+      const m = /^[a-z]+\[(\d+)\]$/.exec(where);
+      if (m && list[+m[1]] && typeof list[+m[1]].id === "string") where = list[+m[1]].id;
+      const rec = { level, code: it.code, where, message: it.message };
+      res.all.push(rec);
+      if (groups.has(where)) (res.byGroup[where] ||= []).push(rec);
+      else if (tables.has(where.split(".")[0])) (res.byTable[where.split(".")[0]] ||= []).push(rec);
+      else (res.byEntry[where] ||= []).push(rec);
+    }
+  }
+  return res;
+}
+
+/* ---------- 그리기 ---------- */
+function activeDataset() {
+  const list = state.snap ? state.snap.datasets : [];
+  return list.find((d) => d.path === state.active) || list.find((d) => d.ok) || list[0] || null;
+}
+
+function renderTabs() {
+  const list = state.snap.datasets;
+  document.getElementById("tabs").replaceChildren(...list.map((d) => {
+    const errs = d.report ? d.report.errors.length : 0, warns = d.report ? d.report.warnings.length : 0;
+    const badge = !d.ok ? el("span", { class: "tag err cnt", text: "읽기 실패" })
+      : d.report && (errs || warns) ? el("span", { class: "tag cnt " + (errs ? "err" : "warn"), text: errs ? `오류 ${errs}` : `경고 ${warns}` }) : null;
+    return el("button", { class: "tab" + (d.path === activeDataset()?.path ? " on" : ""), type: "button",
+      onclick: () => { state.active = d.path; render(); } },
+      el("span", { class: "strong", text: KIND_LABEL[d.kind] || "데이터" }), badge,
+      el("span", { class: "fn", text: d.name }));
+  }));
+}
+
+function renderSummary(ds, idx) {
+  const box = document.getElementById("summary");
+  const kind = KINDS[ds.kind], list = Array.isArray(ds.data[kind.listKey]) ? ds.data[kind.listKey] : [];
+  if (!ds.report) {
+    box.replaceChildren(el("span", { class: "chip none" }, el("b", { text: "검사 안 함 (파일 모드)" })),
+      el("span", { class: "chip" }, "항목 ", el("b", { text: list.length })));
+    document.getElementById("issues-panel").hidden = true;
+    return;
+  }
+  const r = ds.report, s = r.status_counts, p = r.provenance_counts, errs = r.errors.length, warns = r.warnings.length;
+  const chips = [
+    el("span", { class: "chip " + (errs ? "fail" : "pass") }, el("b", { text: errs ? "오류 있음" : "오류 없음" })),
+    el("span", { class: "chip" }, "항목 ", el("b", { text: r.count })),
+    el("span", { class: "chip" }, `제안 ${s.proposed} · 승인 ${s.approved} · 삭제 ${s.cut}` + (s.unspecified ? ` · 상태 미지정 ${s.unspecified}` : "")),
+    el("span", { class: "chip" }, `출처 가정 ${p.assumed} · 계산 ${p.computed} · 측정 ${p.measured}` + (p.unspecified ? ` · 미지정 ${p.unspecified}` : "")),
+    el("span", { class: "chip" }, `오류 ${errs} · 경고 ${warns}`),
+  ];
+  if (r.totals) chips.push(el("span", { class: "chip" }, `활성 강화 ${r.totals.active}개 · 총비용 ${fmt(r.totals.cost)} · 총 power ${fmt(r.totals.power)}`));
+  if (r.drop_table_not_checked && r.drop_table_not_checked.length) chips.push(el("span", { class: "chip none", text: "드랍 테이블 참조 미확인 (아이템 데이터 없음)" }));
+  box.replaceChildren(...chips);
+  const panel = document.getElementById("issues-panel");
+  panel.hidden = idx.all.length === 0;
+  document.getElementById("issues-title").textContent = `검사 결과: 오류 ${errs} · 경고 ${warns}`;
+  if (errs && !panel.dataset.touched) panel.open = true;
+  document.getElementById("issues").replaceChildren(...idx.all.map((it) =>
+    el("li", { onclick: () => focusTarget(it.where) },
+      el("span", { class: "tag " + it.level, text: (it.level === "err" ? "오류 · " : "경고 · ") + (LABEL.code[it.code] || it.code) }),
+      el("span", { class: "mono", text: it.where + " " }), it.message)));
+}
+
+function focusTarget(where) {
+  const target = document.querySelector(`tr[data-id="${CSS.escape(where)}"]`) || document.getElementById("group-" + where) || document.getElementById("drop-" + where.split(".")[0]);
+  if (!target) return;
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+  target.classList.add("flash");
+  setTimeout(() => target.classList.remove("flash"), 1200);
+}
+
+function matches(ds, e, issues) {
+  const u = ui(ds), status = e.status || "unspecified";
+  if (u.group && KINDS[ds.kind].groupOf(e) !== u.group) return false;
+  if (u.status && status !== u.status) return false;
+  if (u.onlyIssues && !(issues && issues.length)) return false;
+  if (u.q) {
+    const hay = [e.id, e.name, e.effect, e.intent].filter(Boolean).join(" ").toLowerCase();
+    if (!hay.includes(u.q.toLowerCase())) return false;
+  }
+  return true;
+}
+
+function sortRows(ds, group, rows, columns) {
+  const kind = KINDS[ds.kind];
+  const s = state.sort[ds.path + "|" + group] || kind.defaultSort;
+  const col = columns.find((c) => c.key === s.key && c.sort) || columns.find((c) => c.key === kind.defaultSort.key);
+  const tie = kind.tieBreak(ds);
+  return rows.sort((a, b) => {
+    const va = col ? col.sort(a) : null, vb = col ? col.sort(b) : null;
+    const na = va === undefined || va === null, nb = vb === undefined || vb === null;
+    if (na !== nb) return na ? 1 : -1;
+    if (!na && va !== vb) return (va < vb ? -1 : 1) * (s.desc ? -1 : 1);
+    return tie(a, b);
+  });
+}
+
+function renderControls(ds, groups) {
+  const u = ui(ds), kind = KINDS[ds.kind];
+  document.getElementById("controls").hidden = false;
+  document.getElementById("q").value = u.q;
+  document.getElementById("status").value = u.status;
+  document.getElementById("only-issues").checked = u.onlyIssues;
+  document.getElementById("only-issues-wrap").hidden = !ds.report;
+  const btn = (value, text) => el("button", { class: u.group === value ? "on" : "", type: "button",
+    onclick: () => { u.group = value; render(); } }, text);
+  const box = document.getElementById("groups");
+  box.setAttribute("aria-label", kind.groupName);
+  box.replaceChildren(btn("", "전체"), ...groups.map((g) => btn(g, kind.groupLabel(g, ds.data))));
+}
+
+function renderSections(ds, idx) {
+  const kind = KINDS[ds.kind];
+  const list = (Array.isArray(ds.data[kind.listKey]) ? ds.data[kind.listKey] : []).filter((e) => e && typeof e === "object");
+  let groups = [...new Set(list.map(kind.groupOf))];
+  if (kind.groupSort) groups.sort(kind.groupSort);
+  renderControls(ds, groups);
+  const out = [];
+  for (const g of groups) {
+    const all = list.filter((e) => kind.groupOf(e) === g);
+    const visible = all.filter((e) => matches(ds, e, idx.byEntry[e.id]));
+    if (!visible.length) continue;
+    const statKeys = [...new Set(all.flatMap((e) => Object.keys(e.stats || {})))];
+    const columns = kind.columns(ds, statKeys);
+    const sortKey = ds.path + "|" + g, s = state.sort[sortKey] || kind.defaultSort;
+    const head = el("tr", {}, ...columns.map((c) => {
+      const on = c.key && c.key === s.key;
+      return el("th", { class: [c.num ? "num" : "", c.sort ? "sortable" : "", on ? "sorted" + (s.desc ? " desc" : "") : ""].join(" ").trim(),
+        onclick: c.sort ? () => { state.sort[sortKey] = { key: c.key, desc: on ? !s.desc : false }; render(); } : null }, c.label);
+    }));
+    const rows = sortRows(ds, g, visible, columns).map((e) => {
+      const issues = idx.byEntry[e.id] || [];
+      const hasErr = issues.some((x) => x.level === "err"), hasWarn = issues.some((x) => x.level === "warn");
+      return el("tr", { "data-id": e.id || "", class: [e.status === "cut" ? "cut" : "", hasErr ? "has-err" : hasWarn ? "has-warn" : ""].join(" ").trim() },
+        ...columns.map((c) => el("td", { class: [c.num ? "num" : "", c.tdClass || ""].join(" ").trim() || null }, c.cell(e, issues))));
+    });
+    const meta = kind.groupMeta(ds, g);
+    out.push(el("section", { class: "panel", id: "group-" + g },
+      el("div", { class: "ph" }, el("h2", {}, kind.groupLabel(g, ds.data), el("span", { class: "muted", text: `${visible.length} / ${all.length}` }),
+        meta ? el("span", { class: "group-meta", text: meta }) : null)),
+      ...(idx.byGroup[g] || []).map((x) => el("div", { class: "group-note", text: "⚠ " + x.message })),
+      el("div", { class: "tw" }, el("table", {}, el("thead", {}, head), el("tbody", {}, rows)))));
+  }
+  document.getElementById("sections").replaceChildren(...(out.length ? out : [el("p", { class: "muted", text: "조건에 맞는 항목이 없습니다." })]));
+  const extra = kind.extras(ds, idx);
+  document.getElementById("extras").replaceChildren(...(extra ? [extra] : []));
+}
+
+function dropTables(ds, idx) {
+  const raw = ds.data.drop_tables || {}, ids = Object.keys(raw);
+  if (!ids.length) return null;
+  const names = Object.fromEntries((ds.data.items || []).filter((i) => i && i.id).map((i) => [i.id, i.name || i.id]));
+  const cards = ids.map((tid) => {
+    const computed = ds.report && ds.report.drop_tables ? ds.report.drop_tables[tid] : null;
+    let body;
+    if (computed) {
+      body = [...Object.entries(computed.rarity_probability).sort((a, b) => orderOf(RARITY_ORDER, a[0]) - orderOf(RARITY_ORDER, b[0]) || a[0].localeCompare(b[0])).map(([r, p]) =>
+        el("div", { class: "bar" }, el("span", { text: label("rarity", r, ds.data) }),
+          el("div", { class: "track" }, el("div", { class: "fill", style: `width:${(p * 100).toFixed(2)}%` })),
+          el("span", { class: "num mono", text: (p * 100).toFixed(2) + "%" }))),
+        computed.pity ? el("div", { class: "muted", style: "font-size:12px;margin-top:6px" },
+          `${label("rarity", computed.pity.target_rarity, ds.data)} 천장 ${computed.pity.guarantee_after}회 · 평균 ${computed.pity.expected_draws_with_pity.toFixed(1)}회` +
+          (computed.pity.expected_draws_without_pity !== null ? ` (천장 없으면 ${computed.pity.expected_draws_without_pity.toFixed(1)}회)` : "") +
+          ` · 천장 도달 확률 ${(computed.pity.probability_pity_triggers * 100).toFixed(1)}%`) : null];
+    } else {
+      const entries = Array.isArray(raw[tid] && raw[tid].entries) ? raw[tid].entries : [];
+      body = [el("div", { class: "muted", style: "font-size:12px", text: ds.report ? "오류 때문에 계산하지 못했습니다. 원본 가중치:" : "원본 가중치 (확률 계산은 서버 모드):" }),
+        ...entries.map((e) => el("div", { class: "bar" }, el("span", { text: e.item ? names[e.item] || e.item : label("rarity", e.rarity, ds.data) }),
+          el("span", { class: "muted", text: "" }), el("span", { class: "num mono", text: e.weight !== undefined ? String(e.weight) : "?" }))),
+        raw[tid] && raw[tid].pity ? el("div", { class: "muted", style: "font-size:12px;margin-top:6px", text: `천장: ${label("rarity", raw[tid].pity.target_rarity, ds.data)} ${raw[tid].pity.guarantee_after}회` }) : null];
+    }
+    return el("div", { class: "drop", id: "drop-" + tid }, el("div", { class: "nm mono", text: tid }), body,
+      ...(idx.byTable[tid] || []).map((x) => el("div", { class: "group-note", style: "padding:6px 0 0", text: "⚠ " + x.message })));
+  });
+  return el("section", { class: "panel" }, el("div", { class: "ph" }, el("h2", {}, "드랍 테이블")), el("div", { class: "drops" }, cards));
+}
+
+function render() {
+  if (!state.snap) return;
+  const ds = activeDataset();
+  renderTabs();
+  const banner = document.getElementById("banner");
+  const failed = state.snap.datasets.filter((d) => !d.ok);
+  banner.hidden = failed.length === 0;
+  banner.textContent = failed.map((d) => `${d.name}: ${d.error}`).join("\n");
+  if (!ds || !ds.ok) {
+    for (const id of ["sections", "extras", "summary"]) document.getElementById(id).replaceChildren();
+    document.getElementById("controls").hidden = true;
+    document.getElementById("issues-panel").hidden = true;
+    return;
+  }
+  state.active = ds.path;
+  const idx = indexIssues(ds);
+  renderSummary(ds, idx);
+  renderSections(ds, idx);
+  document.getElementById("footer").textContent = (state.mode === "server"
+    ? "읽기 전용 뷰어입니다. 수정은 원본 파일에서 합니다. 점수·위협도 = Σ(스탯 × 가중치)이며 같은 묶음 안에서만 비교합니다. 고유 효과는 점수로 비교할 수 없습니다."
+    : "파일 모드: 원본에 적힌 값만 보여 줍니다. 검사·계산 결과를 보려면 서버로 실행하세요: " + SERVER_HINT) + ` · 원본: ${ds.path}`;
+}
+
+function applySnapshot(snap) {
+  const prev = state.snap;
+  const rank = (d) => { const i = ["items", "upgrades", "enemies"].indexOf(d.kind); return i < 0 ? 3 : i; };
+  snap.datasets.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+  state.snap = snap;
+  if (prev && state.active && !snap.datasets.some((d) => d.path === state.active)) state.active = null;
+  render();
+}
+
+/* ---------- 서버 모드 ---------- */
+async function pollServer() {
+  const dot = document.getElementById("dot"), live = document.getElementById("live");
+  try {
+    const res = await fetch("/api/data", { cache: "no-store" });
+    if (!res.ok) throw new Error(res.status);
+    const snap = await res.json();
+    if (state.mode !== "server") {
+      state.mode = "server";
+      const mode = document.getElementById("mode");
+      mode.className = "mode server";
+      mode.textContent = "서버 모드 · 검사 포함";
+    }
+    dot.className = "dot";
+    if (!state.snap || snap.version !== state.snap.version) {
+      applySnapshot(snap);
+      live.textContent = "실시간 동기화 · 갱신 " + new Date().toLocaleTimeString();
+    }
+    return true;
+  } catch (e) {
+    dot.className = "dot off";
+    live.textContent = "뷰어 서버 연결 끊김";
+    return false;
+  }
+}
+
+/* ---------- 파일 모드: 원본 값만, 검사 없음 ---------- */
+function detectKind(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  if ("rooms" in data && "difficulty" in data) return null;
+  return ["items", "upgrades", "enemies"].find((k) => Array.isArray(data[k])) || null;
+}
+
+async function loadFileTexts(named) {
+  const datasets = named.map(({ name, text }) => {
+    const ds = { name, path: name, ok: false, kind: null, report: null, version: text.length + ":" + name };
+    if (!name.toLowerCase().endsWith(".json")) { ds.error = "파일 모드에서는 JSON만 읽습니다. CSV는 서버 모드로 보세요."; return ds; }
+    try {
+      const data = JSON.parse(text), kind = detectKind(data);
+      if (!kind) ds.error = "아이템·영구 강화·적 데이터가 아닙니다 (최상위에 items / upgrades / enemies 배열이 필요합니다).";
+      else Object.assign(ds, { ok: true, kind, data });
+    } catch (e) { ds.error = "JSON 형식 오류: " + e.message; }
+    return ds;
+  });
+  applySnapshot({ mode: "file", version: named.map((n) => n.text).join("\u0000"), datasets });
+  document.getElementById("live").textContent = "불러옴 " + new Date().toLocaleTimeString();
+}
+
+async function readHandles() {
+  const files = await Promise.all(state.file.handles.map((h) => h.getFile()));
+  const named = await Promise.all(files.map(async (f) => ({ name: f.name, text: await f.text() })));
+  const joined = named.map((n) => n.text).join("\u0000");
+  if (!state.snap || state.snap.version !== joined) await loadFileTexts(named);
+}
+
+async function useHandles(handles) {
+  state.file.handles = handles;
+  await readHandles();
+  document.getElementById("dot").className = "dot";
+  document.getElementById("reload").hidden = true;
+  document.getElementById("file-note").firstChild.textContent =
+    "고른 파일을 계속 지켜보며 바뀌면 다시 읽습니다 (Chrome·Edge). 파일 모드는 원본에 적힌 값만 보여 줍니다. 검사·계산은 하지 않습니다. 검사 결과까지 보려면 서버로 실행하세요: ";
+  if (!state.file.timer) state.file.timer = setInterval(() => readHandles().catch(() => {
+    document.getElementById("dot").className = "dot off";
+    document.getElementById("live").textContent = "파일을 다시 읽지 못했습니다";
+  }), 1500);
+}
+
+async function useFiles(fileList) {
+  const named = await Promise.all([...fileList].map(async (f) => ({ name: f.name, text: await f.text() })));
+  state.file.handles = null;
+  await loadFileTexts(named);
+  document.getElementById("dot").className = "dot idle";
+  document.getElementById("reload").hidden = false;
+}
+
+function enterFileMode(reason) {
+  state.mode = "file";
+  const mode = document.getElementById("mode");
+  mode.className = "mode file";
+  mode.textContent = "파일 모드 · 검사 없음";
+  document.getElementById("filebar").classList.add("show");
+  document.getElementById("live").textContent = reason || "파일을 불러오세요";
+  document.getElementById("dot").className = "dot idle";
+}
+
+function setupFileMode() {
+  const input = document.getElementById("file-input");
+  const pick = async () => {
+    if (window.showOpenFilePicker) {
+      try { await useHandles(await window.showOpenFilePicker({ multiple: true, types: [{ description: "JSON", accept: { "application/json": [".json"] } }] })); }
+      catch (e) { if (e.name !== "AbortError") input.click(); }
+    } else input.click();
+  };
+  document.getElementById("pick").addEventListener("click", pick);
+  document.getElementById("reload").addEventListener("click", pick);
+  input.addEventListener("change", () => { if (input.files.length) useFiles(input.files); input.value = ""; });
+  const bar = document.getElementById("filebar");
+  bar.addEventListener("dragover", (e) => { e.preventDefault(); bar.classList.add("drag"); });
+  bar.addEventListener("dragleave", () => bar.classList.remove("drag"));
+  bar.addEventListener("drop", async (e) => {
+    e.preventDefault(); bar.classList.remove("drag");
+    const items = [...(e.dataTransfer.items || [])].filter((i) => i.kind === "file");
+    if (items.length && items[0].getAsFileSystemHandle) {
+      const handles = (await Promise.all(items.map((i) => i.getAsFileSystemHandle()))).filter((h) => h && h.kind === "file");
+      if (handles.length) { await useHandles(handles); return; }
+    }
+    if (e.dataTransfer.files.length) useFiles(e.dataTransfer.files);
+  });
+}
+
+/* ---------- 시작 ---------- */
+document.getElementById("q").addEventListener("input", (e) => { const ds = activeDataset(); if (ds) { ui(ds).q = e.target.value.trim(); render(); } });
+document.getElementById("status").addEventListener("change", (e) => { const ds = activeDataset(); if (ds) { ui(ds).status = e.target.value; render(); } });
+document.getElementById("only-issues").addEventListener("change", (e) => { const ds = activeDataset(); if (ds) { ui(ds).onlyIssues = e.target.checked; render(); } });
+document.getElementById("issues-panel").addEventListener("toggle", (e) => { e.target.dataset.touched = "1"; });
+setupFileMode();
+
+(async function start() {
+  if (location.protocol === "file:") { enterFileMode(); return; }
+  if (await pollServer()) {
+    setInterval(pollServer, 1500);
+  } else {
+    enterFileMode("서버에 연결하지 못했습니다 — 파일을 불러오세요");
+  }
+})();
+</script>
+</body>
+</html>

@@ -5,96 +5,36 @@
 형식은 skills/progression-economy/references/data-format.md를 따른다. 표준 라이브러리만 사용한다.
 
 종료 코드
-  0  오류 없음 (--strict이면 경고도 없음)
-  1  오류 있음, 또는 --strict에서 경고 있음
+  0  오류 없음 (--strict이면 경고도 없음, --fail-on-assumed이면 가정 항목도 없음)
+  1  위 조건 위반
   2  사용법 오류(파일 없음, 파싱 실패)
 """
 from __future__ import annotations
 
 import argparse
-import csv
 import json
-import re
 import sys
 from pathlib import Path
 
-ID_PATTERN = re.compile(r"^[a-z0-9_]+$")
-STAT_PREFIX = "stat."
-STATUSES = ("proposed", "approved", "cut")
-PROVENANCE_KINDS = {"assumed": "assumed", "computed": "computed", "measured": "measured",
-                    "가정": "assumed", "계산": "computed", "측정": "measured"}
-TEXT_FIELDS = ("name", "effect", "intent")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _common as c  # noqa: E402
 
 
 def load(path: Path) -> dict:
-    if path.suffix.lower() == ".csv":
-        return {"items": _load_csv(path)}
-    with path.open(encoding="utf-8") as fh:
-        data = json.load(fh)
-    if isinstance(data, list):
-        data = {"items": data}
-    if not isinstance(data, dict):
-        raise ValueError("최상위는 객체 또는 아이템 배열이어야 합니다.")
+    kind, data = c.load_dataset(Path(path), expected="items")
+    if kind not in (None, "items") or "items" not in data:
+        raise ValueError("아이템 데이터가 아닙니다 (최상위에 items 배열이 필요합니다).")
     return data
 
 
-def _num(value: str):
-    value = value.strip()
-    if value == "":
-        return None
-    try:
-        return int(value)
-    except ValueError:
-        return float(value)
-
-
-def _load_csv(path: Path) -> list[dict]:
-    items = []
-    with path.open(encoding="utf-8-sig", newline="") as fh:
-        for row in csv.DictReader(fh):
-            item: dict = {"stats": {}}
-            for key, raw in row.items():
-                if key is None:
-                    continue
-                key = key.strip()
-                raw = (raw or "").strip()
-                if key.startswith(STAT_PREFIX):
-                    if raw != "":
-                        item["stats"][key[len(STAT_PREFIX):]] = _num(raw)
-                elif key in ("tier", "price"):
-                    item[key] = _num(raw) if raw else None
-                elif key == "unique_effect":
-                    item[key] = raw.lower() in ("1", "true", "yes", "y")
-                elif key.startswith("provenance_"):
-                    if raw != "":
-                        item.setdefault("provenance", {})[key[len("provenance_"):]] = raw
-                elif raw != "":
-                    item[key] = raw
-            items.append(item)
-    return items
-
-
-def _is_number(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
+def budget(item: dict, weights: dict) -> float:
+    return c.weighted(item, weights)
 
 
 def check_schema(items: list, errors: list) -> list[dict]:
-    valid, seen = [], set()
-    for idx, item in enumerate(items):
-        where = f"items[{idx}]"
-        if not isinstance(item, dict):
-            errors.append({"code": "schema", "where": where, "message": "아이템은 객체여야 합니다."})
-            continue
-        iid = item.get("id")
-        if not isinstance(iid, str) or not ID_PATTERN.match(iid):
-            errors.append({"code": "schema", "where": where, "message": f"id는 소문자·숫자·밑줄만 씁니다: {iid!r}"})
-            continue
-        where = iid
-        if iid in seen:
-            errors.append({"code": "duplicate_id", "where": where, "message": "id가 중복됩니다."})
-            continue
-        seen.add(iid)
-        ok = True
+    valid = []
+    for _, item in c.check_identity(items, "items", errors):
+        where, ok = item["id"], True
         if not isinstance(item.get("slot"), str) or not item["slot"]:
             errors.append({"code": "schema", "where": where, "message": "slot이 필요합니다."})
             ok = False
@@ -103,58 +43,18 @@ def check_schema(items: list, errors: list) -> list[dict]:
             errors.append({"code": "schema", "where": where, "message": f"tier는 1 이상의 정수여야 합니다: {tier!r}"})
             ok = False
         price = item.get("price")
-        if price is not None and not (_is_number(price) and price >= 0):
+        if price is not None and not (c.is_number(price) and price >= 0):
             errors.append({"code": "schema", "where": where, "message": f"price는 0 이상의 수여야 합니다: {price!r}"})
             ok = False
-        stats = item.get("stats", {})
-        if not isinstance(stats, dict) or not all(isinstance(k, str) and _is_number(v) for k, v in stats.items()):
-            errors.append({"code": "schema", "where": where, "message": "stats는 {이름: 수} 형태여야 합니다."})
-            ok = False
-        for f in TEXT_FIELDS:
-            if f in item and not isinstance(item[f], str):
-                errors.append({"code": "schema", "where": where, "message": f"{f}는 문자열이어야 합니다."})
-                ok = False
-        status = item.get("status")
-        if status is not None and status not in STATUSES:
-            errors.append({"code": "schema", "where": where, "message": f"status는 {', '.join(STATUSES)} 중 하나입니다: {status!r}"})
-            ok = False
-        if not _check_provenance(item, where, errors):
-            ok = False
+        ok = c.check_stats(item, where, errors) and ok
+        ok = c.check_common(item, where, errors) and ok
         if ok:
             valid.append(item)
     return valid
 
 
-def _check_provenance(item: dict, where: str, errors: list) -> bool:
-    prov = item.get("provenance")
-    if prov is None:
-        return True
-    if not isinstance(prov, dict):
-        errors.append({"code": "provenance", "where": where, "message": "provenance는 {kind, source, note} 객체여야 합니다."})
-        return False
-    kind = PROVENANCE_KINDS.get(prov.get("kind"))
-    if kind is None:
-        errors.append({"code": "provenance", "where": where, "message": f"provenance.kind는 assumed/computed/measured(가정/계산/측정) 중 하나입니다: {prov.get('kind')!r}"})
-        return False
-    source = prov.get("source")
-    if kind in ("computed", "measured") and not (isinstance(source, str) and source.strip()):
-        errors.append({"code": "provenance", "where": where, "message": f"provenance.kind가 {kind}이면 source가 필요합니다."})
-        return False
-    prov["kind"] = kind
-    return True
-
-
-def provenance_kind(item: dict) -> str:
-    prov = item.get("provenance")
-    return prov["kind"] if isinstance(prov, dict) and "kind" in prov else "unspecified"
-
-
-def budget(item: dict, weights: dict) -> float:
-    return sum(v * weights.get(k, 1.0) for k, v in item.get("stats", {}).items())
-
-
 def check_tiers(items: list[dict], weights: dict, warnings: list) -> dict:
-    """slot별로 티어 평균 스탯 예산이 줄어들지 않는지 본다."""
+    """slot별로 티어 평균 스탯 예산이 줄어들지 않는지, 하위 티어 전부보다 약한 아이템이 없는지 본다."""
     summary: dict = {}
     by_slot: dict = {}
     for it in items:
@@ -171,11 +71,10 @@ def check_tiers(items: list[dict], weights: dict, warnings: list) -> dict:
             lower = [budget(i, weights) for lt in ordered if lt < t for i in tiers[lt]]
             if not lower:
                 continue
-            floor = max(lower)
             for it in tiers[t]:
                 if budget(it, weights) < min(lower):
                     warnings.append({"code": "tier_inversion", "where": it["id"],
-                                     "message": f"티어 {t}인데 하위 티어 어떤 아이템보다도 예산이 낮습니다 ({budget(it, weights):.4g} < {min(lower):.4g}, 하위 최고 {floor:.4g})."})
+                                     "message": f"티어 {t}인데 하위 티어 어떤 아이템보다도 예산이 낮습니다 ({budget(it, weights):.4g} < {min(lower):.4g}, 하위 최고 {max(lower):.4g})."})
     return summary
 
 
@@ -229,11 +128,10 @@ def check_drop_tables(tables: dict, items_by_id: dict, errors: list, warnings: l
         if not isinstance(entries, list) or not entries:
             errors.append({"code": "schema", "where": tid, "message": "entries 배열이 필요합니다."})
             continue
-        weights, bad = [], False
-        cut_refs = set()
+        weights, bad, cut_refs = [], False, set()
         for n, e in enumerate(entries):
             w = e.get("weight") if isinstance(e, dict) else None
-            if not (_is_number(w) and w > 0):
+            if not (c.is_number(w) and w > 0):
                 errors.append({"code": "schema", "where": f"{tid}.entries[{n}]", "message": f"weight는 0보다 커야 합니다: {w!r}"})
                 bad = True
                 continue
@@ -288,28 +186,32 @@ def validate(data: dict) -> dict:
     weights = data.get("stat_weights", {}) or {}
     items = check_schema(raw_items, errors)
     by_id = {i["id"]: i for i in items}
-    active = [i for i in items if i.get("status") != "cut"]
+    active = [i for i in items if c.is_active(i)]
     tier_summary = check_tiers(active, weights, warnings)
     not_assessed = check_dominance(active, warnings)
     drops = check_drop_tables(data.get("drop_tables", {}) or {}, by_id, errors, warnings)
-    status_counts = {s: 0 for s in STATUSES + ("unspecified",)}
-    for i in items:
-        status_counts[i.get("status") or "unspecified"] += 1
-    prov_counts = {k: 0 for k in ("assumed", "computed", "measured", "unspecified")}
-    for i in active:
-        prov_counts[provenance_kind(i)] += 1
     return {
-        "items": len(items),
-        "status_counts": status_counts,
-        "provenance_counts": prov_counts,
-        "unverified_items": sorted(i["id"] for i in active if provenance_kind(i) in ("assumed", "unspecified")),
-        "item_scores": {i["id"]: round(budget(i, weights), 4) for i in items},
+        "kind": "items",
+        "count": len(items),
+        **c.summary_counts(items),
+        "scores": {i["id"]: round(budget(i, weights), 4) for i in items},
         "tier_mean_budget": tier_summary,
         "dominance_not_assessed": not_assessed,
         "drop_tables": drops,
         "errors": errors,
         "warnings": warnings,
     }
+
+
+def _print_extra(result: dict) -> None:
+    for tid, t in result["drop_tables"].items():
+        pity = t.get("pity")
+        line = f"drop {tid}: " + ", ".join(f"{k} {v:.2%}" for k, v in t["rarity_probability"].items())
+        if pity:
+            line += f" | {pity['target_rarity']} 기대 시도 {pity['expected_draws_with_pity']} (천장 {pity['guarantee_after']})"
+        print(line)
+    if result["dominance_not_assessed"]:
+        print("열위 판정 제외(고유 효과): " + ", ".join(result["dominance_not_assessed"]))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -319,10 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         pass
     ap = argparse.ArgumentParser(description="아이템 데이터와 드랍 테이블을 검사합니다.")
     ap.add_argument("path", help="items JSON 또는 CSV")
-    ap.add_argument("--strict", action="store_true", help="경고도 실패로 처리합니다.")
-    ap.add_argument("--fail-on-assumed", action="store_true", help="삭제되지 않은 아이템 중 출처가 가정이거나 비어 있는 것이 있으면 실패합니다 (확정 판정 전 게이트).")
-    ap.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
-    ap.add_argument("--out", help="JSON 보고서를 이 경로에 저장합니다. 문서에서 [계산: 이 경로]로 인용합니다.")
+    c.add_common_args(ap)
     args = ap.parse_args(argv)
     try:
         data = load(Path(args.path))
@@ -330,35 +229,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"입력을 읽을 수 없습니다: {exc}", file=sys.stderr)
         return 2
     result = validate(data)
-    gate_failed = args.fail_on_assumed and bool(result["unverified_items"])
-    failed = bool(result["errors"]) or (args.strict and bool(result["warnings"])) or gate_failed
-    result["status"] = "fail" if failed else "pass"
     result["source"] = args.path
-    if args.out:
-        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    else:
-        for e in result["errors"]:
-            print(f"error [{e['code']}] {e['where']}: {e['message']}")
-        for w in result["warnings"]:
-            print(f"warning [{w['code']}] {w['where']}: {w['message']}")
-        for tid, t in result["drop_tables"].items():
-            pity = t.get("pity")
-            line = f"drop {tid}: " + ", ".join(f"{k} {v:.2%}" for k, v in t["rarity_probability"].items())
-            if pity:
-                line += f" | {pity['target_rarity']} 기대 시도 {pity['expected_draws_with_pity']} (천장 {pity['guarantee_after']})"
-            print(line)
-        if result["dominance_not_assessed"]:
-            print("열위 판정 제외(고유 효과): " + ", ".join(result["dominance_not_assessed"]))
-        if gate_failed:
-            print("gate: 출처가 가정이거나 비어 있는 아이템: " + ", ".join(result["unverified_items"]))
-        sc, pc = result["status_counts"], result["provenance_counts"]
-        print(f"상태: 제안 {sc['proposed']} · 승인 {sc['approved']} · 삭제 {sc['cut']} · 미지정 {sc['unspecified']}")
-        print(f"출처(삭제 제외): 가정 {pc['assumed']} · 계산 {pc['computed']} · 측정 {pc['measured']} · 미지정 {pc['unspecified']}")
-        print(f"아이템 {result['items']}개 · 오류 {len(result['errors'])} · 경고 {len(result['warnings'])} → {result['status'].upper()}")
-    return 1 if failed else 0
+    return c.finish_cli(result, args, "아이템", _print_extra)
 
 
 if __name__ == "__main__":

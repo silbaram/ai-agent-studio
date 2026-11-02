@@ -18,7 +18,7 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 | 스킬 | 하는 일 |
 | --- | --- |
 | [numeric-provenance](skills/numeric-provenance/SKILL.md) | 기획 수치를 `[가정]` / `[계산: 출처]` / `[측정: 출처]`로 표시하고, 확정 판정 전에 스크립트로 검사 |
-| [progression-economy](skills/progression-economy/SKILL.md) | 아이템 데이터 단일 원본 관리와 뷰어, 티어 역전·완전 열위·드랍 천장 기대값 검사, 로그라이크 메타 성장 시뮬레이션 |
+| [progression-economy](skills/progression-economy/SKILL.md) | 아이템·영구 강화·적 데이터의 단일 원본 관리와 뷰어, 티어 역전·완전 열위·드랍 천장·강화 사슬·적 위협도 진행 검사, 로그라이크 메타 성장 시뮬레이션 |
 
 첫 대상은 **액션 로그라이크 + 메타 성장형** 게임이다. 데이터는 JSON/CSV로 다뤄 Godot·Unity·Unreal·Roblox 어디에도 묶이지 않는다.
 
@@ -30,20 +30,22 @@ $numeric-provenance로 design/economy.md의 모든 수치에 출처 태그를 �
 ```
 
 ```text
-$progression-economy로 data/items.json을 검사하고 data/meta.json으로 메타 성장을 시뮬레이션해줘.
-결과는 [계산: 보고서 경로]로 인용하고, 결과가 기대는 가정 목록도 알려줘.
+$progression-economy로 2구역에 나올 정예 적을 하나 추가해줘.
+제안 상태로 넣고 검사 경고가 있으면 알려줘. 바뀐 행만 보여줘.
 ```
 
 도구를 직접 실행할 수도 있다. Python 3.9 이상, 추가 설치는 필요 없다.
 
 ```bash
 python skills/numeric-provenance/scripts/check_provenance.py design/
-python skills/progression-economy/scripts/view_items.py skills/progression-economy/assets/sample-items.json
+python skills/progression-economy/scripts/view_data.py skills/progression-economy/assets/
 python skills/progression-economy/scripts/validate_items.py skills/progression-economy/assets/sample-items.json
+python skills/progression-economy/scripts/validate_upgrades.py skills/progression-economy/assets/sample-upgrades.json
+python skills/progression-economy/scripts/validate_enemies.py skills/progression-economy/assets/sample-enemies.json --items skills/progression-economy/assets/sample-items.json
 python skills/progression-economy/scripts/simulate_meta.py skills/progression-economy/assets/sample-meta.json
 ```
 
-`view_items.py`는 원본 데이터를 브라우저에서 부위·티어별 표로 보여 주는 읽기 전용 뷰어다. 문서를 따로 생성하지 않으므로 동기화할 것이 없고, 원본을 고치면 화면이 자동으로 갱신된다.
+`view_data.py`는 폴더 안의 아이템·영구 강화·적 데이터를 브라우저에서 탭과 표로 보여 주는 읽기 전용 뷰어다. 문서를 따로 생성하지 않으므로 동기화할 것이 없고, 원본을 고치면 화면이 자동으로 갱신된다. Python 없이 `skills/progression-economy/assets/data-viewer.html`을 직접 열어 '불러오기'로 볼 수도 있지만, 그때는 검사·계산 없이 원본 값만 보인다.
 
 확정 판정 직전에는 `check_provenance.py`에 `--fail-on-assumed`를 붙인다. `[가정]`이 하나라도 남으면 실패한다.
 시뮬레이터는 추상 모델이다. 결과는 경제·성장 곡선의 구조를 보는 용도이며 실제 난이도나 재미 판정이 아니다.
