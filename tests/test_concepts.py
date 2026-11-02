@@ -1,6 +1,5 @@
 """컨셉 기록 검사기 테스트. 표준 라이브러리 unittest만 사용한다."""
 import copy
-import importlib.util
 import io
 import json
 import sys
@@ -9,15 +8,10 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-sys.dont_write_bytecode = True
-ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "skills/concept-exploration"
-spec = importlib.util.spec_from_file_location("check_concepts", SKILL / "scripts/check_concepts.py")
-cc = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = cc
-spec.loader.exec_module(cc)
+from _studio import SAMPLE as SAMPLE_DIR, concepts as cc, run_cli as studio_cli
 
-SAMPLE = json.loads((SKILL / "assets/sample-concepts.json").read_text(encoding="utf-8"))
+SAMPLE_PATH = SAMPLE_DIR / "design/concepts.json"
+SAMPLE = json.loads(SAMPLE_PATH.read_text(encoding="utf-8"))
 APPROVED = next(c for c in SAMPLE["concepts"] if c["status"] == "approved")
 AXES = ("decision", "information", "commitment", "risk_reward", "space", "pressure", "progression")
 
@@ -210,10 +204,7 @@ class Structure(unittest.TestCase):
 
 class CommandLine(unittest.TestCase):
     def run_cli(self, *args):
-        out, err = io.StringIO(), io.StringIO()
-        with redirect_stdout(out), redirect_stderr(err):
-            code = cc.main(list(args))
-        return code, out.getvalue()
+        return studio_cli("check", *args)
 
     def test_exit_codes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -223,17 +214,17 @@ class CommandLine(unittest.TestCase):
             self.assertEqual(self.run_cli(str(path), "--strict")[0], 1)
             path.write_text(json.dumps({"concepts": [{"id": "a"}]}), encoding="utf-8")
             self.assertEqual(self.run_cli(str(path))[0], 1)
-            path.write_text(json.dumps({"items": []}), encoding="utf-8")
+            path.write_text(json.dumps({"notes": "기획 메모"}), encoding="utf-8")
             self.assertEqual(self.run_cli(str(path))[0], 2)
             self.assertEqual(self.run_cli(str(Path(tmp) / "missing.json"))[0], 2)
 
     def test_table_and_json_output(self):
-        code, out = self.run_cli(str(SKILL / "assets/sample-concepts.json"), "--table")
+        code, out = self.run_cli(str(SAMPLE_PATH), "--table")
         self.assertEqual(code, 0)
         self.assertIn("| parry_tempo | 패링 템포 | 선택 |", out)
-        code, out = self.run_cli(str(SKILL / "assets/sample-concepts.json"), "--json")
+        code, out = self.run_cli(str(SAMPLE_PATH), "--json")
         data = json.loads(out)
-        self.assertEqual((code, data["status"], data["count"]), (0, "pass", 8))
+        self.assertEqual((code, data["status"], data["datasets"][0]["report"]["count"]), (0, "pass", 8))
 
 
 if __name__ == "__main__":

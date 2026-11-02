@@ -60,7 +60,7 @@ description: "Explores game concepts as testable mechanic hypotheses instead of 
 ### 5. 겹치는 후보 정리
 
 ```bash
-python skills/concept-exploration/scripts/check_concepts.py design/concepts.json --table
+python skills/studio-data/scripts/studio.py check design/ --table
 ```
 
 검사기가 구조 축이 거의 같은 후보(`near_duplicate`)와 모든 후보가 같은 값에 몰린 축(`axis_collapse`)을 알려 준다. 겹치는 묶음에서는 대표 하나만 남기고 나머지는 `cut`으로 둔다.
@@ -103,4 +103,10 @@ python skills/concept-exploration/scripts/check_concepts.py design/concepts.json
 
 프로토타입 결과로 가설을 판정한다. 틀렸다는 신호가 나오면 브리프를 고치거나 다른 후보로 돌아간다. 가설이 버티면 아이템·강화·적 데이터를 [progression-economy](../progression-economy/SKILL.md)로 시작한다.
 
-검사 스크립트는 Python 3.9 이상, 표준 라이브러리만 쓴다. 예시는 `assets/sample-concepts.json`이며 실제 기획안이 아니다.
+검사와 뷰어는 공용 도구 [studio-data](../studio-data/SKILL.md)에 있다. 이 스킬과 함께 설치한다. 기록을 보기 좋게 보려면 문서를 따로 만들지 않고 뷰어를 연다.
+
+```bash
+python skills/studio-data/scripts/studio.py view .
+```
+
+컨셉 탭에 제약, 선택한 컨셉의 브리프, 후보 비교표가 보인다. 예시는 `studio-data/assets/sample-project/design/concepts.json`이며 실제 기획안이 아니다.

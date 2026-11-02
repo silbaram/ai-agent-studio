@@ -1,6 +1,5 @@
 """아이템 검증기와 메타 성장 시뮬레이터 테스트. 표준 라이브러리 unittest만 사용한다."""
 import copy
-import importlib.util
 import io
 import json
 import math
@@ -10,25 +9,9 @@ import unittest
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 
-sys.dont_write_bytecode = True
-ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "skills/progression-economy"
+from _studio import SAMPLE, common, enemies as ve, items as vi, meta_sim as sm, run_cli as studio_cli, upgrades as vu, viewer
 
-
-def _load(name, rel):
-    spec = importlib.util.spec_from_file_location(name, SKILL / rel)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-vi = _load("validate_items", "scripts/validate_items.py")
-sm = _load("simulate_meta", "scripts/simulate_meta.py")
-vu = _load("validate_upgrades", "scripts/validate_upgrades.py")
-ve = _load("validate_enemies", "scripts/validate_enemies.py")
-common = _load("_common", "scripts/_common.py")
-viewer = _load("view_data", "scripts/view_data.py")
+DATA = SAMPLE / "data"
 
 
 def item(iid, slot="weapon", tier=1, price=None, **stats):
@@ -193,13 +176,10 @@ class DropTables(unittest.TestCase):
 
 class ItemCli(unittest.TestCase):
     def run_cli(self, *args):
-        out, err = io.StringIO(), io.StringIO()
-        with redirect_stdout(out), redirect_stderr(err):
-            code = vi.main(list(args))
-        return code, out.getvalue()
+        return studio_cli("check", *args)
 
     def test_sample_passes(self):
-        self.assertEqual(self.run_cli(str(SKILL / "assets/sample-items.json"))[0], 0)
+        self.assertEqual(self.run_cli(str(DATA / "items.json"))[0], 0)
 
     def test_csv_and_strict(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -213,7 +193,7 @@ class ItemCli(unittest.TestCase):
             self.assertIn("dominated", out)
             report = Path(tmp) / "out" / "report.json"
             self.run_cli(str(path), "--out", str(report))
-            self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["count"], 2)
+            self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["datasets"][0]["report"]["count"], 2)
 
     def test_fail_on_assumed_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -246,8 +226,8 @@ class ItemCli(unittest.TestCase):
             self.assertEqual(self.run_cli(str(bad))[0], 2)
 
 
-BASE = json.loads((SKILL / "assets/sample-meta.json").read_text(encoding="utf-8"))
-BASE["upgrades_file"] = str(SKILL / "assets" / BASE["upgrades_file"])
+BASE = json.loads((DATA / "meta.json").read_text(encoding="utf-8"))
+BASE["upgrades_file"] = str(DATA / BASE["upgrades_file"])
 
 
 def cfg(**changes):
@@ -366,17 +346,16 @@ class MetaCli(unittest.TestCase):
             conf = Path(tmp) / "meta.json"
             conf.write_text(json.dumps(cfg()), encoding="utf-8")
             out, curve = Path(tmp) / "r/out.json", Path(tmp) / "r/curve.csv"
-            buf = io.StringIO()
-            with redirect_stdout(buf):
-                self.assertEqual(sm.main([str(conf), "--out", str(out), "--csv", str(curve)]), 0)
+            code, printed = studio_cli("simulate", conf, "--out", out, "--csv", curve)
+            self.assertEqual(code, 0)
             data = json.loads(out.read_text(encoding="utf-8"))
             self.assertIn("abstract model", data["evidence"])
             self.assertEqual(len(data["config_sha256"]), 64)
             self.assertEqual(len(curve.read_text(encoding="utf-8").strip().splitlines()), 31)
-            self.assertIn(f"[계산: {out}]", buf.getvalue())
+            self.assertIn(f"[계산: {out}]", printed)
             conf.write_text(json.dumps(cfg(rooms=0)), encoding="utf-8")
             with redirect_stderr(io.StringIO()):
-                self.assertEqual(sm.main([str(conf)]), 2)
+                self.assertEqual(studio_cli("simulate", conf)[0], 2)
 
 
 def upgrade(uid, cost, power=1.0, requires=None, **extra):
@@ -393,7 +372,7 @@ def enemy(eid, rank="normal", zone=1, **stats):
 
 class Upgrades(unittest.TestCase):
     def test_sample_passes(self):
-        r = vu.validate(vu.load(SKILL / "assets/sample-upgrades.json"))
+        r = vu.validate(vu.load(DATA / "upgrades.json"))
         self.assertEqual((r["errors"], r["warnings"]), ([], []))
         self.assertEqual(r["status_counts"]["cut"], 1)
 
@@ -450,18 +429,16 @@ class Upgrades(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "u.json"
             path.write_text(json.dumps({"upgrades": [upgrade("a", 1, provenance={"kind": "assumed"})]}), encoding="utf-8")
-            with redirect_stdout(io.StringIO()):
-                self.assertEqual(vu.main([str(path)]), 0)
-                self.assertEqual(vu.main([str(path), "--fail-on-assumed"]), 1)
-            path.write_text(json.dumps({"items": []}), encoding="utf-8")
-            with redirect_stderr(io.StringIO()):
-                self.assertEqual(vu.main([str(path)]), 2)
+            self.assertEqual(studio_cli("check", path)[0], 0)
+            self.assertEqual(studio_cli("check", path, "--fail-on-assumed")[0], 1)
+            path.write_text(json.dumps({"notes": "강화 메모"}), encoding="utf-8")
+            self.assertEqual(studio_cli("check", path)[0], 2)
 
 
 class Enemies(unittest.TestCase):
     def test_sample_passes_with_items(self):
-        items = vi.load(SKILL / "assets/sample-items.json")
-        r = ve.validate(ve.load(SKILL / "assets/sample-enemies.json"), items["drop_tables"])
+        items = vi.load(DATA / "items.json")
+        r = ve.validate(ve.load(DATA / "enemies.json"), items["drop_tables"])
         self.assertEqual((r["errors"], r["warnings"]), ([], []))
         self.assertEqual(r["drop_table_not_checked"], [])
 
@@ -502,9 +479,8 @@ class Enemies(unittest.TestCase):
             ep, ip = Path(tmp) / "enemies.json", Path(tmp) / "items.json"
             ep.write_text(json.dumps({"enemies": [e]}), encoding="utf-8")
             ip.write_text(json.dumps({"items": [], "drop_tables": {"other": {"entries": [{"rarity": "x", "weight": 1}]}}}), encoding="utf-8")
-            with redirect_stdout(io.StringIO()):
-                self.assertEqual(ve.main([str(ep)]), 0)
-                self.assertEqual(ve.main([str(ep), "--items", str(ip)]), 1)
+            self.assertEqual(studio_cli("check", ep)[0], 0)
+            self.assertEqual(studio_cli("check", ep, ip)[0], 1)
 
 
 class CommonLoading(unittest.TestCase):
@@ -524,14 +500,14 @@ class CommonLoading(unittest.TestCase):
 
 class MetaUpgradesFile(unittest.TestCase):
     def test_sample_meta_reads_upgrades_file_and_skips_cut(self):
-        c = sm.normalize(json.loads((SKILL / "assets/sample-meta.json").read_text(encoding="utf-8")), SKILL / "assets")
+        c = sm.normalize(json.loads((DATA / "meta.json").read_text(encoding="utf-8")), DATA)
         ids = [u["id"] for u in c["upgrades"]]
         self.assertNotIn("lucky_start", ids)
         self.assertEqual(ids, ["vitality_1", "weapon_1", "vitality_2", "weapon_2", "relic_slot", "weapon_3"])
         self.assertEqual(len(c["upgrades_file"]["sha256"]), 64)
 
     def test_file_and_inline_give_identical_results(self):
-        data = vu.load(SKILL / "assets/sample-upgrades.json")
+        data = vu.load(DATA / "upgrades.json")
         inline = [{"id": u["id"], "cost": u["cost"], "power": u["power"], "requires": u.get("requires", [])}
                   for u in data["upgrades"] if u.get("status") != "cut"]
         a = sm.simulate(sm.normalize(cfg()))
@@ -652,11 +628,10 @@ class Viewer(unittest.TestCase):
             self.assertEqual(self.get(route)[0], 404, route)
 
     def test_cli_requires_existing_data(self):
-        with redirect_stderr(io.StringIO()):
-            self.assertEqual(viewer.main([str(self.dir / "nope"), "--no-browser"]), 2)
-            empty = Path(self.tmp.name) / "empty"
-            empty.mkdir()
-            self.assertEqual(viewer.main([str(empty), "--no-browser"]), 2)
+        self.assertEqual(studio_cli("view", self.dir / "nope", "--no-browser")[0], 2)
+        empty = Path(self.tmp.name) / "empty"
+        empty.mkdir()
+        self.assertEqual(studio_cli("view", empty, "--no-browser")[0], 2)
 
 
 if __name__ == "__main__":

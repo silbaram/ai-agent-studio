@@ -1,20 +1,8 @@
-#!/usr/bin/env python3
-"""설계 문서의 수치 출처 태그를 검사한다.
-
-규약은 skills/numeric-provenance/SKILL.md를 따른다. 표준 라이브러리만 사용한다.
-
-종료 코드
-  0  문제 없음
-  1  오류(형식 오류, 출처 열의 태그 누락, 경로 없음) 또는 --fail-on-assumed 조건 위반
-  2  사용법 오류(경로 없음 등)
-"""
+"""설계 문서(md)의 수치 출처 태그를 검사한다. 규약: numeric-provenance/SKILL.md"""
 from __future__ import annotations
 
-import argparse
-import json
 import re
-import sys
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 
 KINDS = {
@@ -184,58 +172,3 @@ def summarize(reports: list[FileReport]) -> dict:
             total[k] += v
     errors = sum(r.errors for r in reports)
     return {"files": len(reports), "counts": total, "errors": errors}
-
-
-def main(argv: list[str] | None = None) -> int:
-    try:
-        sys.stdout.reconfigure(errors="replace")
-    except (AttributeError, ValueError):
-        pass
-    parser = argparse.ArgumentParser(description="설계 문서의 수치 출처 태그를 검사합니다.")
-    parser.add_argument("paths", nargs="+", help="검사할 .md 파일 또는 폴더")
-    parser.add_argument("--fail-on-assumed", action="store_true", help="[가정] 태그가 하나라도 남아 있으면 실패합니다 (확정 판정 전 게이트).")
-    parser.add_argument("--check-paths", action="store_true", help="[계산]/[측정] 출처가 경로처럼 보이면 실제 파일 존재를 확인합니다.")
-    parser.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
-    args = parser.parse_args(argv)
-
-    try:
-        reports = check_paths_cli(args.paths, args.check_paths)
-    except FileNotFoundError as exc:
-        print(f"경로를 찾을 수 없습니다: {exc}", file=sys.stderr)
-        return 2
-
-    summary = summarize(reports)
-    gate_failed = args.fail_on_assumed and summary["counts"]["assumed"] > 0
-    status = "fail" if summary["errors"] or gate_failed else "pass"
-
-    if args.json:
-        out = {
-            "status": status,
-            "summary": summary,
-            "fail_on_assumed": args.fail_on_assumed,
-            "files": [
-                {
-                    "path": r.path,
-                    "counts": r.counts,
-                    "assumed_lines": [t.line for t in r.tags if t.kind == "assumed"],
-                    "findings": [asdict(f) for f in r.findings],
-                }
-                for r in reports
-            ],
-        }
-        print(json.dumps(out, ensure_ascii=False, indent=2))
-    else:
-        for r in reports:
-            for f in r.findings:
-                print(f"{r.path}:{f.line}: {f.level}: {f.message}")
-            if args.fail_on_assumed:
-                for t in r.tags:
-                    if t.kind == "assumed":
-                        print(f"{r.path}:{t.line}: gate: [가정]이 남아 있습니다.")
-        c = summary["counts"]
-        print(f"파일 {summary['files']}개 · 가정 {c['assumed']} · 계산 {c['computed']} · 측정 {c['measured']} · 오류 {summary['errors']} → {status.upper()}")
-    return 0 if status == "pass" else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

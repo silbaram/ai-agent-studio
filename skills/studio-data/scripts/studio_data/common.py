@@ -1,4 +1,4 @@
-"""데이터 파일(아이템·영구 강화·적) 검사기가 함께 쓰는 읽기·공통 필드 검사. 표준 라이브러리만 사용한다."""
+"""게임 설계 데이터(컨셉·아이템·영구 강화·적)의 읽기, 종류 판별, 공통 필드 검사. 표준 라이브러리만 사용한다."""
 from __future__ import annotations
 
 import csv
@@ -11,10 +11,13 @@ STATUSES = ("proposed", "approved", "cut")
 PROVENANCE_KINDS = {"assumed": "assumed", "computed": "computed", "measured": "measured",
                     "가정": "assumed", "계산": "computed", "측정": "measured"}
 TEXT_FIELDS = ("name", "effect", "intent")
-DATASET_KINDS = ("items", "upgrades", "enemies")
+DATASET_KINDS = ("concepts", "items", "upgrades", "enemies")
+KIND_LABELS = {"concepts": "컨셉", "items": "아이템", "upgrades": "영구 강화", "enemies": "적"}
+SUBFOLDERS = ("design", "data")
 STAT_PREFIX = "stat."
 
-# CSV 열 중 수로 읽을 것과 목록(;로 구분)으로 읽을 것
+# CSV 열 중 수로 읽을 것과 목록(;로 구분)으로 읽을 것. 컨셉은 CSV를 지원하지 않는다.
+CSV_KINDS = ("items", "upgrades", "enemies")
 CSV_NUMERIC = {
     "items": ("tier", "price"),
     "upgrades": ("cost", "power", "level"),
@@ -37,28 +40,23 @@ def _num(value: str):
         return float(value)
 
 
-def detect_kind(data, path: Path) -> str | None:
+def detect_kind(data, path: Path | None = None) -> str | None:
     """JSON 최상위 키로 종류를 판단한다. 시뮬레이터 설정은 'meta'로 구분한다."""
-    if isinstance(data, list):
-        return None
     if not isinstance(data, dict):
         return None
     if "rooms" in data and "difficulty" in data:
         return "meta"
     for kind in DATASET_KINDS:
-        if kind in data:
+        if isinstance(data.get(kind), list):
             return kind
     return None
 
 
 def kind_from_filename(path: Path) -> str | None:
-    stem = path.stem.lower()
-    if "upgrade" in stem:
-        return "upgrades"
-    if "enem" in stem:
-        return "enemies"
-    if "item" in stem:
-        return "items"
+    stem = Path(path).stem.lower()
+    for key, kind in (("concept", "concepts"), ("upgrade", "upgrades"), ("enem", "enemies"), ("item", "items")):
+        if key in stem:
+            return kind
     return None
 
 
@@ -66,7 +64,7 @@ def read_csv(path: Path, kind: str) -> list[dict]:
     numeric = CSV_NUMERIC.get(kind, ())
     lists = CSV_LISTS.get(kind, ())
     rows = []
-    with path.open(encoding="utf-8-sig", newline="") as fh:
+    with Path(path).open(encoding="utf-8-sig", newline="") as fh:
         for row in csv.DictReader(fh):
             entry: dict = {"stats": {}}
             for key, raw in row.items():
@@ -97,17 +95,45 @@ def load_dataset(path: Path, expected: str | None = None) -> tuple[str | None, d
     path = Path(path)
     if path.suffix.lower() == ".csv":
         kind = expected or kind_from_filename(path)
-        if kind not in DATASET_KINDS:
-            raise ValueError("CSV 종류를 알 수 없습니다. 파일 이름에 items / upgrades / enemies를 넣으세요.")
+        if kind not in CSV_KINDS:
+            raise ValueError("CSV 종류를 알 수 없습니다. 파일 이름에 items / upgrades / enemies를 넣으세요. 컨셉은 JSON만 지원합니다.")
         return kind, {kind: read_csv(path, kind)}
     with path.open(encoding="utf-8") as fh:
         data = json.load(fh)
     if isinstance(data, list) and expected:
         data = {expected: data}
-    kind = detect_kind(data, path)
     if not isinstance(data, dict):
         raise ValueError("최상위는 객체여야 합니다.")
-    return kind, data
+    return detect_kind(data, path), data
+
+
+def _candidate(path: Path) -> bool:
+    """폴더 탐색 시 데이터 파일로 볼지 정한다. 깨진 파일도 이름에 종류가 드러나면 포함해 오류를 보여 준다."""
+    try:
+        kind, _ = load_dataset(path)
+    except (OSError, ValueError, json.JSONDecodeError, UnicodeDecodeError):
+        return kind_from_filename(path) is not None
+    return kind in DATASET_KINDS
+
+
+def discover(targets: list[Path]) -> list[Path]:
+    """파일은 그대로, 폴더는 그 안과 design/·data/ 하위 폴더(한 단계)의 데이터 파일을 찾는다."""
+    files: list[Path] = []
+    for t in targets:
+        t = Path(t)
+        if t.is_dir():
+            for d in [t] + [t / s for s in SUBFOLDERS if (t / s).is_dir()]:
+                files.extend(f for f in sorted(d.iterdir())
+                             if f.is_file() and f.suffix.lower() in (".json", ".csv") and _candidate(f))
+        elif t.is_file():
+            files.append(t)
+    seen, out = set(), []
+    for f in files:
+        key = f.resolve()
+        if key not in seen:
+            seen.add(key)
+            out.append(f)
+    return out
 
 
 def check_common(entry: dict, where: str, errors: list) -> bool:
@@ -217,44 +243,3 @@ def find_cycle(graph: dict) -> list[str] | None:
         if found:
             return found
     return None
-
-
-def print_findings(result: dict) -> None:
-    for e in result["errors"]:
-        print(f"error [{e['code']}] {e['where']}: {e['message']}")
-    for w in result["warnings"]:
-        print(f"warning [{w['code']}] {w['where']}: {w['message']}")
-
-
-def print_counts(result: dict, noun: str) -> None:
-    sc, pc = result["status_counts"], result["provenance_counts"]
-    print(f"상태: 제안 {sc['proposed']} · 승인 {sc['approved']} · 삭제 {sc['cut']} · 미지정 {sc['unspecified']}")
-    print(f"출처(삭제 제외): 가정 {pc['assumed']} · 계산 {pc['computed']} · 측정 {pc['measured']} · 미지정 {pc['unspecified']}")
-    print(f"{noun} {result['count']}개 · 오류 {len(result['errors'])} · 경고 {len(result['warnings'])} → {result['status'].upper()}")
-
-
-def finish_cli(result: dict, args, noun: str, extra_print=None) -> int:
-    """공통 CLI 마무리: 게이트 판정, --out 저장, 출력."""
-    gate_failed = bool(getattr(args, "fail_on_assumed", False)) and bool(result["unverified"])
-    failed = bool(result["errors"]) or (args.strict and bool(result["warnings"])) or gate_failed
-    result["status"] = "fail" if failed else "pass"
-    if args.out:
-        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    else:
-        print_findings(result)
-        if extra_print:
-            extra_print(result)
-        if gate_failed:
-            print("gate: 출처가 가정이거나 비어 있는 항목: " + ", ".join(result["unverified"]))
-        print_counts(result, noun)
-    return 1 if failed else 0
-
-
-def add_common_args(ap) -> None:
-    ap.add_argument("--strict", action="store_true", help="경고도 실패로 처리합니다.")
-    ap.add_argument("--fail-on-assumed", action="store_true", help="삭제되지 않은 항목 중 출처가 가정이거나 비어 있는 것이 있으면 실패합니다 (확정 판정 전 게이트).")
-    ap.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
-    ap.add_argument("--out", help="JSON 보고서를 이 경로에 저장합니다. 문서에서 [계산: 이 경로]로 인용합니다.")

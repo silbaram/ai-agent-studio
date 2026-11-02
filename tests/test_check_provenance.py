@@ -1,5 +1,4 @@
 """수치 출처 태그 검사기 테스트. 표준 라이브러리 unittest만 사용한다."""
-import importlib.util
 import io
 import json
 import sys
@@ -8,13 +7,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-sys.dont_write_bytecode = True
-ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "skills/numeric-provenance/scripts/check_provenance.py"
-spec = importlib.util.spec_from_file_location("check_provenance", SCRIPT)
-cp = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = cp
-spec.loader.exec_module(cp)
+from _studio import ROOT, provenance as cp, run_cli as studio_cli
 
 
 def errors(report):
@@ -111,10 +104,7 @@ class CommandLine(unittest.TestCase):
         self.tmp.cleanup()
 
     def run_cli(self, *args):
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            code = cp.main(list(args))
-        return code, buf.getvalue()
+        return studio_cli("provenance", *args)
 
     def write(self, name, text):
         path = self.dir / name

@@ -1,23 +1,9 @@
-#!/usr/bin/env python3
-"""아이템 데이터와 드랍 테이블을 결정적으로 검사한다.
-
-입력: JSON({"items": [...], "stat_weights": {...}, "drop_tables": {...}}) 또는 아이템 CSV.
-형식은 skills/progression-economy/references/data-format.md를 따른다. 표준 라이브러리만 사용한다.
-
-종료 코드
-  0  오류 없음 (--strict이면 경고도 없음, --fail-on-assumed이면 가정 항목도 없음)
-  1  위 조건 위반
-  2  사용법 오류(파일 없음, 파싱 실패)
-"""
+"""아이템 데이터와 드랍 테이블을 결정적으로 검사한다. 형식: progression-economy/references/data-format.md"""
 from __future__ import annotations
 
-import argparse
-import json
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import _common as c  # noqa: E402
+from . import common as c
 
 
 def load(path: Path) -> dict:
@@ -203,7 +189,7 @@ def validate(data: dict) -> dict:
     }
 
 
-def _print_extra(result: dict) -> None:
+def print_extra(result: dict) -> None:
     for tid, t in result["drop_tables"].items():
         pity = t.get("pity")
         line = f"drop {tid}: " + ", ".join(f"{k} {v:.2%}" for k, v in t["rarity_probability"].items())
@@ -212,26 +198,3 @@ def _print_extra(result: dict) -> None:
         print(line)
     if result["dominance_not_assessed"]:
         print("열위 판정 제외(고유 효과): " + ", ".join(result["dominance_not_assessed"]))
-
-
-def main(argv: list[str] | None = None) -> int:
-    try:
-        sys.stdout.reconfigure(errors="replace")
-    except (AttributeError, ValueError):
-        pass
-    ap = argparse.ArgumentParser(description="아이템 데이터와 드랍 테이블을 검사합니다.")
-    ap.add_argument("path", help="items JSON 또는 CSV")
-    c.add_common_args(ap)
-    args = ap.parse_args(argv)
-    try:
-        data = load(Path(args.path))
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        print(f"입력을 읽을 수 없습니다: {exc}", file=sys.stderr)
-        return 2
-    result = validate(data)
-    result["source"] = args.path
-    return c.finish_cli(result, args, "아이템", _print_extra)
-
-
-if __name__ == "__main__":
-    sys.exit(main())

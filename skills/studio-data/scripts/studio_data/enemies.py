@@ -1,23 +1,14 @@
-#!/usr/bin/env python3
 """적 데이터를 결정적으로 검사한다.
 
-입력: JSON({"enemies": [...], "threat_weights": {...}}) 또는 enemies CSV.
-형식은 skills/progression-economy/references/data-format.md를 따른다. 표준 라이브러리만 사용한다.
-
-위협도 = Σ(스탯 × threat_weights). 구역(zone)이 오를수록, 등급(일반 → 정예 → 보스)이 오를수록
-위협도 평균이 줄지 않는지 본다. 위협도 가중치는 설계 가정이며 실제 난이도 판정이 아니다.
-
-종료 코드: 0 통과, 1 오류(또는 --strict 경고, --fail-on-assumed 가정), 2 사용법 오류
+위협도 = Σ(스탯 × threat_weights). 구역이 오를수록, 등급(일반 → 정예 → 보스)이 오를수록
+위협도 평균이 줄지 않는지 본다. 가중치는 설계 가정이며 실제 난이도 판정이 아니다.
+형식: progression-economy/references/data-format.md
 """
 from __future__ import annotations
 
-import argparse
-import json
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import _common as c  # noqa: E402
+from . import common as c
 
 RANKS = ("normal", "elite", "boss")
 RANK_LABEL = {"normal": "일반", "elite": "정예", "boss": "보스"}
@@ -115,36 +106,8 @@ def validate(data: dict, drop_tables: dict | None = None) -> dict:
     }
 
 
-def _print_extra(result: dict) -> None:
+def print_extra(result: dict) -> None:
     for z, ranks in result["zone_rank_mean_threat"].items():
         print(f"구역 {z}: " + " · ".join(f"{RANK_LABEL[r]} {m:g}" for r, m in ranks.items()))
     if result["drop_table_not_checked"]:
         print("드랍 테이블 참조 미확인(--items 없음): " + ", ".join(result["drop_table_not_checked"]))
-
-
-def main(argv: list[str] | None = None) -> int:
-    try:
-        sys.stdout.reconfigure(errors="replace")
-    except (AttributeError, ValueError):
-        pass
-    ap = argparse.ArgumentParser(description="적 데이터를 검사합니다.")
-    ap.add_argument("path", help="enemies JSON 또는 CSV")
-    ap.add_argument("--items", help="드랍 테이블 참조를 확인할 아이템 데이터 파일")
-    c.add_common_args(ap)
-    args = ap.parse_args(argv)
-    try:
-        data = load(Path(args.path))
-        tables = None
-        if args.items:
-            _, item_data = c.load_dataset(Path(args.items), expected="items")
-            tables = item_data.get("drop_tables", {}) or {}
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        print(f"입력을 읽을 수 없습니다: {exc}", file=sys.stderr)
-        return 2
-    result = validate(data, tables)
-    result["source"] = args.path
-    return c.finish_cli(result, args, "적", _print_extra)
-
-
-if __name__ == "__main__":
-    sys.exit(main())

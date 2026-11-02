@@ -1,18 +1,13 @@
-#!/usr/bin/env python3
 """컨셉 기록(design/concepts.json)을 결정적으로 검사한다.
 
 재미를 점수로 매기지 않는다. 기록이 빠짐없는지, 구조가 사실상 같은 컨셉이 있는지,
 후보들이 한 구조에 몰려 있지 않은지, 선택한 컨셉의 브리프가 반증 가능한 형태인지 본다.
-형식은 skills/concept-exploration/references/concept-record.md를 따른다. 표준 라이브러리만 사용한다.
-
-종료 코드: 0 통과, 1 오류(또는 --strict 경고), 2 사용법 오류
+형식: concept-exploration/references/concept-record.md
 """
 from __future__ import annotations
 
-import argparse
 import json
 import re
-import sys
 from pathlib import Path
 
 ID_PATTERN = re.compile(r"^[a-z0-9_]+$")
@@ -242,42 +237,3 @@ def table(data: dict, result: dict) -> str:
             cid, c.get("name"), STATUS_LABEL[_status(c)], c.get("decision"), c.get("skill_expression"),
             stress, c.get("risk"), cost_txt, c.get("next_test"))) + " |")
     return "\n".join(rows)
-
-
-def main(argv: list[str] | None = None) -> int:
-    try:
-        sys.stdout.reconfigure(errors="replace")
-    except (AttributeError, ValueError):
-        pass
-    ap = argparse.ArgumentParser(description="컨셉 기록을 검사합니다 (재미 점수는 매기지 않습니다).")
-    ap.add_argument("path", help="concepts.json")
-    ap.add_argument("--strict", action="store_true", help="경고도 실패로 처리합니다.")
-    ap.add_argument("--table", action="store_true", help="비교표(마크다운)를 출력합니다. 파일로 저장하지 않습니다.")
-    ap.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
-    args = ap.parse_args(argv)
-    try:
-        data = load(Path(args.path))
-    except (OSError, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        print(f"입력을 읽을 수 없습니다: {exc}", file=sys.stderr)
-        return 2
-    result = validate(data)
-    failed = bool(result["errors"]) or (args.strict and bool(result["warnings"]))
-    result["status"] = "fail" if failed else "pass"
-    if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 1 if failed else 0
-    for e in result["errors"]:
-        print(f"error [{e['code']}] {e['where']}: {e['message']}")
-    for w in result["warnings"]:
-        print(f"warning [{w['code']}] {w['where']}: {w['message']}")
-    if args.table:
-        print(table(data, result))
-    sc = result["status_counts"]
-    print(f"컨셉 {result['count']}개 · 후보 {sc['proposed']} · 선택 {sc['approved']} · 제외 {sc['cut']}"
-          + (f" · 미지정 {sc['unspecified']}" if sc["unspecified"] else "")
-          + f" · 오류 {len(result['errors'])} · 경고 {len(result['warnings'])} → {result['status'].upper()}")
-    return 1 if failed else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

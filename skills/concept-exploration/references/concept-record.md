@@ -1,6 +1,6 @@
 # 컨셉 기록 형식
 
-게임 프로젝트의 `design/concepts.json` 한 파일에 모든 후보와 판단을 남긴다. 기획 문서(md)는 컨셉을 `id`로만 언급한다. 검사: `check_concepts.py`.
+게임 프로젝트의 `design/concepts.json` 한 파일에 모든 후보와 판단을 남긴다. 기획 문서(md)는 컨셉을 `id`로만 언급한다. 검사: `python skills/studio-data/scripts/studio.py check design/`, 보기: `python skills/studio-data/scripts/studio.py view .`.
 
 ## 최상위
 

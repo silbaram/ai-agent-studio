@@ -1,0 +1,4 @@
+interface:
+  display_name: "설계 데이터 공용 도구"
+  short_description: "컨셉·아이템·영구 강화·적 데이터를 한 번에 검사하고 브라우저 뷰어로 보기, 메타 성장 시뮬레이션, 수치 출처 검사"
+  default_prompt: "Use $studio-data to check this project's design data and open the read-only viewer."
