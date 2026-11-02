@@ -24,6 +24,47 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 
 첫 대상은 **액션 로그라이크 + 메타 성장형** 게임이다. 데이터는 JSON/CSV로 다뤄 Godot·Unity·Unreal·Roblox 어디에도 묶이지 않는다.
 
+## 설치
+
+**스킬을 사용할 게임 프로젝트 폴더에서** 실행한다. 네 스킬을 모두 설치한다. `studio-data`가 빠지면 다른 스킬의 검사와 뷰어가 동작하지 않는다.
+
+필요한 것:
+
+- [Node.js](https://nodejs.org/): 설치 명령(`npx skills`)에만 쓴다.
+- Python 3.9 이상: 설치 후 도구(`studio.py`)를 실행할 때 쓴다. 추가 패키지는 필요 없다.
+
+사용하는 호스트의 명령 하나만 실행한다.
+
+Claude Code:
+
+```bash
+npx skills add silbaram/ai-agent-studio --skill '*' --agent claude-code --copy
+```
+
+Codex:
+
+```bash
+npx skills add silbaram/ai-agent-studio --skill '*' --agent codex --copy
+```
+
+| 호스트 | 설치 위치 (게임 프로젝트 기준) |
+| --- | --- |
+| Claude Code | `.claude/skills/<스킬 이름>/` |
+| Codex | `.agents/skills/<스킬 이름>/` |
+
+- `--copy`는 독립 사본을 만든다. 이 저장소가 갱신돼도 설치본은 자동으로 바뀌지 않는다.
+- **갱신하려면 같은 명령을 다시 실행한다.** 기존 설치본을 덮어쓰므로, 설치본을 직접 고쳤다면 그 내용은 사라진다. 고칠 것이 있으면 설치본이 아니라 이 저장소를 고친다.
+- 받아 둔 이 저장소의 로컬 사본(작업 중인 브랜치 등)으로 설치하려면 `silbaram/ai-agent-studio` 대신 그 폴더 경로를 쓴다.
+- Node.js 없이 설치하려면 이 저장소의 `skills/` 안 네 폴더를 위 표의 설치 위치로 그대로 복사한다.
+
+설치 후 도구는 설치 위치에서 실행한다. 예를 들어 Claude Code에서 게임 프로젝트의 데이터를 뷰어로 보려면 게임 프로젝트 폴더에서 다음을 실행한다(Windows는 `python` 대신 `py`).
+
+```bash
+python .claude/skills/studio-data/scripts/studio.py view .
+```
+
+뷰어는 프로젝트의 `design/`·`data/`에 데이터 파일이 하나 이상 있어야 열린다. 설치 직후에는 아직 파일이 없으므로, 컨셉 탐색 등으로 `design/concepts.json` 같은 파일이 생긴 뒤 실행한다.
+
 ## 사용 예시
 
 보통 순서: 컨셉 탐색 → 프로토타입으로 가설 확인 → 데이터·수치 관리.
@@ -43,7 +84,7 @@ $progression-economy로 2구역에 나올 정예 적을 하나 추가해줘.
 제안 상태로 넣고 검사 경고가 있으면 알려줘. 바뀐 행만 보여줘.
 ```
 
-도구는 모두 `studio.py` 하나로 실행한다. Python 3.9 이상, 추가 설치는 필요 없다. 예시 프로젝트로 바로 해 볼 수 있다.
+도구는 모두 `studio.py` 하나로 실행한다. 아래는 이 저장소를 받은 폴더에서 예시 프로젝트로 바로 해 보는 명령이다. 게임 프로젝트에 설치했다면 경로 앞부분을 설치 위치(`.claude/skills/...` 또는 `.agents/skills/...`)로 바꾼다.
 
 ```bash
 python skills/studio-data/scripts/studio.py view skills/studio-data/assets/sample-project
