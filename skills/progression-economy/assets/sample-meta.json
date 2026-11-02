@@ -1,0 +1,28 @@
+{
+  "seed": 7,
+  "trials": 300,
+  "max_runs": 60,
+  "rooms": 30,
+  "difficulty": { "growth": "linear", "base": 10, "rate": 1.2 },
+  "player": { "base_power": 12, "power_per_room": 0.8, "skill": 1.5, "skill_spread": 0.8 },
+  "survival": { "slope": 0.35, "floor": 0.0, "ceiling": 0.995 },
+  "currency": {
+    "per_room": 2,
+    "bonus_rooms": { "10": 15, "20": 30, "30": 60 },
+    "keep_on_death": 1.0
+  },
+  "purchase_policy": "listed_order",
+  "upgrades": [
+    { "id": "vitality_1", "cost": 20, "power": 1.5 },
+    { "id": "weapon_1", "cost": 40, "power": 2.0 },
+    { "id": "vitality_2", "cost": 70, "power": 2.0, "requires": ["vitality_1"] },
+    { "id": "weapon_2", "cost": 110, "power": 2.5, "requires": ["weapon_1"] },
+    { "id": "relic_slot", "cost": 160, "power": 3.0, "requires": ["weapon_2"] },
+    { "id": "weapon_3", "cost": 240, "power": 3.0, "requires": ["weapon_2"] }
+  ],
+  "milestones": [
+    { "id": "boss_1", "clear_room": 10 },
+    { "id": "boss_2", "clear_room": 20 },
+    { "id": "first_clear", "clear_room": 30 }
+  ]
+}

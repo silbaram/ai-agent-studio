@@ -18,6 +18,9 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 | 스킬 | 하는 일 |
 | --- | --- |
 | [numeric-provenance](skills/numeric-provenance/SKILL.md) | 기획 수치를 `[가정]` / `[계산: 출처]` / `[측정: 출처]`로 표시하고, 확정 판정 전에 스크립트로 검사 |
+| [progression-economy](skills/progression-economy/SKILL.md) | 아이템 티어 역전·완전 열위·드랍 천장 기대값 검사, 로그라이크 메타 성장 시뮬레이션 |
+
+첫 대상은 **액션 로그라이크 + 메타 성장형** 게임이다. 데이터는 JSON/CSV로 다뤄 Godot·Unity·Unreal·Roblox 어디에도 묶이지 않는다.
 
 ## 사용 예시
 
@@ -26,13 +29,21 @@ $numeric-provenance로 design/economy.md의 모든 수치에 출처 태그를 �
 에이전트가 제안한 값은 가정으로 두고, 확정 판정은 하지 마.
 ```
 
-검사만 직접 실행할 수도 있다. Python 3.9 이상, 추가 설치는 필요 없다.
+```text
+$progression-economy로 data/items.json을 검사하고 data/meta.json으로 메타 성장을 시뮬레이션해줘.
+결과는 [계산: 보고서 경로]로 인용하고, 결과가 기대는 가정 목록도 알려줘.
+```
+
+도구를 직접 실행할 수도 있다. Python 3.9 이상, 추가 설치는 필요 없다.
 
 ```bash
 python skills/numeric-provenance/scripts/check_provenance.py design/
+python skills/progression-economy/scripts/validate_items.py skills/progression-economy/assets/sample-items.json
+python skills/progression-economy/scripts/simulate_meta.py skills/progression-economy/assets/sample-meta.json
 ```
 
-확정 판정 직전에는 `--fail-on-assumed`를 붙인다. `[가정]`이 하나라도 남으면 실패한다.
+확정 판정 직전에는 `check_provenance.py`에 `--fail-on-assumed`를 붙인다. `[가정]`이 하나라도 남으면 실패한다.
+시뮬레이터는 추상 모델이다. 결과는 경제·성장 곡선의 구조를 보는 용도이며 실제 난이도나 재미 판정이 아니다.
 
 ## 개발
 

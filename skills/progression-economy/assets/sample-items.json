@@ -1,0 +1,31 @@
+{
+  "stat_weights": { "attack": 1.0, "attack_speed": 20.0, "max_hp": 0.2, "armor": 1.5, "crit_chance": 40.0 },
+  "items": [
+    { "id": "rusty_sword", "slot": "weapon", "tier": 1, "rarity": "common", "price": 0, "stats": { "attack": 8 } },
+    { "id": "short_bow", "slot": "weapon", "tier": 1, "rarity": "common", "price": 35, "stats": { "attack": 6, "attack_speed": 0.15 } },
+    { "id": "iron_sword", "slot": "weapon", "tier": 2, "rarity": "uncommon", "price": 60, "stats": { "attack": 14 } },
+    { "id": "twin_daggers", "slot": "weapon", "tier": 2, "rarity": "uncommon", "price": 75, "stats": { "attack": 9, "attack_speed": 0.3, "crit_chance": 0.05 } },
+    { "id": "storm_blade", "slot": "weapon", "tier": 3, "rarity": "rare", "price": 140, "stats": { "attack": 20, "attack_speed": 0.2 } },
+    { "id": "leather_vest", "slot": "armor", "tier": 1, "rarity": "common", "price": 30, "stats": { "max_hp": 20, "armor": 2 } },
+    { "id": "chain_mail", "slot": "armor", "tier": 2, "rarity": "uncommon", "price": 70, "stats": { "max_hp": 35, "armor": 5 } },
+    { "id": "lucky_coin", "slot": "relic", "tier": 1, "rarity": "rare", "price": 90, "stats": {}, "unique_effect": true },
+    { "id": "whetstone", "slot": "relic", "tier": 1, "rarity": "common", "price": 25, "stats": { "attack": 3 } }
+  ],
+  "drop_tables": {
+    "chest_normal": {
+      "entries": [
+        { "rarity": "common", "weight": 70 },
+        { "rarity": "uncommon", "weight": 25 },
+        { "rarity": "rare", "weight": 5 }
+      ],
+      "pity": { "target_rarity": "rare", "guarantee_after": 30 }
+    },
+    "boss_reward": {
+      "entries": [
+        { "item": "storm_blade", "weight": 1 },
+        { "item": "chain_mail", "weight": 2 },
+        { "item": "twin_daggers", "weight": 2 }
+      ]
+    }
+  }
+}
