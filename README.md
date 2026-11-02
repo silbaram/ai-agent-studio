@@ -17,12 +17,20 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 
 | 스킬 | 하는 일 |
 | --- | --- |
+| [concept-exploration](skills/concept-exploration/SKILL.md) | 막연한 방향을 구조가 다른 게임 가설로 펼치고, 단순 전략으로 반증하고, 고른 안을 필러·가설·최소 프로토타입이 있는 브리프로 정리 |
 | [numeric-provenance](skills/numeric-provenance/SKILL.md) | 기획 수치를 `[가정]` / `[계산: 출처]` / `[측정: 출처]`로 표시하고, 확정 판정 전에 스크립트로 검사 |
 | [progression-economy](skills/progression-economy/SKILL.md) | 아이템·영구 강화·적 데이터의 단일 원본 관리와 뷰어, 티어 역전·완전 열위·드랍 천장·강화 사슬·적 위협도 진행 검사, 로그라이크 메타 성장 시뮬레이션 |
 
 첫 대상은 **액션 로그라이크 + 메타 성장형** 게임이다. 데이터는 JSON/CSV로 다뤄 Godot·Unity·Unreal·Roblox 어디에도 묶이지 않는다.
 
 ## 사용 예시
+
+보통 순서: 컨셉 탐색 → 프로토타입으로 가설 확인 → 데이터·수치 관리.
+
+```text
+$concept-exploration으로 액션 로그라이크에 성장 요소가 있는 게임 컨셉을 찾아줘.
+1인 개발, 한 판 20분 안팎. 재미 점수로 고르지 말고 구조가 다른 후보를 비교표로 보여줘.
+```
 
 ```text
 $numeric-provenance로 design/economy.md의 모든 수치에 출처 태그를 달아줘.
@@ -37,6 +45,7 @@ $progression-economy로 2구역에 나올 정예 적을 하나 추가해줘.
 도구를 직접 실행할 수도 있다. Python 3.9 이상, 추가 설치는 필요 없다.
 
 ```bash
+python skills/concept-exploration/scripts/check_concepts.py skills/concept-exploration/assets/sample-concepts.json --table
 python skills/numeric-provenance/scripts/check_provenance.py design/
 python skills/progression-economy/scripts/view_data.py skills/progression-economy/assets/
 python skills/progression-economy/scripts/validate_items.py skills/progression-economy/assets/sample-items.json

@@ -1,0 +1,192 @@
+{
+  "constraints": {
+    "note": "예시 데이터다. 실제 기획안이 아니다.",
+    "platform": "PC, 키보드·패드",
+    "session": "한 판 15~25분",
+    "feeling": "아슬아슬하게 살아남는 긴장, 판마다 조금씩 강해지는 느낌",
+    "team": "1인, 6개월",
+    "engines": ["Godot", "Unity", "Unreal", "Roblox"],
+    "avoid": ["PvP", "긴 스토리 컷신"],
+    "references": ["Hades", "Dead Cells", "Vampire Survivors"],
+    "assumed": ["한 판 길이는 사용자가 정하지 않아 제안값으로 둠"]
+  },
+  "concepts": [
+    {
+      "id": "parry_tempo",
+      "name": "패링 템포",
+      "pitch": "적 공격을 정확히 막아낼수록 공격 박자가 빨라지는 방 단위 액션 로그라이크",
+      "core_verb": "받아친다",
+      "decision": "다음 공격을 막을지, 피할지, 맞으면서 공격을 이어 갈지",
+      "state_read": "적의 공격 예고(색·자세), 현재 템포 단계, 남은 체력",
+      "skill_expression": "숙련자는 예고를 읽고 패링으로 템포를 올려 짧게 끝내고, 초보는 회피만 하며 오래 싸운다",
+      "risk": "패링 판정이 엄격하면 초반 이탈, 느슨하면 회피가 무의미해짐",
+      "signature": { "decision": "timing", "information": "partial", "commitment": "costly", "risk_reward": "proximity",
+                     "space": "rooms", "pressure": "enemies", "progression": "both" },
+      "status": "approved",
+      "origin": "root",
+      "loop": { "moment": "예고 읽기 → 패링·회피 선택 → 템포 상승 공격", "run": "방 12개, 3구역 보스", "meta": "패링 판정 창과 템포 단계 해금" },
+      "stress": [
+        { "policy": "spam", "result": "loses", "evidence": "공격 버튼 연타는 템포를 올리지 못하고, 패링 실패 시 경직이 있어 피해가 누적된다" },
+        { "policy": "kite", "result": "competitive", "evidence": "거리 두기로 살아남을 수 있지만 템포가 오르지 않아 방 클리어가 느리다" },
+        { "policy": "idle", "result": "loses", "evidence": "적이 계속 공격하므로 아무것도 안 하면 죽는다" }
+      ],
+      "cost": { "level": "medium", "reason": "적 패턴마다 예고 연출과 판정 조정이 필요" },
+      "next_test": "그레이박스 적 1종, 패턴 3개로 3명에게 5판씩 시켜 패링 성공률 변화 관찰",
+      "brief": {
+        "experience": "체력이 바닥난 상태에서 정확한 받아치기 몇 번으로 판을 뒤집는 짜릿함",
+        "pillars": [
+          { "name": "읽히는 위험", "test": "화려한 이펙트와 공격 예고의 선명함 중 이 게임은 예고의 선명함을 고른다" },
+          { "name": "용기에 대한 보상", "test": "안전한 회피와 위험한 패링 중 이 게임은 패링에 더 큰 보상을 준다" },
+          { "name": "짧고 진한 판", "test": "긴 탐험과 밀도 높은 전투 중 이 게임은 밀도를 고른다" }
+        ],
+        "anti_pillars": ["무작위 즉사 함정", "스토리 컷신", "아이템 수집 도감"],
+        "loop": { "moment": "예고 읽기 → 패링·회피 → 템포 공격", "run": "방 12개를 지나 구역 보스 3명", "meta": "판 사이에 패링 판정 창 확장과 템포 단계 해금" },
+        "hypotheses": [
+          { "claim": "공격 예고가 보이면 플레이어는 5판 안에 패링 타이밍을 스스로 개선한다",
+            "failure_signal": "5판 동안 같은 패턴에 같은 방식으로 맞는 비율이 줄지 않는다",
+            "test": "그레이박스 적 1종·패턴 3개, 3명에게 5판씩" },
+          { "claim": "템포 상승이 회피보다 패링을 고르게 만든다",
+            "failure_signal": "패링 성공률이 높은 사람도 회피를 70% 이상 고른다",
+            "test": "같은 프로토타입에서 행동 비율 기록" }
+        ],
+        "prototype": { "kind": "graybox", "scope": "방 1개, 적 1종, 패턴 3개, 템포 3단계. 그래픽·메뉴·저장 제외",
+                       "duration_days": 3, "success_criteria": "3명 중 2명 이상에서 5판 동안 피격률이 줄고 패링 선택 비율이 오른다" },
+        "mvp": ["패링·회피·공격 조작", "공격 예고 3종", "템포 3단계", "적 3종", "보스 1명", "방 연결 구조", "메타 해금 2종"],
+        "out_of_scope": ["멀티플레이", "무기 10종 이상", "스토리", "도감"]
+      }
+    },
+    {
+      "id": "greed_rooms",
+      "name": "탐욕의 방",
+      "pitch": "방에 오래 머물수록 보상이 커지지만 적도 거세지는 로그라이크",
+      "core_verb": "버틴다",
+      "decision": "지금 나갈지, 한 웨이브 더 버틸지",
+      "state_read": "현재 보상 배율, 다음 웨이브 예고, 체력과 회복 수단",
+      "skill_expression": "숙련자는 빌드가 강한 판에 길게 버티고 약한 판에 빨리 빠진다",
+      "risk": "항상 바로 나가는 전략이 안정적이면 버티기 결정이 무의미",
+      "signature": { "decision": "gamble", "information": "full", "commitment": "permanent", "risk_reward": "greed",
+                     "space": "rooms", "pressure": "escalation", "progression": "both" },
+      "status": "proposed",
+      "origin": "root",
+      "stress": [
+        { "policy": "safe_only", "result": "unknown" },
+        { "policy": "greedy", "result": "loses", "evidence": "웨이브 강화가 체력 회복보다 빨라 무조건 버티면 결국 죽는다" }
+      ],
+      "cost": { "level": "small", "reason": "방 하나에서 웨이브만 늘리면 시험 가능" },
+      "next_test": "종이 시뮬레이션으로 보상 배율과 웨이브 강화 곡선을 놓고 '바로 나가기' 전략의 기대 보상 비교"
+    },
+    {
+      "id": "blood_ammo",
+      "name": "피의 탄창",
+      "pitch": "체력이 곧 탄약인 원거리 액션 로그라이크",
+      "core_verb": "쏜다",
+      "decision": "체력을 써서 쏠지, 아껴서 피할지",
+      "state_read": "남은 체력, 적 수와 거리, 체력 회복 아이템 위치",
+      "skill_expression": "숙련자는 한 발로 여러 적을 맞히는 위치를 잡아 체력 효율을 높인다",
+      "risk": "체력이 줄수록 더 불리해지는 악순환으로 회복이 불가능해짐",
+      "signature": { "decision": "allocation", "information": "full", "commitment": "reversible", "risk_reward": "wager",
+                     "space": "arena", "pressure": "enemies", "progression": "in_run" },
+      "status": "proposed",
+      "origin": "root",
+      "stress": [
+        { "policy": "kite", "result": "competitive", "evidence": "쏘지 않고 피하기만 하면 체력은 지키지만 적이 줄지 않는다" },
+        { "policy": "spam", "result": "loses", "evidence": "연사하면 체력이 바닥나 스스로 죽는다" }
+      ],
+      "cost": { "level": "small", "reason": "아레나 하나와 적 2종으로 시험 가능" },
+      "next_test": "아레나 프로토타입에서 체력 30% 이하 구간의 생존율과 역전 빈도 기록"
+    },
+    {
+      "id": "blood_ammo_tide",
+      "name": "피의 탄창: 밀물",
+      "pitch": "체력이 탄약이고, 쏜 탄이 바닥에 고였다가 다음 밀물에 회복으로 돌아오는 로그라이크",
+      "core_verb": "쏘고 되찾는다",
+      "decision": "지금 쏠지, 밀물 직전까지 아낄지",
+      "state_read": "남은 체력, 바닥에 고인 탄의 양과 위치, 다음 밀물까지 남은 시간",
+      "skill_expression": "숙련자는 밀물 직전에 몰아 쏘고 고인 탄 위로 이동해 회복한다",
+      "risk": "밀물 타이밍만 기다리는 수동적 플레이가 지배할 수 있음",
+      "signature": { "decision": "allocation", "information": "partial", "commitment": "costly", "risk_reward": "wager",
+                     "space": "arena", "pressure": "enemies", "progression": "in_run" },
+      "status": "proposed",
+      "origin": "blood_ammo",
+      "notes": "원본의 악순환 위험을 겨냥한 변이. 쏜 체력이 일부 돌아오는 시간 구조를 더해 저체력에서도 역전 수단이 생기길 기대",
+      "stress": [
+        { "policy": "corner", "result": "unknown" },
+        { "policy": "spam", "result": "competitive", "evidence": "밀물 직전 연사는 회수되므로 연사가 항상 손해는 아니다" }
+      ],
+      "cost": { "level": "small", "reason": "원본 프로토타입에 밀물 타이머만 추가" },
+      "next_test": "원본과 같은 아레나에서 저체력 구간 역전 빈도 비교"
+    },
+    {
+      "id": "echo_route",
+      "name": "메아리 지도",
+      "pitch": "다음 방 내용이 소리로만 힌트로 주어지는 경로 선택 로그라이크",
+      "core_verb": "듣고 고른다",
+      "decision": "어느 문으로 갈지",
+      "state_read": "문 너머 소리 힌트, 남은 횃불(자원), 현재 빌드",
+      "skill_expression": "숙련자는 소리 패턴을 학습해 빌드에 맞는 방을 고른다",
+      "risk": "힌트를 학습하기 전에는 사실상 무작위 선택이라 초반이 지루할 수 있음",
+      "signature": { "decision": "route", "information": "hidden", "commitment": "permanent", "risk_reward": "exposure",
+                     "space": "rooms", "pressure": "resource_drain", "progression": "meta" },
+      "status": "proposed",
+      "origin": "root",
+      "stress": [
+        { "policy": "random", "result": "unknown" }
+      ],
+      "cost": { "level": "medium", "reason": "소리 힌트 설계와 방 종류별 콘텐츠가 필요" },
+      "next_test": "종이 프로토타입: 카드 뒷면 그림 힌트로 방 선택, 학습 전후 선택 정확도 비교"
+    },
+    {
+      "id": "combo_forge",
+      "name": "연계 대장간",
+      "pitch": "방 사이마다 무기 연계 기술을 하나씩 단련해 조합하는 로그라이크",
+      "core_verb": "조합한다",
+      "decision": "어떤 연계 기술을 더할지",
+      "state_read": "현재 연계 목록, 다음 구역 적 특성 예고",
+      "skill_expression": "숙련자는 다음 구역 적에 맞춰 연계를 바꾼다",
+      "risk": "한 가지 최강 조합이 발견되면 매 판 같은 선택",
+      "signature": { "decision": "build", "information": "full", "commitment": "permanent", "risk_reward": "none",
+                     "space": "rooms", "pressure": "enemies", "progression": "both" },
+      "status": "proposed",
+      "origin": "root",
+      "stress": [
+        { "policy": "one_build", "result": "unknown" }
+      ],
+      "cost": { "level": "large", "reason": "연계 기술 여러 개의 조합 균형이 필요" },
+      "next_test": "연계 6개로 조합표를 만들고 적 3종 상대 기대 피해를 계산해 지배 조합이 있는지 확인"
+    },
+    {
+      "id": "rhythm_shield",
+      "name": "리듬 방패",
+      "pitch": "음악 박자에 맞춰 방패로 받아치는 방 단위 액션 로그라이크",
+      "core_verb": "받아친다",
+      "decision": "다음 공격을 막을지, 피할지",
+      "state_read": "박자 표시, 적 공격 예고, 남은 체력",
+      "skill_expression": "숙련자는 박자에 맞춰 연속으로 받아친다",
+      "risk": "패링 템포와 사실상 같은 게임",
+      "signature": { "decision": "timing", "information": "partial", "commitment": "costly", "risk_reward": "proximity",
+                     "space": "rooms", "pressure": "enemies", "progression": "both" },
+      "status": "cut",
+      "origin": "root",
+      "notes": "구조 축 7개가 parry_tempo와 모두 같다. 테마(음악)만 다른 변형이라 대표인 parry_tempo만 남김"
+    },
+    {
+      "id": "auto_garden",
+      "name": "자동 전투 정원",
+      "pitch": "캐릭터가 자동으로 싸우고 플레이어는 이동만 하는 로그라이크",
+      "core_verb": "피한다",
+      "decision": "어디로 이동할지",
+      "state_read": "적 위치, 투사체",
+      "skill_expression": "없음: 자동 공격 범위가 넓어 한 구석에 서 있어도 결과가 같다",
+      "risk": "반복해서 내릴 결정이 없다",
+      "signature": { "decision": "position", "information": "full", "commitment": "reversible", "risk_reward": "none",
+                     "space": "arena", "pressure": "escalation", "progression": "meta" },
+      "status": "cut",
+      "origin": "root",
+      "stress": [
+        { "policy": "corner", "result": "dominates", "evidence": "적이 사방에서 다가오고 자동 공격 범위가 화면 대부분이라 구석에 서 있는 것이 이동보다 피해가 적다" }
+      ],
+      "hard_reject": { "type": "dominant_simple_policy", "reason": "구석에 서 있기가 모든 구간에서 이동보다 낫다",
+                       "evidence": "규칙상 적은 플레이어를 향해 직선 이동하고 자동 공격 범위가 진입 경로를 모두 덮는다" }
+    }
+  ]
+}

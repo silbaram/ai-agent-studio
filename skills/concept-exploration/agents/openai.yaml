@@ -1,0 +1,4 @@
+interface:
+  display_name: "컨셉 탐색"
+  short_description: "막연한 방향을 구조가 다른 게임 가설로 펼치고, 단순 전략으로 반증한 뒤, 고른 안을 시험 가능한 브리프로 정리"
+  default_prompt: "Use $concept-exploration to turn my rough game direction into structurally different concept hypotheses, stress-test them, and help me choose one to prototype."
