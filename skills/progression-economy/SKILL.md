@@ -9,7 +9,7 @@ description: "Keeps items, permanent upgrades, and enemies in single-source JSON
 
 ## 도구
 
-모든 도구는 공용 스킬 [studio-data](../studio-data/SKILL.md)의 `studio.py` 하나로 실행한다. 이 스킬과 함께 설치한다.
+모든 도구는 공용 스킬 [studio-data](../studio-data/SKILL.md)의 `studio.py` 하나로 실행한다. 이 스킬과 함께 설치한다. 아래 명령은 게임 프로젝트 폴더에서 Claude Code 설치 기준(`.claude/skills/…`)으로 적었다. Codex는 `.agents/skills/…`, Windows PowerShell은 `python3` 대신 `py`([실행 경로](../studio-data/SKILL.md#실행)).
 
 | 도구 | 답하는 질문 | 답하지 못하는 질문 |
 |---|---|---|
@@ -26,7 +26,7 @@ description: "Keeps items, permanent upgrades, and enemies in single-source JSON
 - 아이템, 영구 강화, 적의 수치·효과·의도·상태·출처는 **종류별 원본 파일 한 곳**에만 쓴다. 권장 배치는 `data/items.json`, `data/upgrades.json`, `data/enemies.json`. 형식은 [references/data-format.md](references/data-format.md).
 - 시뮬레이터 설정(`data/meta.json`)은 강화 목록을 직접 담지 않고 `"upgrades_file": "upgrades.json"`으로 원본을 가리킨다.
 - 기획 문서(md)는 항목을 `id`로만 언급한다. 공격력·가격·체력 같은 수치를 md에 옮겨 적지 않는다. 옮겨 적으면 원본을 고칠 때 어긋난다.
-- 보기 좋은 정리가 필요하면 문서를 생성하지 않고 뷰어(`python skills/studio-data/scripts/studio.py view .`)로 원본을 본다. 뷰어 사용법은 [studio-data](../studio-data/SKILL.md#뷰어).
+- 보기 좋은 정리가 필요하면 문서를 생성하지 않고 뷰어(`python3 .claude/skills/studio-data/scripts/studio.py view .`)로 원본을 본다. 뷰어 사용법은 [studio-data](../studio-data/SKILL.md#뷰어).
 
 ## 항목 추가·변경 요청
 
@@ -34,7 +34,7 @@ description: "Keeps items, permanent upgrades, and enemies in single-source JSON
 
 1. 요청을 해당 원본 파일의 항목으로 바꾼다. `status: "proposed"`, `provenance: {"kind": "assumed", "note": "요청 기반 초안"}`로 넣는다. 수치는 에이전트 제안이므로 가정이다.
 2. 숫자로 비교할 수 없는 효과는 `effect`에 적는다(아이템은 `unique_effect: true`도 붙인다). 왜 넣는지 `intent`에 한 줄로 적는다.
-3. `python skills/studio-data/scripts/studio.py check data/`로 검사한다. 적의 드랍 테이블 참조까지 확인된다. 경고가 나오면 함께 보고한다.
+3. `python3 .claude/skills/studio-data/scripts/studio.py check data/`로 검사한다. 적의 드랍 테이블 참조까지 확인된다. 경고가 나오면 함께 보고한다.
 4. 대화에는 **새로 추가되거나 바뀐 행만** 표로 보여 준다. 전체 목록은 뷰어로 안내한다.
 5. 사용자가 승인하면 `approved`로 바꾼다. 거절하면 지우지 말고 `cut`으로 두고 `intent`에 뺀 이유를 남긴다. `cut` 항목은 비교, 합계, 시뮬레이션, 게이트에서 빠진다.
 6. 사용자 승인 없이 `approved`로 바꾸지 않는다.
@@ -44,18 +44,21 @@ description: "Keeps items, permanent upgrades, and enemies in single-source JSON
 1. **데이터를 단일 원본으로 둔다.** 게임이 읽는 JSON/CSV 파일을 도구도 그대로 읽는다.
 2. **검사한다.**
    ```bash
-   python skills/studio-data/scripts/studio.py check data/ --out reports/data-check.json
+   python3 .claude/skills/studio-data/scripts/studio.py check data/ --out reports/data-check.json
    ```
    - 폴더를 주면 아이템·강화·적을 한 번에 검사하고, 적의 드랍 테이블은 함께 읽은 아이템 데이터로 확인한다.
    - 오류(형식, 중복 id, 없는 참조, 순환, 삭제된 선행 조건)는 먼저 고친다.
-   - 경고(`tier_inversion`, `dominated`, `cost_inversion`, `power_missing`, `zone_inversion`, `rank_inversion`)는 의도인지 판단한다. 의도라면 해당 항목의 `intent`에 이유를 적는다. 의도가 아니면 고친다.
-   - 판정할 수 없는 것(고유 효과 아이템의 열위, 아이템 파일 없이 본 적의 드랍 테이블)은 "판정 제외" 또는 "미확인"으로 표시된다. 통과로 보고하지 않는다.
+   - 경고(`tier_inversion`, `dominated`, `cost_inversion`, `power_missing`, `zone_inversion`, `rank_inversion`)는 의도인지 판단한다. 의도가 아니면 고친다. 의도라면 해당 항목의 `acknowledged`에 `{경고 코드: 이유}`를 적는다. 그 경고는 "확인한 경고"로 이유와 함께 따로 보이고 경고 수에서 빠져 새 경고를 가리지 않는다. `intent`는 항목이 왜 있는지 적는 곳이며 경고를 끄지 않는다. 사용자가 확인하지 않은 경고를 에이전트가 혼자 `acknowledged`로 돌리지 않는다.
+   - 판정할 수 없는 것(고유 효과 아이템의 티어·열위, 아이템 파일 없이 보거나 아이템 파일을 읽지 못한 적의 드랍 테이블)은 "판정 제외" 또는 "미확인"으로 표시된다. 미확인이 남으면 최종 줄이 PASS가 아니라 INCOMPLETE다. 통과로 보고하지 않는다.
    - 확정 판정 전에는 `--fail-on-assumed`를 붙인다. 삭제되지 않은 항목 중 출처가 가정이거나 비어 있는 것이 있으면 실패한다.
 3. **메타 성장을 모델링한다.** 모델과 파라미터는 [references/meta-model.md](references/meta-model.md).
    ```bash
-   python skills/studio-data/scripts/studio.py simulate data/meta.json --out reports/meta.json --csv reports/meta-curve.csv
+   python3 .claude/skills/studio-data/scripts/studio.py simulate data/meta.json --out reports/meta.json --csv reports/meta-curve.csv
    ```
-   강화 데이터에 오류가 있거나 활성 강화에 `power`가 없으면 시뮬레이터가 실행을 거부한다.
+   강화 데이터에 오류가 있거나 활성 강화에 `power`가 없으면 시뮬레이터가 실행을 거부한다. 구매 정책을 비교할 때는 설정 파일을 복사하지 않고 `--compare-policies`를 붙인다.
+   ```bash
+   python3 .claude/skills/studio-data/scripts/studio.py simulate data/meta.json --compare-policies --out reports/meta-policies.json
+   ```
 4. **결과를 문서에 출처와 함께 적는다.** 결과값은 `[계산: reports/meta.json]`처럼 저장한 파일을 출처로 쓴다. 데이터 파일의 수치는 md 태그 대신 각 항목의 `provenance` 필드로 표시한다.
 5. **한 번에 하나만 바꾸고 다시 돌린다.** 같은 seed·trials·max_runs로 비교한다. 여러 값을 한꺼번에 바꾸면 어느 변경이 효과를 냈는지 알 수 없다.
 6. **플레이 기록이 생기면 보정한다.** 실제 런의 도달 방 분포와 모델의 `survival_at_base_power`, 마일스톤 분포를 비교해 `survival.slope`와 `player.skill`을 맞춘다. 보정 근거가 된 파라미터만 `[측정: 기록 출처]`로 올린다.
@@ -64,7 +67,7 @@ description: "Keeps items, permanent upgrades, and enemies in single-source JSON
 
 - 검사기와 시뮬레이터 결과만으로 "난이도 적절", "재미있음"을 판정하지 않는다. 구조적 문제(역전, 끊긴 사슬, 너무 이른 완료, 긴 정체, 도달 불가)를 찾는 데 쓴다.
 - 도달률이 100%가 아닌 마일스톤은 중앙값만 보고하지 않는다. `reached_fraction`과 "미도달"을 함께 적는다.
-- 구매 정책(`listed_order` / `cheapest_first`)에 따라 결론이 달라지면, 그것 자체를 발견으로 보고한다. 한쪽만 골라 보고하지 않는다.
+- 구매 정책(`listed_order` / `cheapest_first`)에 따라 결론이 달라지면, 그것 자체를 발견으로 보고한다. 한쪽만 골라 보고하지 않는다. 두 정책은 `--compare-policies`로 한 번에 돌린다.
 - 숫자를 손으로 조정해 원하는 결과가 나오게 맞추지 않는다. 조정했다면 무엇을 왜 바꿨는지와 바꾸기 전·후 결과를 함께 남긴다.
 
 ## 보고

@@ -67,7 +67,7 @@ class Records(unittest.TestCase):
         small["signature"] = {"decision": "timing", "information": "full"}
         bad = concept("b")
         bad["signature"]["space"] = 3
-        self.assertEqual(codes(run(small, bad)["errors"]), ["signature_too_small", "schema"])
+        self.assertEqual(codes(run(small, bad)["errors"]), ["signature_missing_axis", "signature_too_small", "schema"])
 
     def test_bad_status_and_duplicate_id(self):
         r = run(concept("a", status="maybe"), concept("b"), concept("b"))

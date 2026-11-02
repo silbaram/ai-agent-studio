@@ -12,6 +12,10 @@ from . import common as c
 
 RANKS = ("normal", "elite", "boss")
 RANK_LABEL = {"normal": "일반", "elite": "정예", "boss": "보스"}
+UNCHECKED_REASON = {
+    "no_items": "아이템 데이터를 함께 검사하지 않음 — data/ 폴더나 items.json을 같이 넘기세요",
+    "items_unreadable": "아이템 파일을 읽지 못함 — 아이템 파일의 오류를 먼저 고치세요",
+}
 
 
 def load(path: Path) -> dict:
@@ -72,8 +76,9 @@ def check_progression(active: list[dict], threat: dict, warnings: list) -> dict:
     return {str(z): {r: round(m, 4) for r, m in means[z].items()} for z in zones}
 
 
-def validate(data: dict, drop_tables: dict | None = None) -> dict:
-    """drop_tables를 주면(아이템 데이터의 drop_tables) 적의 drop_table 참조를 확인한다."""
+def validate(data: dict, drop_tables: dict | None = None, items_unreadable: bool = False) -> dict:
+    """drop_tables를 주면(아이템 데이터의 drop_tables) 적의 drop_table 참조를 확인한다.
+    items_unreadable이면 읽지 못한 아이템 파일에 있을 수 있으므로, 찾지 못한 참조를 오류 대신 미확인으로 둔다."""
     errors: list = []
     warnings: list = []
     raw = data.get("enemies")
@@ -90,10 +95,13 @@ def validate(data: dict, drop_tables: dict | None = None) -> dict:
         ref = e.get("drop_table")
         if not ref:
             continue
-        if drop_tables is None:
+        if drop_tables is None or (items_unreadable and ref not in drop_tables):
             unchecked.append(e["id"])
         elif ref not in drop_tables:
             errors.append({"code": "unknown_drop_table", "where": e["id"], "message": f"아이템 데이터에 없는 드랍 테이블입니다: {ref}"})
+    reason = None
+    if unchecked:
+        reason = "items_unreadable" if items_unreadable else "no_items"
     return {
         "kind": "enemies",
         "count": len(enemies),
@@ -101,6 +109,8 @@ def validate(data: dict, drop_tables: dict | None = None) -> dict:
         "scores": threat,
         "zone_rank_mean_threat": zone_means,
         "drop_table_not_checked": sorted(unchecked),
+        "drop_table_unchecked_reason": reason,
+        "unchecked": len(unchecked),
         "errors": errors,
         "warnings": warnings,
     }
@@ -110,5 +120,5 @@ def print_extra(result: dict) -> None:
     for z, ranks in result["zone_rank_mean_threat"].items():
         print(f"구역 {z}: " + " · ".join(f"{RANK_LABEL[r]} {m:g}" for r, m in ranks.items()))
     if result["drop_table_not_checked"]:
-        print("드랍 테이블 참조 미확인(아이템 데이터를 함께 검사하지 않음 — data/ 폴더나 items.json을 같이 넘기세요): "
-              + ", ".join(result["drop_table_not_checked"]))
+        reason = UNCHECKED_REASON.get(result.get("drop_table_unchecked_reason"), "")
+        print(f"드랍 테이블 참조 미확인({reason}): " + ", ".join(result["drop_table_not_checked"]))

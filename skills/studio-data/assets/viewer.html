@@ -23,7 +23,7 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
-         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans CJK KR", "NanumGothic", sans-serif; }
   main { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; }
   header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
   h1 { font-size: 22px; margin: 0; }
@@ -138,7 +138,8 @@
     </div>
     <div class="note" id="file-note">
       파일 모드는 원본에 적힌 값만 보여 줍니다. 검사(열위·역전·참조)와 계산(점수·위협도·확률)은 하지 않습니다.
-      검사 결과까지 보려면 서버로 실행하세요: <span class="mono">python skills/studio-data/scripts/studio.py view .</span>
+      검사 결과까지 보려면 게임 프로젝트 폴더에서 서버로 실행하세요: <span class="mono">python3 .claude/skills/studio-data/scripts/studio.py view .</span>
+      (Codex 설치는 <span class="mono">.agents/skills/…</span>, Windows PowerShell은 <span class="mono">py</span>)
     </div>
   </section>
 
@@ -168,7 +169,8 @@
 <script>
 "use strict";
 const LABEL = {
-  slot: { weapon: "무기", armor: "방어구", relic: "유물", accessory: "장신구", consumable: "소모품" },
+  slot: { weapon: "무기", armor: "방어구", relic: "유물", accessory: "장신구", consumable: "소모품",
+          passive: "패시브", active: "액티브", skill: "스킬" },
   track: {},
   rarity: { common: "일반", uncommon: "고급", rare: "희귀", epic: "영웅", legendary: "전설" },
   rank: { normal: "일반", elite: "정예", boss: "보스" },
@@ -177,7 +179,8 @@ const LABEL = {
   result: { dominates: "지배", competitive: "대등", loses: "짐", unknown: "미확인" },
   cost: { small: "작음", medium: "중간", large: "큼" },
   constraint: { note: "메모", platform: "플랫폼·입력", session: "한 판 길이", feeling: "원하는 감정", team: "제작 규모",
-                engines: "엔진 후보", avoid: "피할 것", references: "참고 게임", assumed: "가정으로 둔 값" },
+                engines: "엔진 후보", avoid: "피할 것", references: "참고 게임", assumed: "가정으로 둔 값",
+                fixed_axes: "제약으로 고정된 축", extra_axes: "추가한 축" },
   prov: { assumed: "가정", computed: "계산", measured: "측정", unspecified: "미지정" },
   code: { dominated: "열위", tier_inversion: "티어 역전", schema: "형식", duplicate_id: "중복 id", unknown_item: "없는 아이템",
           provenance: "출처", pity_target_missing: "천장 대상 없음", cut_item_referenced: "삭제 아이템 드랍",
@@ -187,7 +190,9 @@ const LABEL = {
           evidence_missing: "근거 없음", reject_unsupported: "탈락 근거 부족", unknown_origin: "없는 출신",
           brief_missing: "브리프 없음", brief_incomplete: "브리프 불완전", near_duplicate: "구조 중복",
           axis_collapse: "축 쏠림", dominant_policy: "단순 전략 지배", next_test_missing: "다음 시험 없음",
-          rejected_but_active: "탈락인데 활성" },
+          rejected_but_active: "탈락인데 활성", signature_missing_axis: "필수 축 없음", unknown_axis: "모르는 축",
+          fixed_axis_mismatch: "고정 축과 다름", unknown_policy: "모르는 전략", untagged_number: "태그 없는 수치",
+          item_unchecked: "아이템 미확인", requirement_unchecked: "선행 조건 미확인" },
 };
 const KIND_LABEL = { concepts: "컨셉", items: "아이템", upgrades: "영구 강화", enemies: "적" };
 const KIND_ORDER = ["concepts", "items", "upgrades", "enemies"];
@@ -196,7 +201,7 @@ const statusLabels = (ds) => KINDS[ds.kind].statusLabels || LABEL.status;
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
 const RANK_ORDER = ["normal", "elite", "boss"];
 const orderOf = (list, v) => { const i = list.indexOf(v); return i < 0 ? list.length : i; };
-const SERVER_HINT = "python skills/studio-data/scripts/studio.py view .";
+const SERVER_HINT = "python3 .claude/skills/studio-data/scripts/studio.py view .";
 
 const state = { mode: null, snap: null, active: null, ui: {}, sort: {}, file: { handles: null, texts: [] } };
 
@@ -385,16 +390,22 @@ function renderSummary(ds, idx) {
     el("span", { class: "chip" }, `오류 ${errs} · 경고 ${warns}`),
   ].filter(Boolean);
   if (r.totals) chips.push(el("span", { class: "chip" }, `활성 강화 ${r.totals.active}개 · 총비용 ${fmt(r.totals.cost)} · 총 power ${fmt(r.totals.power)}`));
-  if (r.drop_table_not_checked && r.drop_table_not_checked.length) chips.push(el("span", { class: "chip none", text: "드랍 테이블 참조 미확인 (아이템 데이터 없음)" }));
+  if (r.drop_table_not_checked && r.drop_table_not_checked.length) chips.push(el("span", { class: "chip none",
+    text: "드랍 테이블 참조 미확인 (" + (r.drop_table_unchecked_reason === "items_unreadable" ? "아이템 파일 읽기 실패" : "아이템 데이터 없음") + ")" }));
+  const acks = r.acknowledged || [];
+  if (acks.length) chips.push(el("span", { class: "chip" }, `확인한 경고 ${acks.length}`));
   box.replaceChildren(...chips);
   const panel = document.getElementById("issues-panel");
-  panel.hidden = idx.all.length === 0;
+  panel.hidden = idx.all.length === 0 && acks.length === 0;
   document.getElementById("issues-title").textContent = `검사 결과: 오류 ${errs} · 경고 ${warns}`;
   if (errs && !panel.dataset.touched) panel.open = true;
   document.getElementById("issues").replaceChildren(...idx.all.map((it) =>
     el("li", { onclick: () => focusTarget(it.where) },
       el("span", { class: "tag " + it.level, text: (it.level === "err" ? "오류 · " : "경고 · ") + (LABEL.code[it.code] || it.code) }),
-      el("span", { class: "mono", text: it.where + " " }), it.message)));
+      el("span", { class: "mono", text: it.where + " " }), it.message)),
+    ...acks.map((it) => el("li", { onclick: () => focusTarget(it.where) },
+      el("span", { class: "tag info", text: "확인함 · " + (LABEL.code[it.code] || it.code) }),
+      el("span", { class: "mono", text: it.where + " " }), it.reason)));
 }
 
 function focusTarget(where) {
@@ -543,7 +554,7 @@ function renderConcepts(ds, idx) {
   if (cons && typeof cons === "object" && Object.keys(cons).length) {
     out.push(el("section", { class: "panel" }, el("div", { class: "ph" }, el("h2", {}, "제약")),
       el("div", { class: "doc" }, el("dl", {}, Object.entries(cons).flatMap(([k, v]) => [
-        el("dt", { text: LABEL.constraint[k] || k }), el("dd", { text: Array.isArray(v) ? v.join(", ") : (typeof v === "object" ? JSON.stringify(v) : String(v)) })])))));
+        el("dt", { text: LABEL.constraint[k] || k }), el("dd", { text: Array.isArray(v) ? v.join(", ") : (v && typeof v === "object" ? Object.entries(v).map(([a, b]) => `${a}: ${b}`).join(" · ") : String(v)) })])))));
   }
   const visible = list.filter((e) => matches(ds, e, idx.byEntry[e.id]));
   for (const e of visible.filter((x) => x.status === "approved")) out.push(renderBrief(e, idx.byEntry[e.id] || []));

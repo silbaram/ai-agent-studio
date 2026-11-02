@@ -16,6 +16,20 @@
 
 `decision`, `information`, `commitment`, `risk_reward`는 반드시 적는다. 나머지는 해당되면 적는다(최소 4축).
 
+축 이름은 위 표의 이름을 그대로 쓴다. 이름이 다르면 다른 후보와 비교되지 않아 겹침 검사가 조용히 빠진다. 그래서 검사기는 필수 4축이 없으면 오류(`signature_missing_axis`), 표에 없는 축 이름은 경고(`unknown_axis`)로 알린다. 정말 새 축이 필요하면 `constraints.extra_axes`에 이름을 적는다.
+
+## 제약으로 고정된 축
+
+사용자 제약 때문에 모든 후보가 같은 값을 가지는 축은 탐색 대상이 아니다. 예를 들어 "판 안 빌드 + 판 사이 성장"이 제약이면 모든 후보의 `progression`이 `both`다. 이런 축은 `constraints.fixed_axes`에 적는다.
+
+```json
+"constraints": { "fixed_axes": { "progression": "both" } }
+```
+
+- 검사기는 고정 축을 겹침(`near_duplicate`)·쏠림(`axis_collapse`) 비교에서 뺀다. signature에 적어도 되고 빼도 된다.
+- 후보가 고정 값과 다른 값을 적으면 제약 위반일 수 있어 `fixed_axis_mismatch`로 알린다.
+- 비교할 축(고정 축 제외)은 여전히 4개 이상이어야 한다.
+
 ## 범위 나누기
 
 12개를 만들 때 예를 들어 이렇게 칸을 미리 정한다.
@@ -26,6 +40,15 @@
 - 사용자가 준 장르 경계 안에서, 장르 관례와 다른 축 값을 가진 안을 2개 이상
 
 장르 경계가 "액션 로그라이크"라면 `space`·`pressure`는 장르가 정해 주는 경우가 많다. 그럴수록 `decision`·`information`·`risk_reward`에서 넓게 벌린다.
+
+## 6개로 짧게 할 때
+
+- `decision`이 서로 다른 값 4가지 이상
+- `information`의 값 2가지 이상
+- `risk_reward`가 `none`인 안은 1개 이하
+- 장르 관례와 다른 축 값을 가진 안 1개 이상
+- 변이(6단계)는 생략해도 된다. 생략했으면 보고에 적는다.
+- 6개를 모두 제시해도 된다(7단계의 "3~5개"는 12개 기준이다).
 
 ## 변이 연산
 

@@ -176,6 +176,33 @@ def is_active(entry: dict) -> bool:
     return entry.get("status") != "cut"
 
 
+def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
+    """항목의 acknowledged({경고 코드: 확인한 이유})에 적힌 경고를 report["acknowledged"]로 옮긴다.
+    확인한 경고는 경고 수와 --strict에서 빠지지만 지워지지 않고 이유와 함께 남는다. 오류는 옮기지 않는다."""
+    report.setdefault("acknowledged", [])
+    entries = data.get(kind)
+    if not isinstance(entries, list):
+        return
+    acks: dict = {}
+    for e in entries:
+        if not isinstance(e, dict) or not isinstance(e.get("id"), str) or "acknowledged" not in e:
+            continue
+        ack = e["acknowledged"]
+        if not isinstance(ack, dict) or not all(isinstance(k, str) and isinstance(v, str) and v.strip() for k, v in ack.items()):
+            report["errors"].append({"code": "schema", "where": e["id"],
+                                     "message": "acknowledged는 {경고 코드: 확인한 이유} 객체여야 합니다. 이유를 비워 두지 않습니다."})
+            continue
+        acks.setdefault(e["id"], ack)  # 검사기와 같이 첫 항목을 쓴다
+    kept = []
+    for w in report["warnings"]:
+        reason = acks.get(w["where"], {}).get(w["code"])
+        if reason:
+            report["acknowledged"].append({**w, "reason": reason.strip()})
+        else:
+            kept.append(w)
+    report["warnings"] = kept
+
+
 def summary_counts(entries: list[dict]) -> dict:
     status = {s: 0 for s in STATUSES + ("unspecified",)}
     for e in entries:

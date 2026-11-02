@@ -1,9 +1,9 @@
 """studio.py의 하위 명령: view / check / simulate / provenance.
 
 종료 코드
-  0  통과
+  0  통과. check는 미확인 참조가 있으면 최종 줄이 INCOMPLETE다(종료 코드는 0, --strict·--fail-on-assumed면 1).
   1  오류, 또는 --strict 경고, 또는 --fail-on-assumed 가정 항목
-  2  사용법 오류(경로 없음, 읽을 수 없는 파일, check할 데이터 없음, 설정 오류, 서버를 열 수 없음)
+  2  사용법 오류(경로 없음, 읽을 수 없는 파일, check할 데이터 없음, provenance할 md 없음, 설정 오류, 서버를 열 수 없음)
      view는 데이터가 아직 없어도 열리고, 파일이 생기면 화면에 자동으로 나타난다.
 """
 from __future__ import annotations
@@ -61,6 +61,8 @@ def _print_data_counts(entry: dict) -> None:
     r = entry["report"]
     sc = r["status_counts"]
     tail = f"오류 {len(r['errors'])} · 경고 {len(r['warnings'])}"
+    if r.get("acknowledged"):
+        tail += f" · 확인한 경고 {len(r['acknowledged'])}"
     pc = r["provenance_counts"]
     print(f"상태: 제안 {sc['proposed']} · 승인 {sc['approved']} · 삭제 {sc['cut']} · 미지정 {sc['unspecified']}")
     print(f"출처(삭제 제외): 가정 {pc['assumed']} · 계산 {pc['computed']} · 측정 {pc['measured']} · 미지정 {pc['unspecified']}")
@@ -77,15 +79,23 @@ def cmd_check(args) -> int:
         print("컨셉·아이템·영구 강화·적 데이터 파일을 찾지 못했습니다.", file=sys.stderr)
         return 2
     unreadable = [d for d in entries if not d["ok"]]
-    errors = sum(len(d["report"]["errors"]) for d in entries if d["ok"])
-    warnings = sum(len(d["report"]["warnings"]) for d in entries if d["ok"])
+    reports = [d["report"] for d in entries if d["ok"]]
+    errors = sum(len(r["errors"]) for r in reports)
+    warnings = sum(len(r["warnings"]) for r in reports)
+    acknowledged = sum(len(r.get("acknowledged", [])) for r in reports)
+    unchecked = sum(r.get("unchecked", 0) for r in reports)
     gated = {d["path"]: d["report"]["unverified"] for d in entries
              if d["ok"] and args.fail_on_assumed and d["report"].get("unverified")}
-    failed = bool(errors) or (args.strict and bool(warnings)) or bool(gated)
-    status = "unreadable" if unreadable else ("fail" if failed else "pass")
+    failed = (bool(errors) or (args.strict and bool(warnings)) or bool(gated)
+              or ((args.strict or args.fail_on_assumed) and bool(unchecked)))
+    # 미확인이 남으면 통과(PASS)로 쓰지 않는다. 검사하지 못한 것을 통과로 옮겨 적지 않게 한다.
+    status = "unreadable" if unreadable else ("fail" if failed else ("incomplete" if unchecked else "pass"))
+    ids = [s.strip() for s in args.ids.split(",") if s.strip()] if args.ids else None
     payload = {
         "status": status,
         "fail_on_assumed": args.fail_on_assumed,
+        "unchecked": unchecked,
+        "acknowledged": acknowledged,
         "datasets": [{k: d.get(k) for k in ("path", "kind", "ok", "error", "report") if k in d} for d in entries],
     }
     if args.out:
@@ -104,10 +114,12 @@ def cmd_check(args) -> int:
                 print(f"error [{e['code']}] {e['where']}: {e['message']}")
             for w in r["warnings"]:
                 print(f"warning [{w['code']}] {w['where']}: {w['message']}")
+            for a in r.get("acknowledged", []):
+                print(f"확인한 경고 [{a['code']}] {a['where']}: {a['reason']}")
             if d["kind"] in EXTRA_PRINTERS:
                 EXTRA_PRINTERS[d["kind"]](r)
             if args.table and d["kind"] in TABLE_PRINTERS:
-                print(TABLE_PRINTERS[d["kind"]](d["data"], r))
+                print(TABLE_PRINTERS[d["kind"]](d["data"], r, ids))
             if d["path"] in gated:
                 print("gate: 출처가 가정이거나 비어 있는 항목: " + ", ".join(gated[d["path"]]))
             if d["kind"] in COUNT_PRINTERS:
@@ -115,16 +127,71 @@ def cmd_check(args) -> int:
             else:
                 _print_data_counts(d)
         print(f"전체: 파일 {len(entries)}개 · 오류 {errors} · 경고 {warnings}"
+              + (f" · 확인한 경고 {acknowledged}" if acknowledged else "")
+              + (f" · 미확인 {unchecked}" if unchecked else "")
               + (f" · 읽기 실패 {len(unreadable)}" if unreadable else "") + f" → {status.upper()}")
+        if unchecked and not unreadable:
+            print("미확인 항목이 있어 통과로 보고하지 않습니다. 함께 검사할 데이터를 넘기거나 읽기 오류를 고치세요.")
     if unreadable:
         return 2
     return 1 if failed else 0
 
 
 # ---------- simulate ----------
-def cmd_simulate(args) -> int:
+def _write_curve_csv(path: str, rows: list[dict], with_policy: bool) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    fields = (["policy"] if with_policy else []) + ["run", "median_depth", "median_bank", "median_meta_power"]
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=fields)
+        w.writeheader()
+        w.writerows(rows)
+
+
+def _compare_policies(args) -> int:
+    """같은 설정 파일로 구매 정책만 바꿔 돌려 나란히 보여 준다. 파일을 복사하거나 고치지 않는다."""
+    results = {}
     try:
-        cfg, result = meta_sim.run_config(args.config)
+        for policy in meta_sim.POLICIES:
+            cfg, results[policy] = meta_sim.run_config(args.config, policy)
+    except meta_sim.ConfigError as exc:
+        print(f"설정 오류: {exc}", file=sys.stderr)
+        return 2
+    payload = {"compare_policies": list(meta_sim.POLICIES), "results": results}
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    if args.csv:
+        _write_curve_csv(args.csv, [{"policy": p, **row} for p, r in results.items() for row in r["curve"]], True)
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+    width = max(len(p) for p in results)
+    print(f"구매 정책 비교 · 시행 {cfg['trials']} · 최대 런 {cfg['max_runs']} · seed {cfg['seed']} (설정 파일은 그대로, 정책만 바꿈)")
+    first = results[meta_sim.POLICIES[0]]
+    sections = [(f"마일스톤 {mid}", lambda r, mid=mid: r["milestones"][mid]) for mid in first["milestones"]]
+    sections += [(f"강화 {uid}", lambda r, uid=uid: r["upgrades"][uid]) for uid in first["upgrades"]]
+    if first["all_upgrades_bought"]:
+        sections.append(("전체 강화 구매", lambda r: r["all_upgrades_bought"]))
+    for title, pick in sections:
+        print(title)
+        for policy, r in results.items():
+            print(f"  {policy:<{width}}  {meta_sim.fmt_dist(pick(r))}")
+    print("가장 긴 정체(연속 런)")
+    for policy, r in results.items():
+        s = r["longest_stall_runs"]
+        print(f"  {policy:<{width}}  중앙 {s['median']} / p90 {s['p90']} / 최대 {s['max']}")
+    print("정책에 따라 결론이 다르면 그 자체를 발견으로 보고합니다. 한쪽만 골라 보고하지 않습니다.")
+    print("주의: 추상 모델 결과입니다. 실제 난이도·재미 판정이 아닙니다.")
+    if args.out:
+        print(f"문서 인용: [계산: {args.out}]")
+    return 0
+
+
+def cmd_simulate(args) -> int:
+    if args.compare_policies:
+        return _compare_policies(args)
+    try:
+        cfg, result = meta_sim.run_config(args.config, args.policy)
     except meta_sim.ConfigError as exc:
         print(f"설정 오류: {exc}", file=sys.stderr)
         return 2
@@ -132,15 +199,12 @@ def cmd_simulate(args) -> int:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     if args.csv:
-        Path(args.csv).parent.mkdir(parents=True, exist_ok=True)
-        with open(args.csv, "w", encoding="utf-8", newline="") as fh:
-            w = csv.DictWriter(fh, fieldnames=["run", "median_depth", "median_bank", "median_meta_power"])
-            w.writeheader()
-            w.writerows(result["curve"])
+        _write_curve_csv(args.csv, result["curve"], False)
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
-    print(f"시행 {cfg['trials']} · 최대 런 {cfg['max_runs']} · 구매 정책 {cfg['purchase_policy']} · seed {cfg['seed']}")
+    override = " (--policy로 바꿈)" if args.policy else ""
+    print(f"시행 {cfg['trials']} · 최대 런 {cfg['max_runs']} · 구매 정책 {cfg['purchase_policy']}{override} · seed {cfg['seed']}")
     for mid, d in result["milestones"].items():
         print(f"마일스톤 {mid}: {meta_sim.fmt_dist(d)}")
     for uid, d in result["upgrades"].items():
@@ -161,6 +225,12 @@ def cmd_provenance(args) -> int:
         reports = provenance.check_paths_cli(args.paths, args.check_paths)
     except FileNotFoundError as exc:
         print(f"경로를 찾을 수 없습니다: {exc}", file=sys.stderr)
+        return 2
+    if not reports:
+        if args.json:
+            print(json.dumps({"status": "no_files", "paths": args.paths}, ensure_ascii=False, indent=2))
+        print("검사할 md 파일을 찾지 못했습니다: " + ", ".join(args.paths)
+              + ". 아무것도 검사하지 않았으므로 통과가 아닙니다. 경로를 확인하세요.", file=sys.stderr)
         return 2
     summary = provenance.summarize(reports)
     gate_failed = args.fail_on_assumed and summary["counts"]["assumed"] > 0
@@ -183,7 +253,8 @@ def cmd_provenance(args) -> int:
                     if t.kind == "assumed":
                         print(f"{r.path}:{t.line}: gate: [가정]이 남아 있습니다.")
         n = summary["counts"]
-        print(f"파일 {summary['files']}개 · 가정 {n['assumed']} · 계산 {n['computed']} · 측정 {n['measured']} · 오류 {summary['errors']} → {status.upper()}")
+        print(f"파일 {summary['files']}개 · 가정 {n['assumed']} · 계산 {n['computed']} · 측정 {n['measured']} · 오류 {summary['errors']}"
+              + (f" · 경고 {summary['warnings']}" if summary["warnings"] else "") + f" → {status.upper()}")
     return 0 if status == "pass" else 1
 
 
@@ -203,6 +274,7 @@ def build_parser() -> argparse.ArgumentParser:
     k.add_argument("--strict", action="store_true", help="경고도 실패로 처리합니다.")
     k.add_argument("--fail-on-assumed", action="store_true", help="삭제되지 않은 항목 중 출처가 가정이거나 비어 있는 것이 있으면 실패합니다 (확정 판정 전 게이트).")
     k.add_argument("--table", action="store_true", help="컨셉 비교표(마크다운)를 출력합니다. 파일로 저장하지 않습니다.")
+    k.add_argument("--ids", help="--table에 보일 컨셉 id만 쉼표로 고릅니다 (예: a,b,c). 적은 순서대로 보입니다.")
     k.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
     k.add_argument("--out", help="JSON 보고서를 이 경로에 저장합니다. 문서에서 [계산: 이 경로]로 인용합니다.")
     k.set_defaults(func=cmd_check)
@@ -212,6 +284,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--out", help="결과 JSON 저장 경로. 문서에서 [계산: 이 경로]로 인용합니다.")
     s.add_argument("--csv", help="런별 중앙값 곡선을 CSV로 저장합니다.")
     s.add_argument("--json", action="store_true", help="결과 JSON을 표준 출력으로 냅니다.")
+    pol = s.add_mutually_exclusive_group()
+    pol.add_argument("--policy", choices=meta_sim.POLICIES, help="설정 파일을 고치지 않고 구매 정책만 바꿔 실행합니다.")
+    pol.add_argument("--compare-policies", action="store_true", help="모든 구매 정책으로 돌려 나란히 보여 줍니다. --out에는 정책별 결과를 함께 저장합니다.")
     s.set_defaults(func=cmd_simulate)
 
     p = sub.add_parser("provenance", help="기획 문서(md)의 수치 출처 태그를 검사합니다.")

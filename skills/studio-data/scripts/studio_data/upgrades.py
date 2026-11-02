@@ -65,9 +65,13 @@ def validate(data: dict) -> dict:
         raw = []
     ups = check_schema(raw, errors)
     by_id = {u["id"]: u for u in ups}
+    invalid = {u["id"] for u in raw if isinstance(u, dict) and isinstance(u.get("id"), str)} - set(by_id)
     for u in ups:
         for r in requires(u):
-            if r not in by_id:
+            if r in invalid:
+                warnings.append({"code": "requirement_unchecked", "where": u["id"],
+                                 "message": f"선행 조건 '{r}'에 형식 오류가 있어 확인하지 못했습니다. '{r}'의 오류를 먼저 고치세요."})
+            elif r not in by_id:
                 errors.append({"code": "unknown_requirement", "where": u["id"], "message": f"선행 조건 '{r}'가 없습니다."})
     cycle = c.find_cycle({u["id"]: list(requires(u)) for u in ups})
     if cycle:
