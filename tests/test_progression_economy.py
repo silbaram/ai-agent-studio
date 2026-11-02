@@ -627,11 +627,8 @@ class Viewer(unittest.TestCase):
         for route in ("/items.json", "/../../etc/passwd", "/assets/data-viewer.html", "/api/items"):
             self.assertEqual(self.get(route)[0], 404, route)
 
-    def test_cli_requires_existing_data(self):
+    def test_cli_requires_existing_path(self):
         self.assertEqual(studio_cli("view", self.dir / "nope", "--no-browser")[0], 2)
-        empty = Path(self.tmp.name) / "empty"
-        empty.mkdir()
-        self.assertEqual(studio_cli("view", empty, "--no-browser")[0], 2)
 
 
 if __name__ == "__main__":

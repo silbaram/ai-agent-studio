@@ -624,6 +624,7 @@ function render() {
     for (const id of ["sections", "extras", "summary"]) document.getElementById(id).replaceChildren();
     document.getElementById("controls").hidden = true;
     document.getElementById("issues-panel").hidden = true;
+    if (!state.snap.datasets.length && state.mode === "server") document.getElementById("sections").replaceChildren(renderEmpty(state.snap));
     return;
   }
   state.active = ds.path;
@@ -633,6 +634,19 @@ function render() {
   document.getElementById("footer").textContent = (state.mode === "server"
     ? "읽기 전용 뷰어입니다. 수정은 원본 파일에서 합니다. 점수·위협도 = Σ(스탯 × 가중치)이며 같은 묶음 안에서만 비교합니다. 고유 효과는 점수로 비교할 수 없습니다."
     : "파일 모드: 원본에 적힌 값만 보여 줍니다. 검사·계산 결과를 보려면 서버로 실행하세요: " + SERVER_HINT) + ` · 원본: ${ds.path}`;
+}
+
+function renderEmpty(snap) {
+  const files = [["design/concepts.json", "컨셉 탐색 기록"], ["data/items.json", "아이템"], ["data/upgrades.json", "영구 강화"], ["data/enemies.json", "적"]];
+  return el("section", { class: "panel", id: "empty" },
+    el("div", { class: "ph" }, el("h2", {}, "아직 데이터가 없습니다")),
+    el("div", { class: "doc" },
+      el("p", { text: "아래 위치에 데이터 파일이 생기면 이 화면에 자동으로 나타납니다. 새로고침하지 않아도 됩니다." }),
+      el("h3", { text: "지켜보는 위치" }),
+      el("ul", {}, (snap.watched || []).map((w) => el("li", { class: "mono", text: w }))),
+      el("h3", { text: "예를 들면" }),
+      el("ul", {}, files.map(([f, d]) => el("li", {}, el("span", { class: "mono", text: f }), " — " + d))),
+      el("p", { class: "muted", text: "컨셉 탐색 스킬을 쓰면 design/concepts.json이 만들어집니다." })));
 }
 
 function applySnapshot(snap) {

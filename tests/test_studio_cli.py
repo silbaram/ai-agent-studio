@@ -213,6 +213,69 @@ class ReviewRegressions(unittest.TestCase):
         self.assertEqual(sorted(calls), ["concepts.json", "enemies.json", "items.json", "meta.json", "upgrades.json"])
 
 
+class ViewWithoutData(unittest.TestCase):
+    """데이터가 아직 없어도 뷰어가 열리고, 나중에 생긴 파일을 자동으로 보여 준다."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name) / "game"
+        self.root.mkdir()
+        self.served = []
+        self.original_serve = viewer.serve
+
+        def fake_serve(server, open_browser=True):  # 실제로 기다리지 않고 바로 닫는다
+            self.served.append(open_browser)
+            server.server_close()
+
+        viewer.serve = fake_serve
+
+    def tearDown(self):
+        viewer.serve = self.original_serve
+        self.tmp.cleanup()
+
+    def test_empty_project_opens_with_guidance(self):
+        code, out = run_cli("view", self.root, "--port", 0, "--no-browser")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.served, [False])
+        self.assertIn("아직 데이터 파일이 없습니다", out)
+        self.assertIn(str(self.root.resolve() / "design"), out)
+        self.assertIn(str(self.root.resolve() / "data"), out)
+
+    def test_project_with_data_lists_files(self):
+        shutil.copytree(SAMPLE / "design", self.root / "design")
+        code, out = run_cli("view", self.root, "--port", 0, "--no-browser")
+        self.assertEqual(code, 0)
+        self.assertIn("concepts.json", out)
+        self.assertNotIn("아직 데이터 파일이 없습니다", out)
+
+    def test_missing_path_is_still_an_error(self):
+        self.assertEqual(run_cli("view", self.root / "nope", "--no-browser")[0], 2)
+        self.assertEqual(self.served, [])
+
+    def test_files_created_after_start_appear(self):
+        server = viewer.make_server([self.root], port=0)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        url = "http://127.0.0.1:%d/api/data" % server.server_address[1]
+
+        def get():
+            with urllib.request.urlopen(url, timeout=5) as res:
+                return json.loads(res.read().decode("utf-8"))
+
+        try:
+            first = get()
+            self.assertEqual(first["datasets"], [])
+            self.assertIn(str(self.root.resolve() / "design"), first["watched"])
+            (self.root / "design").mkdir()
+            shutil.copy(SAMPLE / "design/concepts.json", self.root / "design/concepts.json")
+            second = get()
+            self.assertEqual([d["kind"] for d in second["datasets"]], ["concepts"])
+            self.assertNotEqual(first["version"], second["version"])
+        finally:
+            server.shutdown()
+            server.server_close()
+
+
 class ViewerWithConcepts(unittest.TestCase):
     def test_project_snapshot_includes_concepts(self):
         server = viewer.make_server([SAMPLE], port=0)

@@ -18,7 +18,7 @@ description: "Shared tooling for the game-design skills: one entry script (studi
 | `python skills/studio-data/scripts/studio.py simulate data/meta.json` | 메타 성장을 추상 모델로 시뮬레이션한다 |
 | `python skills/studio-data/scripts/studio.py provenance design/` | 기획 문서(md)의 수치 출처 태그를 검사한다 |
 
-옵션은 `studio.py <명령> --help`로 본다. 종료 코드는 0 통과, 1 오류(또는 `--strict` 경고, `--fail-on-assumed` 가정), 2 사용법 오류(경로 없음, 읽을 수 없는 파일, 데이터 없음, 설정 오류)다.
+옵션은 `studio.py <명령> --help`로 본다. 종료 코드는 0 통과, 1 오류(또는 `--strict` 경고, `--fail-on-assumed` 가정), 2 사용법 오류(경로 없음, 읽을 수 없는 파일, `check`할 데이터 없음, 설정 오류)다.
 
 ## 프로젝트 배치
 
@@ -39,7 +39,7 @@ description: "Shared tooling for the game-design skills: one entry script (studi
 
 ## 뷰어
 
-- **서버 모드(기본)**: `studio.py view <폴더>`. 화면이 1.5초마다 원본을 다시 읽고, 내용이 바뀌었을 때만 다시 검사한다. 한 파일의 형식 때문에 검사기가 처리하지 못해도 그 파일만 오류로 표시되고 나머지는 계속 보인다. 탭은 컨셉, 아이템, 영구 강화, 적. 컨셉 탭은 제약, 선택한 컨셉의 브리프, 후보 비교표를 보여 준다. 문서를 생성하지 않으므로 동기화할 것이 없다. 기본으로 127.0.0.1에서만 열린다. 터미널을 닫으면 뷰어도 꺼진다.
+- **서버 모드(기본)**: `studio.py view <폴더>`. 화면이 1.5초마다 원본을 다시 읽고, 내용이 바뀌었을 때만 다시 검사한다. 한 파일의 형식 때문에 검사기가 처리하지 못해도 그 파일만 오류로 표시되고 나머지는 계속 보인다. 탭은 컨셉, 아이템, 영구 강화, 적. 컨셉 탭은 제약, 선택한 컨셉의 브리프, 후보 비교표를 보여 준다. 문서를 생성하지 않으므로 동기화할 것이 없다. 기본으로 127.0.0.1에서만 열린다. 터미널을 닫으면 뷰어도 꺼진다. 데이터 파일이 아직 없어도 열리며, 지켜보는 위치를 안내하고 파일이 생기면 자동으로 보여 준다.
 - **파일 모드(보조)**: `assets/viewer.html`을 직접 열고 '불러오기'로 JSON을 고른다. 원본에 적힌 값만 보여 주며 검사·점수·확률 계산은 하지 않는다. 검사 규칙은 파이썬에만 있고 JavaScript로 복제하지 않는다.
 
 ## 코드 구조
