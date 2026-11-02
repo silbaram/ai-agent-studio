@@ -144,10 +144,18 @@ def _has_tag(text: str) -> bool:
 
 
 def _check_body_numbers(text: str, line: int, report: FileReport) -> None:
-    """표 밖 문장에서 태그 없는 '숫자 + 단위'를 경고한다. 제목 줄과 태그가 이미 있는 줄은 보지 않는다."""
-    if text.lstrip().startswith("#") or _has_tag(text):
+    """표 밖 문장에서 태그 없는 '숫자 + 단위'를 경고한다. 수치마다 다음 수치 전까지 뒤따르는 태그가 있어야 한다.
+    한 줄의 태그 하나가 같은 줄의 다른 수치를 통과시키지 않는다. 제목 줄과 태그 안의 숫자(출처 설명)는 보지 않는다."""
+    if text.lstrip().startswith("#"):
         return
-    found = [m.group(0).replace(" ", "") for m in NUMBER_UNIT.finditer(LINK_TARGET.sub("]", text))]
+    text = LINK_TARGET.sub("]", text)
+    tag_spans = [m.span() for m in LOOSE_TAG.finditer(text)] + [m.span() for m in STRICT_TAG.finditer(text)]
+    nums = [m for m in NUMBER_UNIT.finditer(text) if not any(s <= m.start() < e for s, e in tag_spans)]
+    found = []
+    for i, m in enumerate(nums):
+        until = nums[i + 1].start() if i + 1 < len(nums) else len(text)
+        if not _has_tag(text[m.end():until]):
+            found.append(m.group(0).replace(" ", ""))
     if found:
         shown = ", ".join(dict.fromkeys(found[:5]))
         report.findings.append(Finding("warning", line, f"태그 없는 수치: {shown}. 조정할 수 있는 값이면 [가정] / [계산: 출처] / [측정: 출처]를 붙이세요."))
