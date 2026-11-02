@@ -1,0 +1,4 @@
+interface:
+  display_name: "수치 출처 태그"
+  short_description: "기획 수치를 가정·계산·측정으로 표시하고 확정 판정 전에 스크립트로 검사"
+  default_prompt: "Use $numeric-provenance to tag every tunable number in this design document and run the provenance check before any balance verdict."

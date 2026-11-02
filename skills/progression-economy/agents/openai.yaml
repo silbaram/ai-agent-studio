@@ -1,0 +1,4 @@
+interface:
+  display_name: "아이템·성장 경제"
+  short_description: "아이템 티어·열위·천장 기대값 검사와 로그라이크 메타 성장 시뮬레이션"
+  default_prompt: "Use $progression-economy to validate the item data and simulate meta-progression, then report results with provenance tags and the assumptions they depend on."

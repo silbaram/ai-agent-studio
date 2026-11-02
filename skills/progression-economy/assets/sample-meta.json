@@ -1,0 +1,47 @@
+{
+  "seed": 7,
+  "trials": 300,
+  "max_runs": 60,
+  "rooms": 30,
+  "difficulty": {
+    "growth": "linear",
+    "base": 10,
+    "rate": 1.2
+  },
+  "player": {
+    "base_power": 12,
+    "power_per_room": 0.8,
+    "skill": 1.5,
+    "skill_spread": 0.8
+  },
+  "survival": {
+    "slope": 0.35,
+    "floor": 0.0,
+    "ceiling": 0.995
+  },
+  "currency": {
+    "per_room": 2,
+    "bonus_rooms": {
+      "10": 15,
+      "20": 30,
+      "30": 60
+    },
+    "keep_on_death": 1.0
+  },
+  "purchase_policy": "listed_order",
+  "upgrades_file": "sample-upgrades.json",
+  "milestones": [
+    {
+      "id": "boss_1",
+      "clear_room": 10
+    },
+    {
+      "id": "boss_2",
+      "clear_room": 20
+    },
+    {
+      "id": "first_clear",
+      "clear_room": 30
+    }
+  ]
+}
