@@ -7,7 +7,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from _studio import ROOT, provenance as cp, run_cli as studio_cli
+from _studio import ROOT, concepts as cc, provenance as cp, run_cli as studio_cli
 
 
 def errors(report):
@@ -91,6 +91,41 @@ class ProvenanceTables(unittest.TestCase):
     def test_table_ends_at_non_table_line(self):
         text = "| 항목 | 출처 |\n|---|---|\n| a | [가정] |\n\n| 다른 | 표 |\n|---|---|\n| x | y |\n"
         self.assertEqual(errors(cp.check_text(text)), [])
+
+
+class BodyNumbers(unittest.TestCase):
+    """본문 수치는 줄이 아니라 수치마다 태그를 본다. 한 줄의 태그 하나가 다른 수치를 통과시키지 않는다."""
+
+    def warned(self, text):
+        return [f.message for f in cp.check_text(text).findings if f.level == "warning"]
+
+    def test_one_tag_does_not_pass_other_numbers_on_the_line(self):
+        w = self.warned("체력 100hp [가정], 공격 쿨타임 3초, 속도 5배.\n")
+        self.assertEqual(len(w), 1)
+        self.assertIn("3초", w[0])
+        self.assertIn("5배", w[0])
+        self.assertNotIn("100hp", w[0])
+
+    def test_tag_must_follow_the_number_before_the_next_number(self):
+        self.assertEqual(len(self.warned("[가정] 부화는 6초, 숙성은 8초다.\n")), 1)
+        w = self.warned("설정마다 5분 [가정] 플레이, 본인 3판 + 지인 2명 [가정: 1인 개발].\n")
+        self.assertEqual(len(w), 1)
+        self.assertIn("3판", w[0])
+        self.assertNotIn("2명", w[0])
+
+    def test_every_number_tagged_passes(self):
+        self.assertEqual(self.warned("부화는 6초 [가정], 숙성은 8초 [가정: 웨이브 간격]이다.\n"), [])
+
+    def test_numbers_inside_a_tag_are_part_of_the_source(self):
+        self.assertEqual(self.warned("클리어 7분 [측정: playtest-2026-11-03 3명 평균]\n"), [])
+
+    def test_brief_criterion_with_one_untagged_threshold_is_warned(self):
+        sample = json.loads((ROOT / "skills/studio-data/assets/sample-project/design/concepts.json").read_text(encoding="utf-8"))
+        c = next(x for x in sample["concepts"] if x["status"] == "approved")
+        c["brief"]["hypotheses"] = [{"claim": "c", "failure_signal": "80% [가정] 이상이거나 사망의 50% 이상", "test": "t"}]
+        r = cc.validate({"concepts": [c]})
+        self.assertEqual([w["code"] for w in r["warnings"]], ["untagged_number"])
+        self.assertIn("50%", r["warnings"][0]["message"])
 
 
 class CommandLine(unittest.TestCase):

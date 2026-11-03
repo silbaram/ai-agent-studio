@@ -1,25 +1,29 @@
-"""studio.py의 하위 명령: view / check / simulate / provenance.
+"""studio.py의 하위 명령: view / check / simulate / provenance / setup / hook.
 
 종료 코드
   0  통과. check는 미확인 참조가 있으면 최종 줄이 INCOMPLETE다(종료 코드는 0, --strict·--fail-on-assumed면 1).
   1  오류, 또는 --strict 경고, 또는 --fail-on-assumed 가정 항목
   2  사용법 오류(경로 없음, 읽을 수 없는 파일, check할 데이터 없음, provenance할 md 없음, 설정 오류, 서버를 열 수 없음)
      view는 데이터가 아직 없어도 열리고, 파일이 생기면 화면에 자동으로 나타난다.
+hook은 Claude Code 훅 규약을 따른다: 0 통과, 2 차단(PreToolUse) 또는 에이전트에게 오류 보이기(PostToolUse).
 """
 from __future__ import annotations
 
 import argparse
 import csv
 import json
+import os
 import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from . import concepts, datasets, enemies, items, meta_sim, provenance, upgrades, viewer
+from . import claude, combat, concepts, datasets, enemies, items, meta_sim, playtests, provenance, upgrades, viewer
 
-EXTRA_PRINTERS = {"items": items.print_extra, "upgrades": upgrades.print_extra, "enemies": enemies.print_extra}
-TABLE_PRINTERS = {"concepts": concepts.table}
-COUNT_PRINTERS = {"concepts": concepts.print_counts}
+EXTRA_PRINTERS = {"items": items.print_extra, "upgrades": upgrades.print_extra, "enemies": enemies.print_extra,
+                  "combat": combat.print_extra, "playtests": playtests.print_extra}
+TABLE_PRINTERS = {"concepts": concepts.table, "combat": combat.table}
+COUNT_PRINTERS = {"concepts": concepts.print_counts, "combat": combat.print_counts, "playtests": playtests.print_counts}
+GATE_LABELS = {"playtests": "판정이 확정되지 않은 가설(버팀·틀림 확정이 아님): "}
 
 
 def _missing(paths: list[str]) -> list[str]:
@@ -76,7 +80,7 @@ def cmd_check(args) -> int:
         return 2
     entries = datasets.collect([Path(p) for p in args.paths])
     if not entries:
-        print("컨셉·아이템·영구 강화·적 데이터 파일을 찾지 못했습니다.", file=sys.stderr)
+        print("컨셉·아이템·영구 강화·적·전투 계산·플레이 기록 데이터 파일을 찾지 못했습니다.", file=sys.stderr)
         return 2
     unreadable = [d for d in entries if not d["ok"]]
     reports = [d["report"] for d in entries if d["ok"]]
@@ -121,7 +125,7 @@ def cmd_check(args) -> int:
             if args.table and d["kind"] in TABLE_PRINTERS:
                 print(TABLE_PRINTERS[d["kind"]](d["data"], r, ids))
             if d["path"] in gated:
-                print("gate: 출처가 가정이거나 비어 있는 항목: " + ", ".join(gated[d["path"]]))
+                print("gate: " + GATE_LABELS.get(d["kind"], "출처가 가정이거나 비어 있는 항목: ") + ", ".join(gated[d["path"]]))
             if d["kind"] in COUNT_PRINTERS:
                 COUNT_PRINTERS[d["kind"]](r)
             else:
@@ -258,6 +262,36 @@ def cmd_provenance(args) -> int:
     return 0 if status == "pass" else 1
 
 
+# ---------- setup / hook (Claude Code) ----------
+def cmd_setup(args) -> int:
+    project = Path(args.project)
+    if not project.is_dir():
+        print(f"게임 프로젝트 폴더를 찾을 수 없습니다: {project}", file=sys.stderr)
+        return 2
+    code, lines = claude.setup(project.resolve(), args.python)
+    for line in lines:
+        print(line, file=sys.stderr if code else sys.stdout)
+    return code
+
+
+def cmd_hook(args) -> int:
+    payload = sys.stdin.buffer.read().decode("utf-8", errors="replace") if hasattr(sys.stdin, "buffer") else sys.stdin.read()
+    if args.event == "judge-guard":
+        code, message = claude.judge_guard(payload)
+        out, err = "", message
+    else:
+        code, out, err = claude.post_edit(payload)
+    if out:
+        sys.stdout.write(out)
+    if err:
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+        sys.stderr.write(err if err.endswith("\n") else err + "\n")
+    return code
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="studio.py", description="게임 설계 데이터 공용 도구 (컨셉·아이템·영구 강화·적·수치 출처).")
     sub = ap.add_subparsers(dest="command", required=True, metavar="명령")
@@ -269,11 +303,11 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--no-browser", action="store_true", help="브라우저를 자동으로 열지 않습니다.")
     v.set_defaults(func=cmd_view)
 
-    k = sub.add_parser("check", help="컨셉·아이템·영구 강화·적 데이터를 검사합니다.")
+    k = sub.add_parser("check", help="컨셉·아이템·영구 강화·적·전투 계산·플레이 기록 데이터를 검사합니다.")
     k.add_argument("paths", nargs="+", help="프로젝트·데이터 폴더 또는 파일")
     k.add_argument("--strict", action="store_true", help="경고도 실패로 처리합니다.")
-    k.add_argument("--fail-on-assumed", action="store_true", help="삭제되지 않은 항목 중 출처가 가정이거나 비어 있는 것이 있으면 실패합니다 (확정 판정 전 게이트).")
-    k.add_argument("--table", action="store_true", help="컨셉 비교표(마크다운)를 출력합니다. 파일로 저장하지 않습니다.")
+    k.add_argument("--fail-on-assumed", action="store_true", help="삭제되지 않은 항목 중 출처가 가정이거나 비어 있는 것, 판정이 확정되지 않은 가설이 있으면 실패합니다 (확정 판정 전 게이트).")
+    k.add_argument("--table", action="store_true", help="컨셉 비교표와 전투 계산표(마크다운)를 출력합니다. 파일로 저장하지 않습니다.")
     k.add_argument("--ids", help="--table에 보일 컨셉 id만 쉼표로 고릅니다 (예: a,b,c). 적은 순서대로 보입니다.")
     k.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
     k.add_argument("--out", help="JSON 보고서를 이 경로에 저장합니다. 문서에서 [계산: 이 경로]로 인용합니다.")
@@ -295,6 +329,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--check-paths", action="store_true", help="[계산]/[측정] 출처가 경로처럼 보이면 실제 파일 존재를 확인합니다.")
     p.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
     p.set_defaults(func=cmd_provenance)
+
+    u = sub.add_parser("setup", help="게임 프로젝트에 판정 에이전트와 훅을 설치합니다 (Claude Code).")
+    u.add_argument("host", choices=("claude",), help="연결할 호스트. 지금은 claude(Claude Code)만 지원합니다.")
+    u.add_argument("project", nargs="?", default=".", help="게임 프로젝트 폴더 (기본: 현재 폴더)")
+    u.add_argument("--python", default="py" if os.name == "nt" else "python3", help="훅이 쓸 파이썬 실행 이름 (기본: Windows py, 그 밖 python3)")
+    u.set_defaults(func=cmd_setup)
+
+    h = sub.add_parser("hook", help="Claude Code 훅 처리기. setup이 settings.json에 등록하며 직접 실행하지 않습니다.")
+    h.add_argument("event", choices=("post-edit", "judge-guard"))
+    h.set_defaults(func=cmd_hook)
     return ap
 
 

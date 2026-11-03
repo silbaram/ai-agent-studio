@@ -1,0 +1,4 @@
+interface:
+  display_name: "플레이 기록·가설 판정"
+  short_description: "프로토타입 플레이를 데이터로 기록하고, 기록만 보고 가설을 버팀·틀림·모름으로 판정하고, 측정값을 출처와 함께 올림"
+  default_prompt: "Use $playtest-verdict to record this playtest session in data/playtests.json, propose a verdict for each hypothesis from the records only, and list numbers that can move from assumed to measured."

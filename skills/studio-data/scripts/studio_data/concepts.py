@@ -6,10 +6,9 @@
 """
 from __future__ import annotations
 
-import difflib
-
 from . import provenance
-from .common import STATUSES, check_identity, is_active
+from .common import ID_PATTERN, STATUSES, check_identity, is_active
+from .common import did_you_mean as _did_you_mean
 
 STATUS_LABEL = {"proposed": "후보", "approved": "선택", "cut": "제외", "unspecified": "미지정"}
 REQUIRED_TEXT = ("name", "pitch", "core_verb", "decision", "state_read", "skill_expression", "risk")
@@ -34,11 +33,6 @@ def _text(v) -> bool:
 
 def _status(c: dict) -> str:
     return c.get("status") or "unspecified"
-
-
-def _did_you_mean(name: str, known) -> str:
-    close = difflib.get_close_matches(name, list(known), n=1, cutoff=0.6)
-    return f" '{close[0]}'의 오타인가요?" if close else ""
 
 
 def read_constraints(data: dict, errors: list) -> dict:
@@ -160,9 +154,17 @@ def check_brief(c: dict, where: str, errors: list) -> None:
          "brief.loop에 moment(30초), run(한 판), meta(판 사이 성장)가 필요합니다.")
     hyps = b.get("hypotheses")
     need(isinstance(hyps, list) and len(hyps) >= 1, "brief.hypotheses가 1개 이상 필요합니다.")
+    seen_ids: set = set()
     for n, h in enumerate(hyps if isinstance(hyps, list) else []):
         need(isinstance(h, dict) and all(_text(h.get(k)) for k in ("claim", "failure_signal", "test")),
              f"brief.hypotheses[{n}]에 claim, failure_signal(틀렸다는 신호), test가 필요합니다.")
+        hid = h.get("id") if isinstance(h, dict) else None
+        if hid is None:
+            continue
+        if not (isinstance(hid, str) and ID_PATTERN.match(hid)) or hid in seen_ids:
+            errors.append({"code": "schema", "where": where,
+                           "message": f"brief.hypotheses[{n}].id는 소문자·숫자·밑줄로 쓰고 컨셉 안에서 겹치지 않아야 합니다: {hid!r}"})
+        seen_ids.add(hid)
     proto = b.get("prototype")
     need(isinstance(proto, dict) and _text(proto.get("scope")) and _text(proto.get("success_criteria"))
          and isinstance(proto.get("duration_days"), (int, float)) and not isinstance(proto.get("duration_days"), bool)
@@ -292,6 +294,22 @@ def validate(data: dict) -> dict:
         "errors": errors,
         "warnings": warnings,
     }
+
+
+def hypothesis_index(data: dict) -> dict:
+    """플레이 기록 검사용: {컨셉 id: {approved, hypotheses: [가설 id 또는 None, ...]}}. 형식이 틀린 항목은 건너뛴다.
+    concepts 배열 자체가 없으면 None(읽지 못함)을 돌려준다. 빈 결과로 돌려주면 모든 참조가 '없는 컨셉'으로 연쇄 보고된다."""
+    if not isinstance(data.get("concepts"), list):
+        return None
+    out: dict = {}
+    for c in data["concepts"]:
+        if not (isinstance(c, dict) and isinstance(c.get("id"), str)) or c["id"] in out:
+            continue
+        hyps = (c.get("brief") or {}).get("hypotheses") if isinstance(c.get("brief"), dict) else None
+        ids = [h.get("id") if isinstance(h, dict) and isinstance(h.get("id"), str) else None
+               for h in (hyps if isinstance(hyps, list) else [])]
+        out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids}
+    return out
 
 
 def _cell(v) -> str:

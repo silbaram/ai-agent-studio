@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import difflib
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -117,9 +118,14 @@ def _parse_tags(text: str, line: int, report: FileReport, base_dirs: list[Path],
             report.findings.append(Finding("error", line, f"'{m.group(0)}' 태그에 출처가 없습니다. 예: [{m.group(1)}: {SOURCE_EXAMPLE[kind]}]"))
             continue
         if check_paths and kind in SOURCE_REQUIRED and PATHLIKE.search(source):
-            target = source.split("#", 1)[0].strip()
-            if not any((b / target).exists() for b in base_dirs):
+            target, _, anchor = (part.strip() for part in source.partition("#"))
+            found = next((b / target for b in base_dirs if (b / target).exists()), None)
+            if found is None:
                 report.findings.append(Finding("error", line, f"출처 경로를 찾을 수 없습니다: {target}"))
+            elif anchor:
+                missing = _missing_session(found, anchor.split()[0])
+                if missing:
+                    report.findings.append(Finding("error", line, missing))
         report.counts[kind] += 1
         report.tags.append(Tag(kind, source, line))
     for m in LOOSE_TAG.finditer(text):
@@ -129,6 +135,21 @@ def _parse_tags(text: str, line: int, report: FileReport, base_dirs: list[Path],
         guess = _tag_typo(m.group(1))
         if guess:
             report.findings.append(Finding("error", line, f"알 수 없는 태그 이름 '[{m.group(1)}:'. '{guess}'의 오타인가요?"))
+
+
+def _missing_session(path: Path, sid: str) -> str | None:
+    """출처가 플레이 기록 파일#세션 id이면 그 세션이 기록에 있는지 본다. 플레이 기록이 아닌 파일은 보지 않는다."""
+    if path.suffix.lower() != ".json" or not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not (isinstance(data, dict) and isinstance(data.get("playtests"), list)):
+        return None
+    if any(isinstance(s, dict) and s.get("id") == sid for s in data["playtests"]):
+        return None
+    return f"플레이 기록 {path.name}에 없는 세션입니다: {sid}. 측정값은 기록된 세션만 출처로 씁니다."
 
 
 def _tag_typo(name: str) -> str | None:
@@ -144,10 +165,18 @@ def _has_tag(text: str) -> bool:
 
 
 def _check_body_numbers(text: str, line: int, report: FileReport) -> None:
-    """표 밖 문장에서 태그 없는 '숫자 + 단위'를 경고한다. 제목 줄과 태그가 이미 있는 줄은 보지 않는다."""
-    if text.lstrip().startswith("#") or _has_tag(text):
+    """표 밖 문장에서 태그 없는 '숫자 + 단위'를 경고한다. 수치마다 다음 수치 전까지 뒤따르는 태그가 있어야 한다.
+    한 줄의 태그 하나가 같은 줄의 다른 수치를 통과시키지 않는다. 제목 줄과 태그 안의 숫자(출처 설명)는 보지 않는다."""
+    if text.lstrip().startswith("#"):
         return
-    found = [m.group(0).replace(" ", "") for m in NUMBER_UNIT.finditer(LINK_TARGET.sub("]", text))]
+    text = LINK_TARGET.sub("]", text)
+    tag_spans = [m.span() for m in LOOSE_TAG.finditer(text)] + [m.span() for m in STRICT_TAG.finditer(text)]
+    nums = [m for m in NUMBER_UNIT.finditer(text) if not any(s <= m.start() < e for s, e in tag_spans)]
+    found = []
+    for i, m in enumerate(nums):
+        until = nums[i + 1].start() if i + 1 < len(nums) else len(text)
+        if not _has_tag(text[m.end():until]):
+            found.append(m.group(0).replace(" ", ""))
     if found:
         shown = ", ".join(dict.fromkeys(found[:5]))
         report.findings.append(Finding("warning", line, f"태그 없는 수치: {shown}. 조정할 수 있는 값이면 [가정] / [계산: 출처] / [측정: 출처]를 붙이세요."))
