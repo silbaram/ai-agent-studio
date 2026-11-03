@@ -1,7 +1,8 @@
-"""게임 설계 데이터(컨셉·아이템·영구 강화·적·플레이 기록)의 읽기, 종류 판별, 공통 필드 검사. 표준 라이브러리만 사용한다."""
+"""게임 설계 데이터(컨셉·아이템·영구 강화·적·전투 계산·플레이 기록)의 읽기, 종류 판별, 공통 필드 검사. 표준 라이브러리만 사용한다."""
 from __future__ import annotations
 
 import csv
+import difflib
 import json
 import re
 from pathlib import Path
@@ -11,12 +12,14 @@ STATUSES = ("proposed", "approved", "cut")
 PROVENANCE_KINDS = {"assumed": "assumed", "computed": "computed", "measured": "measured",
                     "가정": "assumed", "계산": "computed", "측정": "measured"}
 TEXT_FIELDS = ("name", "effect", "intent")
-DATASET_KINDS = ("concepts", "items", "upgrades", "enemies", "playtests")
-KIND_LABELS = {"concepts": "컨셉", "items": "아이템", "upgrades": "영구 강화", "enemies": "적", "playtests": "플레이 기록"}
+DATASET_KINDS = ("concepts", "items", "upgrades", "enemies", "combat", "playtests")
+KIND_LABELS = {"concepts": "컨셉", "items": "아이템", "upgrades": "영구 강화", "enemies": "적", "combat": "전투 계산",
+               "playtests": "플레이 기록"}
+LIST_KEYS = {"combat": "stages"}  # 항목 배열의 키가 종류 이름과 다른 경우
 SUBFOLDERS = ("design", "data")
 STAT_PREFIX = "stat."
 
-# CSV 열 중 수로 읽을 것과 목록(;로 구분)으로 읽을 것. 컨셉과 플레이 기록은 CSV를 지원하지 않는다.
+# CSV 열 중 수로 읽을 것과 목록(;로 구분)으로 읽을 것. 컨셉·전투 계산·플레이 기록은 CSV를 지원하지 않는다.
 CSV_KINDS = ("items", "upgrades", "enemies")
 CSV_NUMERIC = {
     "items": ("tier", "price"),
@@ -24,6 +27,17 @@ CSV_NUMERIC = {
     "enemies": ("zone", "reward"),
 }
 CSV_LISTS = {"upgrades": ("requires",)}
+
+
+def add_issue(target: list, code: str, where: str, message: str, **extra) -> None:
+    """오류·경고 목록에 한 건을 넣는다. extra(예: owner)는 그대로 붙는다."""
+    target.append({"code": code, "where": where, "message": message, **extra})
+
+
+def did_you_mean(name: str, known) -> str:
+    """오타 안내 문장. 비슷한 이름이 없으면 빈 문자열."""
+    close = difflib.get_close_matches(name, list(known), n=1, cutoff=0.6)
+    return f" '{close[0]}'의 오타인가요?" if close else ""
 
 
 def is_number(v) -> bool:
@@ -178,9 +192,10 @@ def is_active(entry: dict) -> bool:
 
 def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
     """항목의 acknowledged({경고 코드: 확인한 이유})에 적힌 경고를 report["acknowledged"]로 옮긴다.
-    확인한 경고는 경고 수와 --strict에서 빠지지만 지워지지 않고 이유와 함께 남는다. 오류는 옮기지 않는다."""
+    확인한 경고는 경고 수와 --strict에서 빠지지만 지워지지 않고 이유와 함께 남는다. 오류는 옮기지 않는다.
+    경고에 owner가 있으면 그 항목의 확인으로 본다(예: 전투 계산의 '단계.적' 경고는 단계가 주인)."""
     report.setdefault("acknowledged", [])
-    entries = data.get(kind)
+    entries = data.get(LIST_KEYS.get(kind, kind))
     if not isinstance(entries, list):
         return
     acks: dict = {}
@@ -195,7 +210,7 @@ def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
         acks.setdefault(e["id"], ack)  # 검사기와 같이 첫 항목을 쓴다
     kept = []
     for w in report["warnings"]:
-        reason = acks.get(w["where"], {}).get(w["code"])
+        reason = acks.get(w.get("owner", w["where"]), {}).get(w["code"])
         if reason:
             report["acknowledged"].append({**w, "reason": reason.strip()})
         else:

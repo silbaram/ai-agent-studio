@@ -1,0 +1,4 @@
+interface:
+  display_name: "전투 계산"
+  short_description: "플레이어·아이템·강화·적을 하나의 스탯과 방어 공식으로 이어 단계·적마다 처치·버팀 타수와 시간을 계산하고 목표 이탈을 찾음"
+  default_prompt: "Use $combat-balance to choose a defense formula for this game, map its stat names to roles, compute hits and seconds to kill and to die per stage and enemy, and report results outside the target ranges."

@@ -6,10 +6,9 @@
 """
 from __future__ import annotations
 
-import difflib
-
 from . import provenance
 from .common import ID_PATTERN, STATUSES, check_identity, is_active
+from .common import did_you_mean as _did_you_mean
 
 STATUS_LABEL = {"proposed": "후보", "approved": "선택", "cut": "제외", "unspecified": "미지정"}
 REQUIRED_TEXT = ("name", "pitch", "core_verb", "decision", "state_read", "skill_expression", "risk")
@@ -34,11 +33,6 @@ def _text(v) -> bool:
 
 def _status(c: dict) -> str:
     return c.get("status") or "unspecified"
-
-
-def _did_you_mean(name: str, known) -> str:
-    close = difflib.get_close_matches(name, list(known), n=1, cutoff=0.6)
-    return f" '{close[0]}'의 오타인가요?" if close else ""
 
 
 def read_constraints(data: dict, errors: list) -> dict:

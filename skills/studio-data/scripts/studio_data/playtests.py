@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 from .common import STATUSES, check_identity, is_number
+from .common import add_issue as _err
 
 RESULTS = ("holds", "refuted", "unknown")
 RESULT_LABEL = {"holds": "버팀", "refuted": "틀림", "unknown": "모름"}
@@ -23,10 +24,6 @@ UNCHECKED_REASON = {
 
 def _text(v) -> bool:
     return isinstance(v, str) and v.strip() != ""
-
-
-def _err(errors: list, code: str, where: str, message: str) -> None:
-    errors.append({"code": code, "where": where, "message": message})
 
 
 def check_session(s: dict, errors: list, warnings: list) -> bool:

@@ -6,10 +6,11 @@ import json
 from pathlib import Path
 
 from . import common as c
-from . import concepts, enemies, items, playtests, upgrades
+from . import combat, concepts, enemies, items, playtests, upgrades
 
-VALIDATORS = {"concepts": concepts, "items": items, "upgrades": upgrades, "enemies": enemies, "playtests": playtests}
-NOT_DATA = "컨셉·아이템·영구 강화·적·플레이 기록 데이터가 아닙니다 (최상위에 concepts / items / upgrades / enemies / playtests 배열이 필요합니다)."
+VALIDATORS = {"concepts": concepts, "items": items, "upgrades": upgrades, "enemies": enemies, "combat": combat, "playtests": playtests}
+NOT_DATA = ("컨셉·아이템·영구 강화·적·전투 계산·플레이 기록 데이터가 아닙니다 "
+            "(최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat 객체가 필요합니다).")
 
 
 def read(path: Path) -> dict:
@@ -77,9 +78,25 @@ def discover(targets: list[Path]) -> list[Path]:
     return [Path(e["path"]) for e in scan(targets)]
 
 
+def _index(entries: list[dict], kind: str) -> dict | None:
+    """함께 읽은 kind 데이터의 {id: 항목}. 그 종류가 없거나, 읽지 못했거나, 배열 형식이 아닌 파일이 있으면 None(미확인).
+    빈 결과로 돌려주면 모든 참조가 '없는 id'로 연쇄 보고된다."""
+    if any(not d["ok"] and d.get("kind") == kind for d in entries):
+        return None
+    loaded = [d for d in entries if d["ok"] and d["kind"] == kind]
+    if not loaded or any(not isinstance(d["data"].get(kind), list) for d in loaded):
+        return None
+    out: dict = {}
+    for d in loaded:
+        for e in d["data"][kind]:
+            if isinstance(e, dict) and isinstance(e.get("id"), str):
+                out.setdefault(e["id"], e)  # 검사기와 같이 첫 항목을 쓴다
+    return out
+
+
 def validate_all(entries: list[dict]) -> list[dict]:
     """읽은 항목들에 검사 결과(report)를 붙인다. 적의 드랍 테이블은 함께 읽은 아이템 데이터로,
-    플레이 기록의 컨셉·가설 참조는 함께 읽은 컨셉 데이터로 확인한다.
+    플레이 기록의 컨셉·가설 참조는 함께 읽은 컨셉 데이터로, 전투 계산은 함께 읽은 아이템·영구 강화·적 데이터로 확인한다.
     검사기가 예상하지 못한 예외를 내면 그 파일만 오류로 표시하고 나머지는 계속 검사한다."""
     loaded_items = [d for d in entries if d["ok"] and d["kind"] == "items"]
     broken_items = [d for d in entries if not d["ok"] and d.get("kind") == "items"]
@@ -90,6 +107,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
             tables = d["data"].get("drop_tables") or {}
             if isinstance(tables, dict):
                 drop_tables.update(tables)
+    by_id = {k: _index(entries, k) for k in ("items", "upgrades", "enemies")}
     loaded_concepts = [d for d in entries if d["ok"] and d["kind"] == "concepts"]
     broken_concepts = [d for d in entries if not d["ok"] and d.get("kind") == "concepts"]
     hypotheses = None
@@ -107,6 +125,8 @@ def validate_all(entries: list[dict]) -> list[dict]:
         try:
             if d["kind"] == "enemies":
                 d["report"] = enemies.validate(d["data"], drop_tables, items_unreadable=bool(broken_items))
+            elif d["kind"] == "combat":
+                d["report"] = combat.validate(d["data"], **by_id)
             elif d["kind"] == "playtests":
                 d["report"] = playtests.validate(d["data"], hypotheses, concepts_unreadable=bool(broken_concepts))
             else:
