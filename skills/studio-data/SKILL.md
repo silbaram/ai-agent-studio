@@ -77,7 +77,7 @@ python3 .claude/skills/studio-data/scripts/studio.py setup claude .
 
 다시 실행하면 이 도구가 넣은 훅만 바꾼다. `settings.json`이 JSON이 아니거나, `studio-judge.md`가 이미 있는데 setup이 만든 파일이 아니면 아무것도 바꾸지 않고 종료 코드 2로 끝난다. 훅이 쓸 파이썬은 `--python`으로 바꾼다(기본: Windows `py`, 그 밖 `python3`).
 
-확인 범위: 훅 처리기는 Claude Code 문서의 입력 형식으로 테스트했다. 실제 Claude Code 세션에서의 동작, Windows에서의 훅 명령 실행은 아직 확인하지 않았다. Codex에는 같은 장치가 없다.
+확인 범위: Claude Code 2.1.316, WSL(Linux)에서 실제 세션으로 확인했다. 판정 에이전트의 `check`는 통과하고 셸 리다이렉트 쓰기는 막혔으며, 메인 에이전트의 데이터 오류 편집은 오류로 되돌아왔고 메인 에이전트는 막히지 않았다. Windows에서의 훅 명령 실행은 아직 확인하지 않았다. Codex에는 같은 장치가 없다.
 
 ## 코드 구조
 

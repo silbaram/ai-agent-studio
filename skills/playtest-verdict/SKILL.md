@@ -81,6 +81,6 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 - 검사기는 판정이 **증거를 가리키는지**만 본다. 관찰값이 틀렸다는 신호에 해당하는지는 판정 에이전트와 사용자가 본다.
 - 표본이 충분한지 숫자로 막지 않는다. 판 수·사람 수를 보여 줄 뿐이고, 가설의 `test`에 적은 계획과 비교하는 것은 판정 에이전트가 한다.
 - 시뮬레이터(`simulate`)를 플레이 기록으로 보정하는 절차는 아직 없다. 그 전까지 시뮬레이션 결과로 난이도를 판정하지 않는다.
-- 판정 에이전트와 훅은 Claude Code 전용이다. 훅 입력의 에이전트 이름(`agent_type`)으로 판정 에이전트를 구분한다.
+- 판정 에이전트와 훅은 Claude Code 전용이다. 훅 입력의 에이전트 이름(`agent_type`)으로 판정 에이전트를 구분한다(Claude Code 2.1.316, WSL에서 확인. Windows는 미확인).
 
 예시: `studio-data/assets/sample-project/data/playtests.json` (실제 플레이 기록이 아니다).
