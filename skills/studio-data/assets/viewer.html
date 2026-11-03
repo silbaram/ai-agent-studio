@@ -221,12 +221,13 @@ const LABEL = {
           recipe_loses_value: "합성 손해", value_loop: "증식 고리", unobtainable: "얻을 수 없음",
           reward_missing: "보상 없음", unknown_recipe: "없는 합성", unknown_enhance: "없는 강화", price_missing: "가격 없음",
           unaffordable: "살 수 없음", currency_piles_up: "재화 남음", rarity_empty: "희귀도 비어 있음", price_source_invalid: "가격 출처 오류",
-          unknown_stage: "없는 단계" },
+          unknown_stage: "없는 단계", unknown_choice: "없는 선택지", build_dominated: "빌드가 밀림", level_decreases: "레벨 감소",
+          build_invalid: "빌드 스탯 오류", stat_not_in_combat: "전투에 안 쓰는 스탯", nothing_to_compare: "비교할 것 없음" },
 };
-const KIND_LABEL = { concepts: "컨셉", items: "아이템", upgrades: "영구 강화", enemies: "적", combat: "전투 계산", budget: "스탯 예산",
-                     crafting: "강화·합성", economy: "재화 흐름", playtests: "플레이 기록" };
-const KIND_ORDER = ["concepts", "items", "upgrades", "enemies", "combat", "budget", "crafting", "economy", "playtests"];
-const OBJECT_KINDS = ["combat", "budget", "crafting", "economy"];  // 최상위가 배열이 아니라 객체인 종류
+const KIND_LABEL = { concepts: "컨셉", items: "아이템", upgrades: "영구 강화", enemies: "적", combat: "전투 계산", growth: "판 안 성장",
+                     budget: "스탯 예산", crafting: "강화·합성", economy: "재화 흐름", playtests: "플레이 기록" };
+const KIND_ORDER = ["concepts", "items", "upgrades", "enemies", "combat", "growth", "budget", "crafting", "economy", "playtests"];
+const OBJECT_KINDS = ["combat", "growth", "budget", "crafting", "economy"];  // 최상위가 배열이 아니라 객체인 종류
 const DEFAULT_SEARCH = ["id", "name", "effect", "intent"];
 const statusLabels = (ds) => KINDS[ds.kind].statusLabels || LABEL.status;
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
@@ -274,6 +275,12 @@ const KINDS = {
   },
   crafting: {
     listKey: "recipes", groupName: "", custom: (ds, idx) => renderCrafting(ds, idx),
+    searchFields: ["id", "name", "intent"],
+    groupOf: () => "all", groupLabel: () => "", defaultSort: { key: "id", desc: false },
+    columns: () => [], tieBreak: () => () => 0, groupMeta: () => null, extras: () => null,
+  },
+  growth: {
+    listKey: "builds", groupName: "", custom: (ds, idx) => renderGrowth(ds, idx),
     searchFields: ["id", "name", "intent"],
     groupOf: () => "all", groupLabel: () => "", defaultSort: { key: "id", desc: false },
     columns: () => [], tieBreak: () => () => 0, groupMeta: () => null, extras: () => null,
@@ -867,6 +874,47 @@ function renderCrafting(ds, idx) {
   return out;
 }
 
+function renderGrowth(ds, idx) {
+  const r = ds.report || {};
+  const small = (heads, body, empty) => el("div", { class: "tw" }, el("table", {}, el("thead", {}, el("tr", {}, ...heads.map((h) => el("th", {}, h)))),
+    el("tbody", {}, body.length ? body : [el("tr", {}, el("td", { colspan: String(heads.length), class: "muted", text: empty }))])));
+  const num = (v) => (v === null || v === undefined ? dash() : fmt(v));
+  const badges = (issues) => (issues && issues.length ? el("div", { class: "badges" }, issues.map((x) => el("span", { class: "tag " + x.level, title: x.message, text: LABEL.code[x.code] || x.code }))) : null);
+  const raw = { choices: Array.isArray(ds.data.choices) ? ds.data.choices : [], builds: Array.isArray(ds.data.builds) ? ds.data.builds : [] };
+  const names = Object.fromEntries([...raw.choices, ...raw.builds].filter((x) => x && x.id).map((x) => [x.id, x.name || x.id]));
+  const known = new Set([...raw.choices, ...raw.builds].filter((x) => x && typeof x === "object").map((x) => x.id));
+  const general = idx.all.filter((x) => !known.has(x.where)).map((x) => el("div", { class: "group-note", text: "⚠ " + x.message }));
+  const builds = Object.keys(r.builds || {}).filter((b) => matches(ds, raw.builds.find((x) => x && x.id === b) || { id: b }, idx.byEntry[b]));
+  const out = [];
+  if (general.length) out.push(el("section", { class: "panel" }, el("div", { class: "ph" }, el("h2", {}, "전체")), ...general));
+  // 빌드별로 단계마다 얻은 스탯
+  out.push(el("section", { class: "panel", id: "group-all" },
+    el("div", { class: "ph" }, el("h2", {}, "빌드별 성장"),
+      el("span", { class: "group-meta", text: r.settings ? `레벨업마다 선택지 ${r.settings.offers}개 제시 · 시행 ${r.settings.trials} · seed ${r.settings.seed}의 평균` : "계산은 서버 모드에서 보입니다." })),
+    small(["빌드", "단계", "레벨", "평균 선택 횟수", "얻은 스탯"], builds.flatMap((b) => Object.entries(r.builds[b].stages).map(([sid, st]) => {
+      const issues = idx.byEntry[b] || [];
+      return el("tr", { "data-id": b, class: issues.length ? "has-warn" : "" },
+        el("td", { class: "name" }, el("div", {}, el("span", { class: "nm", text: names[b] || b })), badges(issues)),
+        el("td", { class: "mono", text: sid }), el("td", { class: "num", text: String(st.level) }),
+        el("td", { class: "text" }, Object.entries(st.picks).map(([c, n]) => `${names[c] || c} ${fmt(n)}`).join(" · ") || dash()),
+        el("td", { class: "text" }, Object.entries(st.bonus).map(([k, v]) => `${k} +${fmt(v)}`).join(" · ") || dash()));
+    })), ds.report ? "비교한 빌드가 없습니다." : "계산은 서버 모드에서 보입니다."),
+    r.unused_choices && r.unused_choices.length ? el("div", { class: "group-note", style: "color: var(--muted)", text: "어느 빌드도 고르지 않은 선택지: " + r.unused_choices.map((c) => names[c] || c).join(", ") }) : null));
+  // 단계 × 적마다 성장 없음과 빌드별 처치·버팀 타수를 나란히
+  const key = (x) => `${x.stage}|${x.enemy}`;
+  const per = Object.fromEntries(builds.map((b) => [b, Object.fromEntries(r.builds[b].rows.map((x) => [key(x), x]))]));
+  const rows = (r.base_rows || []).map((x) => el("tr", {},
+    el("td", { class: "mono", text: x.stage }), el("td", { class: "mono", text: x.enemy }),
+    el("td", { class: "num" }, num(x.hits_to_kill)), el("td", { class: "num" }, num(x.hits_to_die)),
+    ...builds.flatMap((b) => { const y = per[b][key(x)] || {}; return [el("td", { class: "num" }, num(y.hits_to_kill)), el("td", { class: "num" }, num(y.hits_to_die))]; })));
+  out.push(el("section", { class: "panel" },
+    el("div", { class: "ph" }, el("h2", {}, "빌드 비교 (처치 타수 / 버티는 타수)"),
+      el("span", { class: "group-meta", text: "처치 타수는 적을수록, 버티는 타수는 많을수록 좋습니다. 기대값 계산이며 실제 난이도나 재미를 판정하지 않습니다." })),
+    small(["단계", "적", "성장 없음 처치", "성장 없음 버팀", ...builds.flatMap((b) => [(names[b] || b) + " 처치", (names[b] || b) + " 버팀"])], rows,
+      ds.report ? "전투 계산 행이 없습니다." : "계산은 서버 모드에서 보입니다.")));
+  return out;
+}
+
 function renderEconomy(ds, idx) {
   const r = ds.report || {};
   const unit = r.time_unit || "초";
@@ -1000,7 +1048,7 @@ function render() {
 }
 
 function renderEmpty(snap) {
-  const files = [["design/concepts.json", "컨셉 탐색 기록"], ["data/items.json", "아이템"], ["data/upgrades.json", "영구 강화"], ["data/enemies.json", "적"], ["data/combat.json", "전투 계산"], ["data/budget.json", "스탯 예산"], ["data/crafting.json", "강화·합성"], ["data/economy.json", "재화 흐름"], ["data/playtests.json", "플레이 기록과 가설 판정"]];
+  const files = [["design/concepts.json", "컨셉 탐색 기록"], ["data/items.json", "아이템"], ["data/upgrades.json", "영구 강화"], ["data/enemies.json", "적"], ["data/combat.json", "전투 계산"], ["data/budget.json", "스탯 예산"], ["data/growth.json", "판 안 성장"], ["data/crafting.json", "강화·합성"], ["data/economy.json", "재화 흐름"], ["data/playtests.json", "플레이 기록과 가설 판정"]];
   return el("section", { class: "panel", id: "empty" },
     el("div", { class: "ph" }, el("h2", {}, "아직 데이터가 없습니다")),
     el("div", { class: "doc" },
@@ -1060,7 +1108,7 @@ async function loadFileTexts(named) {
     if (!name.toLowerCase().endsWith(".json")) { ds.error = "파일 모드에서는 JSON만 읽습니다. CSV는 서버 모드로 보세요."; return ds; }
     try {
       const data = JSON.parse(text), kind = detectKind(data);
-      if (!kind) ds.error = "컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·강화·합성·재화 흐름·플레이 기록 데이터가 아닙니다 (최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat / budget / crafting / economy 객체가 필요합니다).";
+      if (!kind) ds.error = "컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·플레이 기록 데이터가 아닙니다 (최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat / growth / budget / crafting / economy 객체가 필요합니다).";
       else Object.assign(ds, { ok: true, kind, data });
     } catch (e) { ds.error = "JSON 형식 오류: " + e.message; }
     return ds;

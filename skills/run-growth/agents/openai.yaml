@@ -1,0 +1,4 @@
+interface:
+  display_name: "판 안 성장"
+  short_description: "레벨업 선택지와 빌드 정책으로 단계별 스탯을 시뮬레이션해 전투 계산에 더하고, 빌드끼리 처치·버팀을 비교해 밀리는 빌드를 찾음"
+  default_prompt: "Use $run-growth to model this game's level-up choices and a few build policies, add each build's growth to the combat calculation, and report builds that are worse everywhere and choices nobody picks."

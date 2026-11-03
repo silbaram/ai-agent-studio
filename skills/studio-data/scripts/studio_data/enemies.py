@@ -37,7 +37,7 @@ def check_schema(enemies: list, errors: list) -> list[dict]:
             errors.append({"code": "schema", "where": where, "message": f"rank는 {', '.join(RANKS)} 중 하나입니다: {e.get('rank')!r}"})
             ok = False
         zone = e.get("zone")
-        if not (isinstance(zone, int) and not isinstance(zone, bool) and zone >= 1):
+        if not c.is_int(zone, 1):
             errors.append({"code": "schema", "where": where, "message": f"zone은 1 이상의 정수여야 합니다: {zone!r}"})
             ok = False
         reward = e.get("reward")

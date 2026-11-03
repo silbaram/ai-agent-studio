@@ -253,8 +253,7 @@ def _price(p: dict, settings: dict, refs: dict, errors: list, warnings: list, mi
         level, start = spec.get("level"), spec.get("from", 0)
         levels = found.get("levels")
         top = len(levels) if isinstance(levels, list) else 0
-        is_int = lambda v: isinstance(v, int) and not isinstance(v, bool)  # noqa: E731
-        if not (is_int(level) and is_int(start) and 0 <= start < level <= top):
+        if not (c.is_int(level) and c.is_int(start) and 0 <= start < level <= top):
             _err(errors, "schema", where, f"강화 {ref}의 가격은 from(시작 단계, 기본 0) < level ≤ {top}인 정수로 적습니다: from {start!r}, level {level!r}")
             return None
         costs = cr.level_costs(levels, found.get("replace_cost", 0.0))

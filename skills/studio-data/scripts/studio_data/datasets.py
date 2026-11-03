@@ -6,12 +6,12 @@ import json
 from pathlib import Path
 
 from . import common as c
-from . import budget, combat, concepts, crafting, economy, enemies, items, playtests, upgrades
+from . import budget, combat, concepts, crafting, economy, enemies, growth, items, playtests, upgrades
 
 VALIDATORS = {"concepts": concepts, "items": items, "upgrades": upgrades, "enemies": enemies, "combat": combat,
-              "budget": budget, "crafting": crafting, "economy": economy, "playtests": playtests}
-NOT_DATA = ("컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·강화·합성·재화 흐름·플레이 기록 데이터가 아닙니다 "
-            "(최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat / budget / crafting / economy 객체가 필요합니다).")
+              "growth": growth, "budget": budget, "crafting": crafting, "economy": economy, "playtests": playtests}
+NOT_DATA = ("컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·플레이 기록 데이터가 아닙니다 "
+            "(최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat / growth / budget / crafting / economy 객체가 필요합니다).")
 
 
 def read(path: Path) -> dict:
@@ -101,6 +101,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
     스탯 예산은 아이템·적 데이터와 비교하고, 전투 계산이 있으면 그 공식으로 잰 스탯 원가 제안을 붙인다.
     강화·합성은 아이템 데이터와 드랍 테이블로 참조·획득 경로를, 스탯 예산이 있으면 가치를 확인한다.
     재화 흐름은 적 보상·드랍 테이블·아이템 가격·영구 강화 비용·강화·합성 비용을 함께 읽은 데이터에서 가져온다.
+    판 안 성장은 전투 계산 파일과 그 참조 데이터로 빌드마다 전투 계산을 다시 한다.
     검사기가 예상하지 못한 예외를 내면 그 파일만 오류로 표시하고 나머지는 계속 검사한다."""
     loaded_items = [d for d in entries if d["ok"] and d["kind"] == "items"]
     broken_items = [d for d in entries if not d["ok"] and d.get("kind") == "items"]
@@ -145,6 +146,8 @@ def validate_all(entries: list[dict]) -> list[dict]:
                 d["report"] = budget.validate(d["data"], items=by_id["items"], enemies=by_id["enemies"], suggestions=suggestions)
             elif d["kind"] == "crafting":
                 d["report"] = crafting.validate(d["data"], items=by_id["items"], drop_tables=drop_tables, budget=budget_settings)
+            elif d["kind"] == "growth":
+                d["report"] = growth.validate(d["data"], combat=combat_data, **by_id)
             elif d["kind"] == "economy":
                 d["report"] = economy.validate(d["data"], enemies=by_id["enemies"], items=by_id["items"], drop_tables=drop_tables,
                                                upgrades=by_id["upgrades"], crafting=crafting_data)

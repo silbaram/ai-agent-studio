@@ -1,0 +1,22 @@
+{
+  "_note": "예시 데이터다. 실제 게임 수치가 아니다. 형식: run-growth/references/growth-format.md",
+  "growth": {
+    "level_at": { "zone_1": 4, "zone_2": 9, "zone_3": 14 },
+    "offers": 3,
+    "trials": 1000,
+    "seed": 7,
+    "provenance": { "kind": "assumed", "note": "단계별 레벨은 평범하게 깬 판의 추정" }
+  },
+  "choices": [
+    { "id": "sharpen", "name": "날 세우기", "stats": { "attack": 2 }, "max_picks": 6, "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "quickdraw", "name": "빠른 손", "stats": { "attack_speed": 0.05 }, "max_picks": 4, "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "focus", "name": "집중", "stats": { "crit_chance": 0.04 }, "max_picks": 5, "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "vigor", "name": "활력", "stats": { "max_hp": 12 }, "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "plating", "name": "덧댄 갑옷", "stats": { "armor": 3 }, "max_picks": 6, "status": "approved", "provenance": { "kind": "assumed" } }
+  ],
+  "builds": [
+    { "id": "blade", "name": "공격 몰빵", "priority": ["sharpen", "quickdraw", "focus"], "intent": "빨리 잡고 많이 맞는다", "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "bulwark", "name": "버티기", "priority": ["plating", "vigor"], "intent": "느리게 잡고 오래 버틴다", "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "balanced", "name": "고르게", "priority": ["sharpen", "vigor", "plating", "quickdraw"], "pick": "spread", "status": "proposed", "provenance": { "kind": "assumed" } }
+  ]
+}

@@ -10,7 +10,7 @@ STUDIO = ROOT / "skills/studio-data"
 SAMPLE = STUDIO / "assets/sample-project"
 sys.path.insert(0, str(STUDIO / "scripts"))
 
-from studio_data import budget, claude, cli, combat, common, concepts, crafting, datasets, economy, enemies, items, meta_sim, playtests, provenance, upgrades, viewer  # noqa: E402,F401
+from studio_data import budget, claude, cli, combat, common, concepts, crafting, datasets, economy, enemies, growth, items, meta_sim, playtests, provenance, upgrades, viewer  # noqa: E402,F401
 
 
 def run_cli(*args):

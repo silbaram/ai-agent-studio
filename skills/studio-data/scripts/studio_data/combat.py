@@ -208,6 +208,71 @@ def _metric(hp: float, hit: float, rate) -> tuple:
     return hits, (round(hits / rate, 3) if c.is_number(rate) and rate > 0 else None)
 
 
+def _row_metrics(me: dict, foe: dict, formula: dict, level) -> dict:
+    """한 단계·한 적의 처치·버팀. 검사(validate)와 반복 계산(evaluate)이 같은 식을 쓴다."""
+    my_hit = expected_hit(me["attack"], foe["defense"], formula, level, me["crit_chance"], me["crit_multiplier"])
+    their_hit = expected_hit(foe["attack"], me["defense"], formula, level, foe["crit_chance"], foe["crit_multiplier"])
+    htk, ttk = _metric(foe["hp"], my_hit, me["attack_rate"])
+    htd, ttd = _metric(me["hp"], their_hit, foe["attack_rate"])
+    return {"player_hit": round(my_hit, 4), "enemy_hit": round(their_hit, 4),
+            "hits_to_kill": htk, "time_to_kill": ttk, "hits_to_die": htd, "time_to_die": ttd}
+
+
+def _side_problem(side: dict, roles: dict, formula: dict) -> str | None:
+    """계산에 쓸 수 없는 스탯이면 그 이유."""
+    lacking = [roles[r] for r in REQUIRED_ROLES if not c.is_number(side[r])]
+    if lacking:
+        return f"{', '.join(lacking)} 없음"
+    bad = _bad_stats(side, roles)
+    if bad:
+        return ", ".join(bad)
+    if formula["form"] in ("ratio", "level_ratio") and side["defense"] < 0:
+        return "비율 공식에서 음수 방어"
+    return None
+
+
+def prepare(data: dict, items: dict | None = None, upgrades: dict | None = None, enemies: dict | None = None) -> dict | None:
+    """추가 스탯만 바꿔 같은 전투 계산을 여러 번(판 안 성장 시뮬레이션 등) 빠르게 하기 위한 준비. 설정이 틀렸거나 적이 없으면 None.
+    단계마다 기준 장비 합계와 적 스탯을 한 번만 모은다. 참조가 틀려 계산할 수 없는 단계는 빠진다(그 오류는 validate가 보고한다)."""
+    settings = read_settings(data, [])
+    raw = data.get("stages")
+    if settings is None or not isinstance(raw, list) or enemies is None:
+        return None
+    roles, formula = settings["roles"], settings["formula"]
+    refs = {"items": items, "upgrades": upgrades, "enemies": enemies}
+    stages = {}
+    for s in raw:
+        if not (isinstance(s, dict) and isinstance(s.get("id"), str) and c.is_active(s)):
+            continue
+        if formula["form"] == "level_ratio" and not c.is_number(s.get("level")):
+            continue
+        stats, n = _player(s, settings, refs, [], [])
+        foes = _stage_enemies(s, enemies, [], []) if stats is not None and not n else None
+        sides = []
+        for e in foes or []:
+            st = _stats_of(e)
+            foe = _side(st, roles["enemy"]) if st is not None else None
+            if foe is not None and _side_problem(foe, roles["enemy"], formula) is None:
+                sides.append((e["id"], e.get("rank"), foe))
+        if sides:
+            stages[s["id"]] = {"player": stats, "foes": sides, "level": s.get("level")}
+    return {"settings": settings, "stages": stages}
+
+
+def evaluate(prep: dict, stage_id: str, bonus: dict) -> tuple[list[dict] | None, str | None]:
+    """준비한 단계의 기준 장비에 bonus를 더해 적마다 처치·버팀을 낸다. 스탯이 계산에 쓸 수 없으면 (None, 이유)."""
+    roles, formula = prep["settings"]["roles"], prep["settings"]["formula"]
+    st = prep["stages"][stage_id]
+    stats = dict(st["player"])
+    for k, v in bonus.items():
+        stats[k] = stats.get(k, 0) + v
+    me = _side(stats, roles["player"])
+    problem = _side_problem(me, roles["player"], formula)
+    if problem:
+        return None, problem
+    return [{"enemy": eid, "rank": rank, **_row_metrics(me, foe, formula, st["level"])} for eid, rank, foe in st["foes"]], None
+
+
 def _stage_enemies(stage: dict, enemies: dict, errors: list, warnings: list) -> list[dict] | None:
     where = stage["id"]
     if "enemies" in stage:
@@ -230,8 +295,10 @@ def _stage_enemies(stage: dict, enemies: dict, errors: list, warnings: list) -> 
     return [e for e in enemies.values() if e.get("zone") == zone and c.is_active(e)]
 
 
-def validate(data: dict, items: dict | None = None, upgrades: dict | None = None, enemies: dict | None = None) -> dict:
-    """items·upgrades·enemies: 함께 읽은 데이터의 {id: 항목}. None이면 그 참조는 미확인으로 센다."""
+def validate(data: dict, items: dict | None = None, upgrades: dict | None = None, enemies: dict | None = None,
+             bonus: dict | None = None) -> dict:
+    """items·upgrades·enemies: 함께 읽은 데이터의 {id: 항목}. None이면 그 참조는 미확인으로 센다.
+    bonus: {단계 id: {스탯: 값}}. 판 안 성장(run-growth)처럼 기준 장비 위에 더할 스탯."""
     errors: list = []
     warnings: list = []
     settings = read_settings(data, errors)
@@ -265,6 +332,10 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
                     continue
             before = len(errors)
             stats, n = _player(s, settings, refs, errors, warnings)
+            if stats is not None and bonus and bonus.get(where):
+                stats = dict(stats)
+                for k, v in bonus[where].items():
+                    stats[k] = stats.get(k, 0) + v
             unchecked += n
             if n:
                 missing_kinds |= {k for k in ("items", "upgrades") if refs[k] is None and (s.get("player") or {}).get(k)}
@@ -309,14 +380,8 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
                 if formula["form"] in ("ratio", "level_ratio") and foe["defense"] < 0:
                     _err(errors, "negative_defense", ewhere, "비율 공식은 음수 방어를 지원하지 않습니다(v1).")
                     continue
-                level = s.get("level")
-                my_hit = expected_hit(me["attack"], foe["defense"], formula, level, me["crit_chance"], me["crit_multiplier"])
-                their_hit = expected_hit(foe["attack"], me["defense"], formula, level, foe["crit_chance"], foe["crit_multiplier"])
-                htk, ttk = _metric(foe["hp"], my_hit, me["attack_rate"])
-                htd, ttd = _metric(me["hp"], their_hit, foe["attack_rate"])
-                r = {"stage": where, "enemy": e["id"], "rank": e.get("rank"), "player_hit": round(my_hit, 4), "enemy_hit": round(their_hit, 4),
-                     "hits_to_kill": htk, "time_to_kill": ttk, "hits_to_die": htd, "time_to_die": ttd, "out_of_range": []}
-                if my_hit <= 0:
+                r = {"stage": where, "enemy": e["id"], "rank": e.get("rank"), **_row_metrics(me, foe, formula, s.get("level")), "out_of_range": []}
+                if r["player_hit"] <= 0:
                     _err(warnings, "zero_damage", ewhere, f"이 단계 기준 장비로 {e['id']}에게 피해를 줄 수 없습니다.", owner=where)
                 for m, rng in (targets.get(e.get("rank")) or {}).items():
                     v = r[m]

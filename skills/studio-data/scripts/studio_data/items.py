@@ -25,7 +25,7 @@ def check_schema(items: list, errors: list) -> list[dict]:
             errors.append({"code": "schema", "where": where, "message": "slot이 필요합니다."})
             ok = False
         tier = item.get("tier")
-        if not (isinstance(tier, int) and not isinstance(tier, bool) and tier >= 1):
+        if not c.is_int(tier, 1):
             errors.append({"code": "schema", "where": where, "message": f"tier는 1 이상의 정수여야 합니다: {tier!r}"})
             ok = False
         price = item.get("price")

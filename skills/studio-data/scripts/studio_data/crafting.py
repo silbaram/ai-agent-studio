@@ -100,7 +100,7 @@ def _side_of(spec, where: str, label: str, errors: list) -> dict | None:
         _err(errors, "schema", where, f"{label}에는 item(아이템 id)이나 match({{필드: 값}})가 필요합니다.")
         return None
     count = spec.get("count", 1)
-    if not (isinstance(count, int) and not isinstance(count, bool) and count >= 1):
+    if not c.is_int(count, 1):
         _err(errors, "schema", where, f"{label}의 count는 1 이상의 정수입니다: {count!r}")
         return None
     return {"item": spec.get("item"), "match": spec.get("match"), "count": count}
