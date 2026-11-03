@@ -1,0 +1,4 @@
+interface:
+  display_name: "스탯 예산"
+  short_description: "티어·구역별 예산 곡선과 스탯 원가로 아이템·적의 넘침·모자람을 찾고, 원형으로 새 항목 초안을 만들고, 전투 공식으로 스탯 원가를 제안"
+  default_prompt: "Use $stat-budget to set budget curves and stat costs for this game's items and enemies, list entries outside the curve, and draft new entries from archetypes without writing files."

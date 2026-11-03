@@ -358,6 +358,90 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
     }
 
 
+# ---------- 스탯 원가 제안 (B2 예산에 쓴다) ----------
+def _power(me_stats: dict, me_roles: dict, foes: list[dict], foe_roles: dict, formula: dict, level) -> float | None:
+    """ln(초당 주는 피해) + ln(버티는 실질 체력)의 상대 평균. 주어진 적 중 계산할 수 없는 조합이 있으면 None."""
+    total = 0.0
+    me = _side(me_stats, me_roles)
+    for foe_stats in foes:
+        foe = _side(foe_stats, foe_roles)
+        if not all(c.is_number(x) and x > 0 for x in (me["hp"], me["attack"], foe["attack"])):
+            return None
+        if formula["form"] in ("ratio", "level_ratio") and (me["defense"] < 0 or foe["defense"] < 0):
+            return None
+        rate = me["attack_rate"] if c.is_number(me["attack_rate"]) and me["attack_rate"] > 0 else 1.0
+        dealt = expected_hit(me["attack"], foe["defense"], formula, level, me["crit_chance"], me["crit_multiplier"]) * rate
+        taken = expected_hit(foe["attack"], me["defense"], formula, level, foe["crit_chance"], foe["crit_multiplier"])
+        if dealt <= 0 or taken <= 0:
+            return None
+        total += math.log(dealt) + math.log(me["hp"] / taken)
+    return total / len(foes) if foes else None
+
+
+def _measurable(me_stats: dict, me_roles: dict, foes: list[dict], foe_roles: dict, formula: dict, level) -> list[dict]:
+    """서로 피해를 주고받을 수 있는 적만. 피해 0인 적 하나 때문에 단계 전체를 버리지 않는다."""
+    return [f for f in foes if _power(me_stats, me_roles, [f], foe_roles, formula, level) is not None]
+
+
+def _gradient(me_stats: dict, me_roles: dict, foes: list[dict], foe_roles: dict, formula: dict, level) -> dict:
+    """역할 스탯 1의 값어치를 공격 1 기준으로 환산한 {스탯 이름: 값}. 앞으로 차분(작은 증가)으로 잰다.
+    잴 적은 호출하는 쪽이 _measurable로 고른다. 조금 올렸을 때 계산이 안 되는 역할은 빼고 잰다."""
+    base = _power(me_stats, me_roles, foes, foe_roles, formula, level)
+    if base is None:
+        return {}
+    current = _side(me_stats, me_roles)
+    grads = {}
+    for role, name in me_roles.items():
+        if role == "attack_rate" and not c.is_number(current["attack_rate"]):
+            continue  # 공격 속도를 모델에 넣지 않은 게임
+        if role in ("crit_chance", "crit_multiplier") and "crit_chance" not in me_roles:
+            continue
+        step = 1e-4 * max(1.0, abs(current[role]))
+        bumped = dict(me_stats, **{name: current[role] + step})
+        after = _power(bumped, me_roles, foes, foe_roles, formula, level)
+        if after is not None:
+            grads[name] = (after - base) / step
+    attack = grads.get(me_roles["attack"])
+    if not attack or attack <= 0:
+        return {}
+    return {name: round(g / attack, 4) for name, g in grads.items()}
+
+
+def marginal_costs(data: dict, items: dict | None = None, upgrades: dict | None = None, enemies: dict | None = None) -> dict | None:
+    """단계마다 플레이어·적 스탯 1의 값어치(공격 1 = 1). 전투 설정이 틀렸거나 적 데이터가 없으면 None.
+    값어치는 그 단계의 기준 장비와 적에서 잰 것이라 단계마다 다르다. 공식 바깥의 효과(이동 속도 등)는 잴 수 없다."""
+    settings = read_settings(data, [])
+    stages = data.get("stages")
+    if settings is None or not isinstance(stages, list) or enemies is None:
+        return None
+    roles, formula = settings["roles"], settings["formula"]
+    refs = {"items": items, "upgrades": upgrades, "enemies": enemies}
+    out = {"player": {}, "enemy": {}, "skipped": {}, "attack_stat": {"player": roles["player"]["attack"], "enemy": roles["enemy"]["attack"]}}
+    for st in stages:
+        if not (isinstance(st, dict) and isinstance(st.get("id"), str) and c.is_active(st)):
+            continue
+        level = st.get("level")
+        if formula["form"] == "level_ratio" and not c.is_number(level):
+            continue
+        stats, _ = _player(st, settings, refs, [], [])
+        foes = _stage_enemies(st, enemies, [], []) if stats is not None else None
+        foe_stats = [x for x in (_stats_of(e) for e in foes or []) if x]
+        usable = _measurable(stats, roles["player"], foe_stats, roles["enemy"], formula, level) if foe_stats else []
+        if len(usable) < len(foe_stats):
+            out["skipped"][st["id"]] = len(foe_stats) - len(usable)
+        if not usable:
+            continue
+        foe_stats = usable
+        mine = _gradient(stats, roles["player"], foe_stats, roles["enemy"], formula, level)
+        if mine:
+            out["player"][st["id"]] = mine
+        per_foe = [g for g in (_gradient(fs, roles["enemy"], [stats], roles["player"], formula, level) for fs in foe_stats) if g]
+        if per_foe:
+            names = set.intersection(*(set(g) for g in per_foe))
+            out["enemy"][st["id"]] = {n: round(sum(g[n] for g in per_foe) / len(per_foe), 4) for n in sorted(names)}
+    return out
+
+
 # ---------- 출력 ----------
 def _fmt(v) -> str:
     if v is None:

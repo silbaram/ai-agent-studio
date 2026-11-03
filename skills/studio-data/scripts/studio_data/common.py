@@ -1,4 +1,4 @@
-"""게임 설계 데이터(컨셉·아이템·영구 강화·적·전투 계산·플레이 기록)의 읽기, 종류 판별, 공통 필드 검사. 표준 라이브러리만 사용한다."""
+"""게임 설계 데이터(컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·플레이 기록)의 읽기, 종류 판별, 공통 필드 검사. 표준 라이브러리만 사용한다."""
 from __future__ import annotations
 
 import csv
@@ -12,14 +12,14 @@ STATUSES = ("proposed", "approved", "cut")
 PROVENANCE_KINDS = {"assumed": "assumed", "computed": "computed", "measured": "measured",
                     "가정": "assumed", "계산": "computed", "측정": "measured"}
 TEXT_FIELDS = ("name", "effect", "intent")
-DATASET_KINDS = ("concepts", "items", "upgrades", "enemies", "combat", "playtests")
+DATASET_KINDS = ("concepts", "items", "upgrades", "enemies", "combat", "budget", "playtests")
 KIND_LABELS = {"concepts": "컨셉", "items": "아이템", "upgrades": "영구 강화", "enemies": "적", "combat": "전투 계산",
-               "playtests": "플레이 기록"}
-LIST_KEYS = {"combat": "stages"}  # 항목 배열의 키가 종류 이름과 다른 경우
+               "budget": "스탯 예산", "playtests": "플레이 기록"}
+LIST_KEYS = {"combat": "stages", "budget": "archetypes"}  # 항목 배열의 키가 종류 이름과 다른 경우
 SUBFOLDERS = ("design", "data")
 STAT_PREFIX = "stat."
 
-# CSV 열 중 수로 읽을 것과 목록(;로 구분)으로 읽을 것. 컨셉·전투 계산·플레이 기록은 CSV를 지원하지 않는다.
+# CSV 열 중 수로 읽을 것과 목록(;로 구분)으로 읽을 것. 컨셉·전투 계산·스탯 예산·플레이 기록은 CSV를 지원하지 않는다.
 CSV_KINDS = ("items", "upgrades", "enemies")
 CSV_NUMERIC = {
     "items": ("tier", "price"),
@@ -190,6 +190,18 @@ def is_active(entry: dict) -> bool:
     return entry.get("status") != "cut"
 
 
+def valid_acknowledged(ack) -> bool:
+    """acknowledged 형식: {경고 코드: 비어 있지 않은 이유}. 한 칸이라도 틀리면 전체를 쓰지 않는다."""
+    return isinstance(ack, dict) and all(isinstance(k, str) and isinstance(v, str) and v.strip() for k, v in ack.items())
+
+
+def ack_reason(entry: dict, code: str) -> str | None:
+    """항목이 그 경고 코드를 확인한 이유. 다른 파일의 검사기(예: 스탯 예산)가 항목의 확인을 읽을 때 같은 규칙을 쓴다.
+    형식이 틀린 확인은 무시한다. 그 오류는 항목이 있는 파일의 검사(apply_acknowledged)가 보고한다."""
+    ack = entry.get("acknowledged") if isinstance(entry, dict) else None
+    return ack[code].strip() if valid_acknowledged(ack) and code in ack else None
+
+
 def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
     """항목의 acknowledged({경고 코드: 확인한 이유})에 적힌 경고를 report["acknowledged"]로 옮긴다.
     확인한 경고는 경고 수와 --strict에서 빠지지만 지워지지 않고 이유와 함께 남는다. 오류는 옮기지 않는다.
@@ -203,7 +215,7 @@ def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
         if not isinstance(e, dict) or not isinstance(e.get("id"), str) or "acknowledged" not in e:
             continue
         ack = e["acknowledged"]
-        if not isinstance(ack, dict) or not all(isinstance(k, str) and isinstance(v, str) and v.strip() for k, v in ack.items()):
+        if not valid_acknowledged(ack):
             report["errors"].append({"code": "schema", "where": e["id"],
                                      "message": "acknowledged는 {경고 코드: 확인한 이유} 객체여야 합니다. 이유를 비워 두지 않습니다."})
             continue

@@ -1,4 +1,4 @@
-"""studio.py의 하위 명령: view / check / simulate / provenance / setup / hook.
+"""studio.py의 하위 명령: view / check / simulate / provenance / draft / setup / hook.
 
 종료 코드
   0  통과. check는 미확인 참조가 있으면 최종 줄이 INCOMPLETE다(종료 코드는 0, --strict·--fail-on-assumed면 1).
@@ -17,12 +17,13 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from . import claude, combat, concepts, datasets, enemies, items, meta_sim, playtests, provenance, upgrades, viewer
+from . import budget, claude, combat, concepts, datasets, enemies, items, meta_sim, playtests, provenance, upgrades, viewer
 
 EXTRA_PRINTERS = {"items": items.print_extra, "upgrades": upgrades.print_extra, "enemies": enemies.print_extra,
-                  "combat": combat.print_extra, "playtests": playtests.print_extra}
-TABLE_PRINTERS = {"concepts": concepts.table, "combat": combat.table}
-COUNT_PRINTERS = {"concepts": concepts.print_counts, "combat": combat.print_counts, "playtests": playtests.print_counts}
+                  "combat": combat.print_extra, "budget": budget.print_extra, "playtests": playtests.print_extra}
+TABLE_PRINTERS = {"concepts": concepts.table, "combat": combat.table, "budget": budget.table}
+COUNT_PRINTERS = {"concepts": concepts.print_counts, "combat": combat.print_counts, "budget": budget.print_counts,
+                  "playtests": playtests.print_counts}
 GATE_LABELS = {"playtests": "판정이 확정되지 않은 가설(버팀·틀림 확정이 아님): "}
 
 
@@ -80,7 +81,7 @@ def cmd_check(args) -> int:
         return 2
     entries = datasets.collect([Path(p) for p in args.paths])
     if not entries:
-        print("컨셉·아이템·영구 강화·적·전투 계산·플레이 기록 데이터 파일을 찾지 못했습니다.", file=sys.stderr)
+        print("컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·플레이 기록 데이터 파일을 찾지 못했습니다.", file=sys.stderr)
         return 2
     unreadable = [d for d in entries if not d["ok"]]
     reports = [d["report"] for d in entries if d["ok"]]
@@ -262,6 +263,43 @@ def cmd_provenance(args) -> int:
     return 0 if status == "pass" else 1
 
 
+# ---------- draft ----------
+def _value(raw: str):
+    for cast in (int, float):
+        try:
+            return cast(raw)
+        except ValueError:
+            pass
+    return raw
+
+
+def cmd_draft(args) -> int:
+    path = Path(args.path)
+    if not path.exists():
+        print(f"경로를 찾을 수 없습니다: {path}", file=sys.stderr)
+        return 2
+    found = [d for d in datasets.scan([path]) if d["ok"] and d["kind"] == "budget"]
+    if not found:
+        print("스탯 예산 데이터(data/budget.json, 최상위 budget 객체)를 찾지 못했습니다.", file=sys.stderr)
+        return 2
+    fields = {}
+    for pair in args.set or []:
+        key, sep, raw = pair.partition("=")
+        if not sep or not key.strip():
+            print(f"--set은 필드=값 형식입니다: {pair}", file=sys.stderr)
+            return 2
+        fields[key.strip()] = _value(raw.strip())
+    try:
+        entry, info = budget.draft(found[0]["data"], args.archetype, args.at, args.id, fields)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    print(f"# {found[0]['name']} · 원형 {args.archetype} · 기대 예산 {info['expected']:g} (곡선 {info['curve']:g} × 배수 {info['multiplier']:g})."
+          " 파일에 쓰지 않았습니다. 제안 상태로 원본에 넣고 check로 확인하세요.")
+    print(json.dumps(entry, ensure_ascii=False, indent=2))
+    return 0
+
+
 # ---------- setup / hook (Claude Code) ----------
 def cmd_setup(args) -> int:
     project = Path(args.project)
@@ -303,11 +341,11 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--no-browser", action="store_true", help="브라우저를 자동으로 열지 않습니다.")
     v.set_defaults(func=cmd_view)
 
-    k = sub.add_parser("check", help="컨셉·아이템·영구 강화·적·전투 계산·플레이 기록 데이터를 검사합니다.")
+    k = sub.add_parser("check", help="컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·플레이 기록 데이터를 검사합니다.")
     k.add_argument("paths", nargs="+", help="프로젝트·데이터 폴더 또는 파일")
     k.add_argument("--strict", action="store_true", help="경고도 실패로 처리합니다.")
     k.add_argument("--fail-on-assumed", action="store_true", help="삭제되지 않은 항목 중 출처가 가정이거나 비어 있는 것, 판정이 확정되지 않은 가설이 있으면 실패합니다 (확정 판정 전 게이트).")
-    k.add_argument("--table", action="store_true", help="컨셉 비교표와 전투 계산표(마크다운)를 출력합니다. 파일로 저장하지 않습니다.")
+    k.add_argument("--table", action="store_true", help="컨셉 비교표, 전투 계산표, 예산 비교표(마크다운)를 출력합니다. 파일로 저장하지 않습니다.")
     k.add_argument("--ids", help="--table에 보일 컨셉 id만 쉼표로 고릅니다 (예: a,b,c). 적은 순서대로 보입니다.")
     k.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
     k.add_argument("--out", help="JSON 보고서를 이 경로에 저장합니다. 문서에서 [계산: 이 경로]로 인용합니다.")
@@ -329,6 +367,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--check-paths", action="store_true", help="[계산]/[측정] 출처가 경로처럼 보이면 실제 파일 존재를 확인합니다.")
     p.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
     p.set_defaults(func=cmd_provenance)
+
+    d = sub.add_parser("draft", help="스탯 예산의 곡선과 원형으로 아이템·적 초안 하나를 만듭니다 (파일에 쓰지 않음).")
+    d.add_argument("path", help="게임 프로젝트 폴더 또는 budget.json")
+    d.add_argument("--archetype", required=True, help="원형 id (budget.json의 archetypes)")
+    d.add_argument("--at", type=float, required=True, help="곡선 기준 값 (예: 티어 3, 구역 2)")
+    d.add_argument("--id", help="초안 항목 id (기본: 원형_기준값)")
+    d.add_argument("--set", action="append", metavar="필드=값", help="초안에 넣을 필드. 배수 필드(예: rank=elite)도 여기서 정합니다. 여러 번 쓸 수 있습니다.")
+    d.set_defaults(func=cmd_draft)
 
     u = sub.add_parser("setup", help="게임 프로젝트에 판정 에이전트와 훅을 설치합니다 (Claude Code).")
     u.add_argument("host", choices=("claude",), help="연결할 호스트. 지금은 claude(Claude Code)만 지원합니다.")
