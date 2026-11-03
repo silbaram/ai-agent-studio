@@ -156,6 +156,20 @@ def indexes(entries: list[dict]) -> dict:
     return {k: _index(entries, k) for k in ("items", "upgrades", "enemies")}
 
 
+def _ids(raw) -> set | None:
+    return {x["id"] for x in raw if isinstance(x, dict) and isinstance(x.get("id"), str)} if isinstance(raw, list) else None
+
+
+def _stage_refs(combat_data: dict | None, growth_data: dict | None, economy_data: dict | None, by_id: dict) -> dict:
+    """플레이 기록의 단계 기록이 가리키는 id. 데이터가 없으면 그 종류는 None(미확인)."""
+    cfg = (economy_data or {}).get("economy")
+    currencies = cfg.get("currencies") if isinstance(cfg, dict) else None
+    return {"stages": _ids((combat_data or {}).get("stages")), "builds": _ids((growth_data or {}).get("builds")),
+            "upgrades": set(by_id["upgrades"]) if by_id["upgrades"] is not None else None,
+            "enemies": set(by_id["enemies"]) if by_id["enemies"] is not None else None,
+            "currencies": set(currencies) if isinstance(currencies, dict) else None}
+
+
 def validate_all(entries: list[dict]) -> list[dict]:
     """읽은 항목들에 검사 결과(report)를 붙인다. 적의 드랍 테이블은 함께 읽은 아이템 데이터로,
     플레이 기록의 컨셉·가설 참조는 함께 읽은 컨셉 데이터로, 전투 계산은 함께 읽은 아이템·영구 강화·적 데이터로 확인한다.
@@ -199,6 +213,8 @@ def validate_all(entries: list[dict]) -> list[dict]:
         hypotheses = hypotheses or {}
         for cid, info in index.items():
             hypotheses.setdefault(cid, info)
+    economy_data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "economy"), None)
+    stage_refs = _stage_refs(combat_data, growth_data, economy_data, by_id)
     for d in entries:
         if not d["ok"]:
             continue
@@ -221,7 +237,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
                                                upgrades=by_id["upgrades"], crafting=crafting_data, combat=combat_data,
                                                meta=_meta_configs(d))
             elif d["kind"] == "playtests":
-                d["report"] = playtests.validate(d["data"], hypotheses, concepts_unreadable=bool(broken_concepts))
+                d["report"] = playtests.validate(d["data"], hypotheses, concepts_unreadable=bool(broken_concepts), refs=stage_refs)
             else:
                 d["report"] = VALIDATORS[d["kind"]].validate(d["data"])
             c.apply_acknowledged(d["kind"], d["data"], d["report"])

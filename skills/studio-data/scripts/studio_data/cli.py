@@ -1,9 +1,9 @@
-"""studio.py의 하위 명령: view / check / simulate / provenance / draft / setup / hook.
+"""studio.py의 하위 명령: view / check / simulate / calibrate / provenance / draft / setup / hook.
 
 종료 코드
   0  통과. check는 미확인 참조가 있으면 최종 줄이 INCOMPLETE다(종료 코드는 0, --strict·--fail-on-assumed면 1).
   1  오류, 또는 --strict 경고, 또는 --fail-on-assumed 가정 항목
-  2  사용법 오류(경로 없음, 읽을 수 없는 파일, check할 데이터 없음, provenance할 md 없음, 설정 오류, 서버를 열 수 없음)
+  2  사용법 오류(경로 없음, 읽을 수 없는 파일, check할 데이터 없음, provenance할 md 없음, calibrate할 단계 기록 없음, 설정 오류, 서버를 열 수 없음)
      view는 데이터가 아직 없어도 열리고, 파일이 생기면 화면에 자동으로 나타난다.
 hook은 Claude Code 훅 규약을 따른다: 0 통과, 2 차단(PreToolUse) 또는 에이전트에게 오류 보이기(PostToolUse).
 """
@@ -17,7 +17,7 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from . import budget, claude, combat, concepts, crafting, datasets, economy, enemies, growth, items, meta_sim, playtests, provenance, upgrades, viewer
+from . import budget, calibrate, claude, combat, concepts, crafting, datasets, economy, enemies, growth, items, meta_sim, playtests, provenance, upgrades, viewer
 from . import common as c
 
 EXTRA_PRINTERS = {"items": items.print_extra, "upgrades": upgrades.print_extra, "enemies": enemies.print_extra,
@@ -231,6 +231,10 @@ def _model_label(cfg: dict) -> str:
 
 
 def _caution(cfg: dict) -> str:
+    prov = cfg.get("provenance") or {}
+    if prov.get("kind") in ("computed", "measured"):
+        return (f"주의: 생존 곡선은 보정값입니다(출처 {prov['source']}). 기록한 빌드·플레이어 밖에서는 가정과 같습니다. "
+                "실제 난이도·재미 판정이 아닙니다.")
     if cfg["model"] == "combat":
         return ("주의: 전투 계산의 기대값과 생존 곡선 가정(slope·even_margin·skill)에서 나온 결과입니다. "
                 "실제 난이도·재미 판정이 아닙니다. 플레이 기록으로 보정하기 전에는 가정입니다.")
@@ -281,6 +285,29 @@ def cmd_simulate(args) -> int:
     s = result["longest_stall_runs"]
     print(f"가장 긴 정체(목표가 남은 상태에서 구매도 최고 기록 갱신도 없는 연속 런): 중앙 {s['median']} / p90 {s['p90']} / 최대 {s['max']}")
     print(_caution(cfg))
+    if args.out:
+        print(f"문서 인용: [계산: {args.out}]")
+    return 0
+
+
+# ---------- calibrate ----------
+def cmd_calibrate(args) -> int:
+    if not Path(args.path).exists():
+        print(f"경로를 찾을 수 없습니다: {args.path}", file=sys.stderr)
+        return 2
+    sessions = [x.strip() for x in args.sessions.split(",") if x.strip()] if args.sessions else None
+    try:
+        result = calibrate.calibrate(args.path, sessions, args.tolerance)
+    except meta_sim.ConfigError as exc:
+        print(f"보정할 수 없습니다: {exc}", file=sys.stderr)
+        return 2
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    calibrate.print_report(result)
     if args.out:
         print(f"문서 인용: [계산: {args.out}]")
     return 0
@@ -432,6 +459,14 @@ def build_parser() -> argparse.ArgumentParser:
                      help="설정 파일을 고치지 않고 구매 정책만 바꿔 실행합니다. economy는 재화 흐름의 구매 계획 순서(economy 연결이 있을 때).")
     pol.add_argument("--compare-policies", action="store_true", help="모든 구매 정책으로 돌려 나란히 보여 줍니다. --out에는 정책별 결과를 함께 저장합니다.")
     s.set_defaults(func=cmd_simulate)
+
+    b = sub.add_parser("calibrate", help="플레이 기록의 단계 기록으로 가정값을 비교하고 생존 곡선 값을 제안합니다 (파일을 고치지 않음).")
+    b.add_argument("path", help="프로젝트·데이터 폴더(가정값 비교만) 또는 시뮬레이터 설정 파일(전투 계산 모델: 통과율 비교와 제안까지)")
+    b.add_argument("--sessions", help="쓸 세션 id만 쉼표로 고릅니다. 빌드가 바뀌었으면 지금 빌드의 세션만 씁니다.")
+    b.add_argument("--tolerance", type=float, default=calibrate.DEFAULT_TOLERANCE, help="가정값과 측정값이 이 비율을 넘게 다르면 표시합니다 (기본 0.2).")
+    b.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
+    b.add_argument("--out", help="결과 JSON 저장 경로. 문서에서 [계산: 이 경로]로 인용합니다.")
+    b.set_defaults(func=cmd_calibrate)
 
     p = sub.add_parser("provenance", help="기획 문서(md)의 수치 출처 태그를 검사합니다.")
     p.add_argument("paths", nargs="+", help="검사할 .md 파일 또는 폴더")

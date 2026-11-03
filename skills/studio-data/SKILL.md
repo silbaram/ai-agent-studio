@@ -26,6 +26,7 @@ description: "Shared tooling for the game-design skills: one entry script (studi
 | `python3 .claude/skills/studio-data/scripts/studio.py view .` | 프로젝트의 설계 데이터를 브라우저에서 본다 (읽기 전용, 자동 갱신) |
 | `python3 .claude/skills/studio-data/scripts/studio.py check .` | 컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·플레이 기록을 한 번에 검사한다 |
 | `python3 .claude/skills/studio-data/scripts/studio.py simulate data/meta.json` | 메타 성장을 시뮬레이션한다(추상 모델, 또는 `"model": "combat"`이면 전투 계산 데이터로) |
+| `python3 .claude/skills/studio-data/scripts/studio.py calibrate data/meta_combat.json` | 플레이 기록의 단계 기록으로 가정값을 비교하고 생존 곡선 값을 제안한다. 파일을 고치지 않는다([calibration](../playtest-verdict/references/calibration.md)) |
 | `python3 .claude/skills/studio-data/scripts/studio.py provenance design/` | 기획 문서(md)의 수치 출처 태그를 검사한다 |
 | `python3 .claude/skills/studio-data/scripts/studio.py draft . --archetype <원형> --at <기준 값>` | 스탯 예산의 곡선과 원형으로 아이템·적 초안을 JSON으로 출력한다 (파일에 쓰지 않음) |
 | `python3 .claude/skills/studio-data/scripts/studio.py setup claude .` | 판정 에이전트와 훅을 게임 프로젝트에 설치한다 (Claude Code, [아래](#claude-code-연결)) |

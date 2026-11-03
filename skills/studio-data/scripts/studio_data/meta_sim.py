@@ -111,10 +111,13 @@ def normalize(cfg: dict, base_dir: Path | None = None) -> dict:
     if model not in MODELS:
         raise ConfigError(f"model은 {' 또는 '.join(MODELS)}입니다: {model!r}{c.did_you_mean(str(model), MODELS)}")
     _check_keys(cfg, model)
+    prov = _provenance(cfg.get("provenance"))
     out = {"model": model, "seed": _req(cfg, "seed", int), "trials": _req(cfg, "trials", int), "max_runs": _req(cfg, "max_runs", int)}
     for k in ("trials", "max_runs"):
         if out[k] < 1:
             raise ConfigError(f"{k}는 1 이상이어야 합니다.")
+    if prov is not None:
+        out["provenance"] = prov
     if model == "abstract":
         _abstract_part(cfg, out)
     else:
@@ -208,9 +211,9 @@ def normalize(cfg: dict, base_dir: Path | None = None) -> dict:
 
 _KEYS = {
     "abstract": {"model", "seed", "trials", "max_runs", "rooms", "difficulty", "player", "survival", "currency", "economy",
-                 "upgrades_file", "upgrades", "purchase_policy", "milestones"},
+                 "upgrades_file", "upgrades", "purchase_policy", "milestones", "provenance"},
     "combat": {"model", "seed", "trials", "max_runs", "combat_file", "stages", "growth_file", "build", "survival", "player", "currency",
-               "economy", "stat_effects", "upgrades_file", "upgrades", "purchase_policy", "milestones"},
+               "economy", "stat_effects", "upgrades_file", "upgrades", "purchase_policy", "milestones", "provenance"},
 }
 _SUB_KEYS = {
     ("abstract", "player"): {"base_power", "power_per_room", "skill", "skill_spread"}, ("combat", "player"): {"skill", "skill_spread"},
@@ -258,6 +261,18 @@ def _stat_effects(v, has_growth: bool) -> dict:
         if "levels" in out[stat] and not has_growth:
             raise ConfigError(f"{where}levels(판 안 레벨업)는 growth_file과 build가 있어야 씁니다.")
     return out
+
+
+def _provenance(v) -> dict | None:
+    """설정의 수치(생존 곡선 등)가 어디서 왔는가. 데이터 파일과 같은 규칙: assumed / computed / measured, 뒤의 둘은 source가 필요."""
+    if v is None:
+        return None
+    entry = {"provenance": dict(v) if isinstance(v, dict) else v}
+    errors: list = []
+    c.check_common(entry, "provenance", errors)
+    if errors:
+        raise ConfigError(errors[0]["message"])
+    return entry["provenance"]
 
 
 def _even_margin(v):
@@ -473,7 +488,7 @@ def row_margin(r: dict) -> float:
     return r["hits_to_die"] / r["hits_to_kill"]
 
 
-def _reference(even, rank) -> float:
+def margin_reference(even, rank) -> float:
     return even.get(rank, 1.0) if isinstance(even, dict) else even
 
 
@@ -481,7 +496,7 @@ def stage_limit(rows: list[dict], even=1.0) -> tuple[float, dict | None]:
     """(기준 대비 여유, 그 단계를 정한 적의 행). 적마다 여유 ÷ 그 등급의 기준(even_margin)을 내고 가장 작은 적이 단계를 정한다."""
     worst, who = math.inf, None
     for r in rows:
-        m = row_margin(r) / _reference(even, r.get("rank"))
+        m = row_margin(r) / margin_reference(even, r.get("rank"))
         if who is None or m < worst:
             worst, who = m, r
     return worst, who
@@ -541,6 +556,7 @@ def attach(cfg: dict, base_dir: Path | None = None) -> dict:
     entries = datasets.collect([Path(x) for x in folders])
     ups = {u["id"]: u for u in cfg["upgrades"]}
     out = dict(cfg)
+    out["_entries"] = entries  # 같은 데이터를 쓰는 쪽(calibrate)이 다시 읽고 검사하지 않게 한다
     used = ("combat", "growth", "economy", "items", "upgrades", "enemies", "crafting") if cfg["model"] == "combat" else ("economy",)
     # 결과를 인용할 때 어느 데이터에서 나왔는지 확인할 수 있게, 함께 읽어 계산에 쓴 파일의 경로와 해시를 남긴다
     out["inputs"] = [{"path": d["path"], "sha256": hashlib.sha256(Path(d["path"]).read_bytes()).hexdigest()}
@@ -628,13 +644,8 @@ def _attach_combat(cfg: dict, entries: list, ups: dict) -> None:
             raise ConfigError(f"판 안 성장에 없거나 삭제된 빌드입니다: {cfg['build']}{c.did_you_mean(cfg['build'], builds)}")
         gains, _ = gr.choice_stats(choices, refs["items"], [], [])
         usable = [dict(ch, stats=gains[ch["id"]]) for ch in choices if ch["id"] in gains]
-        own, levels, last = build.get("level_at") or {}, [], 1
-        for sid in stages:  # 레벨이 없는 단계는 앞 단계의 레벨을 이어 쓴다
-            v = own.get(sid, settings["level_at"].get(sid))
-            last = v if v is not None else last
-            levels.append(last)
-        growth = {"choices": usable, "build": build, "levels": levels, "offers": settings["offers"],
-                  "stats": {ch["id"]: ch["stats"] for ch in usable}}
+        growth = {"choices": usable, "build": build, "levels": _build_levels(stages, build, settings["level_at"]), "offers": settings["offers"],
+                  "stats": {ch["id"]: ch["stats"] for ch in usable}, "builds": builds, "level_at": settings["level_at"]}
     roles = set(prep["settings"]["roles"]["player"].values())
     doubled = sorted(set(cfg["stat_effects"]) & roles)
     if doubled:
@@ -646,6 +657,16 @@ def _attach_combat(cfg: dict, entries: list, ups: dict) -> None:
                       "upgrade_stats": {uid: u["stats"] for uid, u in ups.items()},
                       "growth": growth, "no_effect": [u for u, x in ups.items() if not set(x["stats"]) & known]}
     _check_reachable_stats(cfg)
+
+
+def _build_levels(stages: list, build: dict, level_at: dict, override: dict | None = None) -> list:
+    """단계 순서대로 그 빌드의 레벨. override({단계: 레벨})가 먼저다. 레벨이 없는 단계는 앞 단계의 레벨을 이어 쓴다."""
+    own, levels, last = build.get("level_at") or {}, [], 1
+    for sid in stages:
+        v = (override or {}).get(sid, own.get(sid, level_at.get(sid)))
+        last = v if v is not None else last
+        levels.append(last)
+    return levels
 
 
 def _effects(cfg: dict, owned) -> tuple[float, int]:
@@ -676,12 +697,49 @@ def _stage_margin_for(cfg: dict, sid: str, owned, growth_counts, cache: dict) ->
     return cache[key][0]
 
 
-def _growth_counts(cfg: dict, seed: int, trials: int = 1, extra_levels: int = 0) -> list:
-    """판 안 성장의 단계별 선택 횟수(시행마다). extra_levels: 전투 밖 강화(stat_effects levels)로 더해지는 레벨업 횟수."""
+def _growth_counts(cfg: dict, seed: int, trials: int = 1, extra_levels: int = 0, levels: list | None = None, build: dict | None = None) -> list:
+    """판 안 성장의 단계별 선택 횟수(시행마다). extra_levels: 전투 밖 강화(stat_effects levels)로 더해지는 레벨업 횟수.
+    levels·build: 설정과 다른 레벨·빌드로 볼 때(플레이 기록과 비교)."""
     g = cfg["_combat"]["growth"]
     if not g:
         return [[()] * len(cfg["_combat"]["stages"])] * trials
-    return gr.simulate_trials(g["choices"], g["build"], [lv + extra_levels for lv in g["levels"]], g["offers"], trials, seed)
+    return gr.simulate_trials(g["choices"], build or g["build"], [lv + extra_levels for lv in levels or g["levels"]], g["offers"], trials, seed)
+
+
+def _average_picks(cfg: dict, extra_levels: int = 0, levels: list | None = None, build: dict | None = None) -> list:
+    """단계마다 평균 선택 횟수 {선택지: 횟수}. 판 안 성장이 없으면 빈 dict들."""
+    out: list = [{} for _ in cfg["_combat"]["stages"]]
+    if cfg["_combat"]["growth"]:
+        runs = _growth_counts(cfg, cfg["seed"], 200, extra_levels, levels, build)
+        for per_stage in runs:
+            for n, counts in enumerate(per_stage):
+                for ch, times in counts:
+                    out[n][ch] = out[n].get(ch, 0) + times / len(runs)
+    return out
+
+
+def stage_rows(cfg: dict, owned, levels: dict | None = None, build_id: str | None = None) -> dict:
+    """{단계: 전투 계산 행}. 산 강화 owned와 판 안 성장(평균)을 기준 장비에 더한다. levels({단계: 레벨})·build_id를 주면 그 값을 쓴다
+    (플레이 기록과 비교할 때 기록의 레벨·빌드로 맞춘다). 스탯이 계산에 쓸 수 없는 값이 되면 ConfigError."""
+    ctx = cfg["_combat"]
+    g, build, order = ctx["growth"], None, None
+    if g:
+        build = g["builds"].get(build_id or cfg["build"])
+        if build is None:
+            raise ConfigError(f"판 안 성장에 없거나 삭제된 빌드입니다: {build_id}{c.did_you_mean(str(build_id), g['builds'])}")
+        # 기록의 레벨에는 전투 밖 강화로 더 오른 레벨이 이미 들어 있다. 기록이 없는 단계에만 더한다
+        extra = _effects(cfg, owned)[1]
+        order = [lv if sid in (levels or {}) else lv + extra
+                 for sid, lv in zip(ctx["stages"], _build_levels(ctx["stages"], build, g["level_at"], levels))]
+    avg = _average_picks(cfg, 0, order, build)
+    base = gr.stat_bonus(ctx["upgrade_stats"], ((u, 1) for u in owned))
+    out = {}
+    for n, sid in enumerate(ctx["stages"]):
+        rows, problem = cb.evaluate(ctx["prep"], sid, gr.stat_bonus(g["stats"], avg[n].items(), base) if g else base)
+        if rows is None:
+            raise ConfigError(f"단계 {sid}의 스탯을 전투 계산에 쓸 수 없습니다: {problem}. 강화: {', '.join(sorted(owned)) or '없음'}")
+        out[sid] = rows
+    return out
 
 
 def _check_reachable_stats(cfg: dict) -> None:
@@ -714,18 +772,7 @@ def combat_overview(cfg: dict) -> dict:
     ctx, skill = cfg["_combat"], cfg["player"]["skill"]
     g = ctx["growth"]
     goal = targets(cfg)
-
-    def average(extra_levels: int) -> list:
-        out: list = [{} for _ in ctx["stages"]]
-        if g:
-            runs = _growth_counts(cfg, cfg["seed"], 200, extra_levels)
-            for per_stage in runs:
-                for n, counts in enumerate(per_stage):
-                    for ch, times in counts:
-                        out[n][ch] = out[n].get(ch, 0) + times / len(runs)
-        return out
-
-    avg, avg_new = average(_effects(cfg, goal)[1]), average(0)
+    avg, avg_new = _average_picks(cfg, _effects(cfg, goal)[1]), _average_picks(cfg)
     even = cfg["survival"]["even_margin"]
 
     def limit(bonus: dict) -> tuple:
@@ -822,6 +869,8 @@ def simulate(cfg: dict) -> dict:
         "longest_stall_runs": {"median": percentile(stalls, 50), "p90": percentile(stalls, 90), "max": max(stalls)},
         "curve": curve,
     }
+    if "provenance" in cfg:
+        out["provenance"] = cfg["provenance"]
     if combat:
         out.update(combat_overview(cfg))
     else:

@@ -62,7 +62,7 @@ description: "Keeps items, permanent upgrades, and enemies in single-source JSON
    ```
 4. **결과를 문서에 출처와 함께 적는다.** 결과값은 `[계산: reports/meta.json]`처럼 저장한 파일을 출처로 쓴다. 데이터 파일의 수치는 md 태그 대신 각 항목의 `provenance` 필드로 표시한다.
 5. **한 번에 하나만 바꾸고 다시 돌린다.** 같은 seed·trials·max_runs로 비교한다. 여러 값을 한꺼번에 바꾸면 어느 변경이 효과를 냈는지 알 수 없다.
-6. **플레이 기록이 생기면 보정한다.** 실제 런의 도달 방(단계) 분포와 모델의 `survival_at_base_power`(전투 계산 모델은 `survival_by_stage`), 마일스톤 분포를 비교해 `survival.slope`와 `player.skill`(전투 계산 모델은 `even_margin`도)을 맞춘다. 보정 근거가 된 파라미터만 `[측정: 기록 출처]`로 올린다.
+6. **플레이 기록이 생기면 보정한다.** 전투 계산 모델은 `calibrate`가 기록의 단계 통과율과 비교해 `slope`·`even_margin`을 제안한다([playtest-verdict](../playtest-verdict/references/calibration.md)). 추상 모델은 실제 런의 도달 방 분포와 `survival_at_base_power`, 마일스톤 분포를 손으로 비교해 `survival.slope`와 `player.skill`을 맞춘다. 보정 근거가 된 파라미터만 `[측정: 기록 출처]`로 올린다.
 
 ## 판정 규칙
 

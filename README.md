@@ -17,7 +17,7 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 
 | 스킬 | 하는 일 |
 | --- | --- |
-| [studio-data](skills/studio-data/SKILL.md) | **공용 도구.** 실행 파일 `studio.py` 하나로 검사(check)·뷰어(view)·시뮬레이션(simulate)·수치 출처 검사(provenance)·Claude Code 연결(setup). 다른 스킬과 함께 설치 |
+| [studio-data](skills/studio-data/SKILL.md) | **공용 도구.** 실행 파일 `studio.py` 하나로 검사(check)·뷰어(view)·시뮬레이션(simulate)·플레이 기록 보정(calibrate)·수치 출처 검사(provenance)·Claude Code 연결(setup). 다른 스킬과 함께 설치 |
 | [concept-exploration](skills/concept-exploration/SKILL.md) | 막연한 방향을 구조가 다른 게임 가설로 펼치고, 단순 전략으로 반증하고, 고른 안을 필러·가설·최소 프로토타입이 있는 브리프로 정리 |
 | [numeric-provenance](skills/numeric-provenance/SKILL.md) | 기획 수치를 `[가정]` / `[계산: 출처]` / `[측정: 출처]`로 표시하고, 확정 판정 전에 스크립트로 검사 |
 | [progression-economy](skills/progression-economy/SKILL.md) | 아이템·영구 강화·적 데이터의 단일 원본 관리와 뷰어, 티어 역전·완전 열위·드랍 천장·강화 사슬·적 위협도 진행 검사, 로그라이크 메타 성장 시뮬레이션 |
@@ -162,6 +162,7 @@ python3 skills/studio-data/scripts/studio.py view skills/studio-data/assets/samp
 python3 skills/studio-data/scripts/studio.py check skills/studio-data/assets/sample-project --table
 python3 skills/studio-data/scripts/studio.py simulate skills/studio-data/assets/sample-project/data/meta.json
 python3 skills/studio-data/scripts/studio.py simulate skills/studio-data/assets/sample-project/data/meta_combat.json
+python3 skills/studio-data/scripts/studio.py calibrate skills/studio-data/assets/sample-project/data/meta_combat.json
 python3 skills/studio-data/scripts/studio.py provenance design/
 ```
 

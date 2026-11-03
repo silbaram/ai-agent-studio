@@ -225,7 +225,8 @@ const LABEL = {
           unknown_stage: "없는 단계", unknown_choice: "없는 선택지", build_dominated: "빌드가 밀림", level_decreases: "레벨 감소",
           build_invalid: "빌드 스탯 오류", stat_not_in_combat: "전투에 안 쓰는 스탯", stat_not_found: "역할 스탯 이름 오타",
           level_missing: "레벨 없는 단계", duplicate_purchase: "중복 구매", enhance_gap: "강화 단계 어긋남", weights_ignored: "가중치 무시",
-          meta_income_differs: "메타 설정과 수입 다름", meta_order_differs: "메타 설정과 순서 다름", kill_not_in_stage: "전투 단계 밖 처치" },
+          meta_income_differs: "메타 설정과 수입 다름", meta_order_differs: "메타 설정과 순서 다름", kill_not_in_stage: "전투 단계 밖 처치",
+          stage_counts_mismatch: "단계 판 수 어긋남", unknown_reference: "지금 데이터에 없는 id" },
   unchecked: { nothing: "계산한 것 없음", value: "가치 비교(스탯 예산 없음)", meta: "메타 성장 설정 없음", drop_tables: "드랍 테이블 없음" },
 };
 const KIND_LABEL = { concepts: "컨셉", items: "아이템", upgrades: "영구 강화", enemies: "적", combat: "전투 계산", growth: "판 안 성장",
@@ -1014,6 +1015,9 @@ function renderPlaytests(ds, idx) {
         ? el("ul", {}, e.observations.map((o) => el("li", {}, el("span", { class: "mono", text: ((o && o.hypothesis) || "?") + ": " }),
             String(o && o.value !== undefined ? o.value : "?") + (o && o.n !== undefined ? ` (n=${o.n})` : ""),
             o && o.metric ? el("div", { class: "muted", text: o.metric }) : null))) : dash("관찰값 없음");
+      const stageStats = Array.isArray(e.stage_stats) && e.stage_stats.length
+        ? el("ul", {}, e.stage_stats.map((x) => el("li", {}, el("span", { class: "mono", text: ((x && x.stage) || "?") + ": " }),
+            `${x && x.cleared}/${x && x.entered}판 통과` + (x && x.level !== undefined ? ` · 레벨 ${fmt(x.level)}` : "") + (x && x.duration !== undefined ? ` · 길이 ${fmt(x.duration)}` : "")))) : null;
       const notes = Array.isArray(e.notes) && e.notes.length
         ? el("ul", {}, e.notes.map((n) => el("li", {}, el("span", { class: "tag info", text: LABEL.note[n && n.kind] || (n && n.kind) || "?" }), (n && n.text) || ""))) : dash();
       return el("tr", { "data-id": e.id || "", class: rowClass(issues) },
@@ -1022,7 +1026,7 @@ function renderPlaytests(ds, idx) {
         el("td", { class: "mono" }, e.build || dash()),
         el("td", {}, Array.isArray(e.players) ? e.players.join(", ") : dash()),
         el("td", { class: "num" }, e.runs !== undefined ? String(e.runs) : dash()),
-        el("td", { class: "text" }, obs),
+        el("td", { class: "text" }, stageStats ? [stageStats, Array.isArray(e.observations) && e.observations.length ? obs : null] : obs),
         el("td", { class: "text" }, notes));
     });
   const ids = new Set([...sessions.map((e) => e.id), ...verdicts.map((v) => `${v.concept}.${v.hypothesis}`)]);

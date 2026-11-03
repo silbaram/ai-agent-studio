@@ -63,6 +63,7 @@
 | `purchase_policy` | 아니오 | `listed_order`(기본), `cheapest_first`, `economy`(재화 흐름의 구매 계획 순서. 아래 `economy` 연결이 필요) |
 | `economy` | 아니오 | `{file: 재화 흐름 파일, currency: 판 사이 재화 id}`. 구매 정책 `economy`가 그 파일의 구매 계획에서 이 재화로 사는 영구 강화 순서를 쓴다. 전투 계산 모델은 단계별 수입도 여기서 읽는다(추상 모델은 순서만). 재화 흐름에 오류가 있거나 이 재화의 수입·구매가 미확인이면 실행을 거부한다. 다른 재화만 미확인(예: 골드로 사는 합성의 데이터가 없음)이면 그대로 쓴다 |
 | `milestones` | 아니오 | `clear_room`은 1 ~ `rooms` |
+| `provenance` | 아니오 | 설정 수치(생존 곡선 등)의 출처. 데이터 파일과 같은 형식이다. 보정값이면 `{"kind": "computed", "source": "reports/calibrate.json"}`로 적고, 결과와 주의 문구에 그 출처가 나온다 |
 
 ## 출력
 
@@ -143,7 +144,7 @@
 1. `even_margin`을 비우고(기본 1) 한 번 돌린다. `survival_by_stage`에서 단계마다 그 단계를 정한 적(`decided_by_growth`와 그 적의 등급)과 첫 판의 새 플레이어의 여유(`margin_growth`: 영구 강화 없이 판 안 성장 평균)를 본다. 판 안 성장을 설정하지 않았으면 `margin_none`과 같다. `margin_none`(성장도 없음)으로 맞추면 실제 첫 판보다 어려운 상태에 맞춘 것이 된다.
 2. 등급마다 "새 플레이어가 첫 판에 절반쯤 넘기길 바라는" 단계의 `margin_growth`를 그 등급의 `even_margin`으로 둔다(예: 첫 보스 단계의 보스 여유). 바라는 확률이 절반이 아니면 `skill`로 옮긴다(+1이면 약 73%).
 3. 계획한 강화를 모두 산 뒤(`p_all`) 그 단계를 얼마나 넘기길 바라는지로 `slope`를 정한다. 클수록 강화의 효과가 크게 보인다.
-4. 정한 값과 이유를 설정의 `_note`나 기획 문서에 `[가정]`으로 적는다. 플레이 기록으로 보정하는 것은 B5c다(그 전에는 결과를 난이도 판정에 쓰지 않는다).
+4. 정한 값과 이유를 설정의 `_note`나 기획 문서에 `[가정]`으로 적는다. 플레이 기록이 생기면 `calibrate`로 보정한다([playtest-verdict](../../playtest-verdict/references/calibration.md), 로드맵 B5c).
 
 ### 재화 흐름과 같은 원본 쓰기
 
