@@ -1,0 +1,34 @@
+{
+  "_note": "예시 데이터다. 실제 게임 수치가 아니다. 형식: economy-flow/references/economy-format.md",
+  "economy": {
+    "currencies": { "gold": { "name": "골드" }, "soul": { "name": "영혼", "carry": true } },
+    "kill_reward": "gold",
+    "sell": { "currency": "gold", "ratio": 0.5 },
+    "prices": { "items": "gold", "enhance": "gold", "recipes": "gold", "upgrades": "soul" },
+    "time_unit": "초",
+    "leftover_max": 0.35,
+    "provenance": { "kind": "assumed", "note": "처치 수·드랍 횟수는 한 판을 평범하게 깬 경우의 추정" }
+  },
+  "stages": [
+    { "id": "zone_1", "name": "구역 1", "duration": 300,
+      "kills": { "slime": 40, "skeleton_archer": 25, "grave_knight": 3, "bone_lord": 1 }, "drops": { "chest_normal": 2 },
+      "income": { "soul": 8 }, "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "zone_2", "name": "구역 2", "duration": 360,
+      "kills": { "frost_wolf": 35, "ice_mage": 20, "frost_giant": 3, "ice_queen": 1 }, "drops": { "chest_normal": 3, "boss_reward": 1 },
+      "income": { "soul": 12 }, "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "zone_3", "name": "구역 3", "duration": 420,
+      "kills": { "void_spawn": 45, "void_herald": 1 }, "drops": { "chest_normal": 3 },
+      "income": { "soul": 20 }, "status": "approved", "provenance": { "kind": "assumed" } }
+  ],
+  "purchases": [
+    { "id": "buy_iron_sword", "name": "철검 구입", "price": { "item": "iron_sword" }, "target": [60, 300], "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "weapon_plus_2", "name": "무기 +2", "price": { "enhance": "weapon_plus", "level": 2 }, "target": [200, 600], "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "forge_storm", "name": "폭풍검 강화 합성", "price": { "recipe": "storm_upgrade" }, "after": "zone_2",
+      "intent": "대장간은 구역 2부터 열린다", "status": "proposed", "provenance": { "kind": "assumed" } },
+    { "id": "potion_stock", "name": "회복약 묶음", "price": { "amount": 120, "currency": "gold" }, "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "weapon_plus_3", "name": "무기 +3", "price": { "enhance": "weapon_plus", "level": 3, "from": 2 }, "status": "proposed", "provenance": { "kind": "assumed" } },
+    { "id": "meta_weapon_1", "name": "영구 강화: 무기 1", "price": { "upgrade": "weapon_1" }, "target": [1, 2], "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "meta_vitality_1", "name": "영구 강화: 생명력 1", "price": { "upgrade": "vitality_1" }, "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "meta_weapon_2", "name": "영구 강화: 무기 2", "price": { "upgrade": "weapon_2" }, "target": [3, 6], "status": "approved", "provenance": { "kind": "assumed" } }
+  ]
+}

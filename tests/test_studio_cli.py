@@ -25,7 +25,7 @@ class ProjectDiscovery(unittest.TestCase):
 
     def test_project_root_finds_design_and_data_but_skips_meta(self):
         names = sorted(p.relative_to(self.root).as_posix() for p in datasets.discover([self.root]))
-        self.assertEqual(names, ["data/budget.json", "data/combat.json", "data/crafting.json", "data/enemies.json", "data/items.json", "data/playtests.json", "data/upgrades.json", "design/concepts.json"])
+        self.assertEqual(names, ["data/budget.json", "data/combat.json", "data/crafting.json", "data/economy.json", "data/enemies.json", "data/items.json", "data/playtests.json", "data/upgrades.json", "design/concepts.json"])
 
     def test_deeper_folders_are_not_scanned(self):
         (self.root / "data" / "old").mkdir()
@@ -34,8 +34,8 @@ class ProjectDiscovery(unittest.TestCase):
         self.assertFalse(any("old" in parts for parts in found))  # 임시 폴더 이름에 old가 들어가도 흔들리지 않게 상대 경로로 본다
 
     def test_same_file_given_twice_is_listed_once(self):
-        self.assertEqual(len(datasets.discover([self.root / "data", self.root / "data/items.json"])), 7)
-        self.assertEqual(len(datasets.discover([self.root / "data", self.root / "data" / ".." / "data" / "items.json"])), 7)
+        self.assertEqual(len(datasets.discover([self.root / "data", self.root / "data/items.json"])), 8)
+        self.assertEqual(len(datasets.discover([self.root / "data", self.root / "data" / ".." / "data" / "items.json"])), 8)
 
     def test_wrong_shaped_key_is_still_that_kind(self):
         # 형식이 틀려도 종류로 인정해야 검사기가 형식 오류를 보고한다 (조용히 건너뛰면 안 된다).
@@ -57,17 +57,17 @@ class Check(unittest.TestCase):
     def test_whole_sample_project_passes(self):
         code, out = run_cli("check", self.root)
         self.assertEqual(code, 0)
-        self.assertIn("전체: 파일 8개 · 오류 0 · 경고 0 · 확인한 경고 1 → PASS", out)
+        self.assertIn("전체: 파일 9개 · 오류 0 · 경고 0 · 확인한 경고 1 → PASS", out)
 
     def test_json_payload_lists_every_dataset(self):
         code, out = run_cli("check", self.root, "--json")
         data = json.loads(out)
-        self.assertEqual(sorted(d["kind"] for d in data["datasets"]), ["budget", "combat", "concepts", "crafting", "enemies", "items", "playtests", "upgrades"])
+        self.assertEqual(sorted(d["kind"] for d in data["datasets"]), ["budget", "combat", "concepts", "crafting", "economy", "enemies", "items", "playtests", "upgrades"])
 
     def test_assumption_gate_applies_to_data_and_brief_criteria(self):
         code, out = run_cli("check", self.root, "--fail-on-assumed")
         self.assertEqual(code, 1)
-        self.assertEqual(out.count("gate:"), 8)
+        self.assertEqual(out.count("gate:"), 9)
         code, out = run_cli("check", self.root / "design", "--fail-on-assumed")
         self.assertEqual(code, 1)
         self.assertIn("parry_tempo.brief.hypotheses[0].failure_signal", out)
@@ -134,7 +134,7 @@ class ReviewRegressions(unittest.TestCase):
                 code, out = run_cli("check", self.root)
                 self.assertEqual(code, 1)
                 self.assertIn(f"{key} 배열이 필요합니다", out)
-                self.assertIn("파일 8개", out)
+                self.assertIn("파일 9개", out)
                 self.save(rel, original)
 
     def test_non_string_origin_is_a_schema_error_not_a_crash(self):
@@ -216,7 +216,7 @@ class ReviewRegressions(unittest.TestCase):
             datasets.collect([self.root])
         finally:
             datasets.read = original
-        self.assertEqual(sorted(calls), ["budget.json", "combat.json", "concepts.json", "crafting.json", "enemies.json", "items.json", "meta.json", "playtests.json", "upgrades.json"])
+        self.assertEqual(sorted(calls), ["budget.json", "combat.json", "concepts.json", "crafting.json", "economy.json", "enemies.json", "items.json", "meta.json", "playtests.json", "upgrades.json"])
 
 
 class ViewWithoutData(unittest.TestCase):
@@ -295,7 +295,7 @@ class ViewerWithConcepts(unittest.TestCase):
             server.shutdown()
             server.server_close()
         kinds = {d["kind"]: d for d in snap["datasets"]}
-        self.assertEqual(set(kinds), {"concepts", "items", "upgrades", "enemies", "combat", "budget", "crafting", "playtests"})
+        self.assertEqual(set(kinds), {"concepts", "items", "upgrades", "enemies", "combat", "budget", "crafting", "economy", "playtests"})
         self.assertEqual(kinds["concepts"]["report"]["approved"], ["parry_tempo"])
 
     def test_page_file_exists_where_the_server_looks(self):

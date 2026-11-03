@@ -57,7 +57,7 @@ def level_costs(levels: list[dict], replace_cost: float = 0.0) -> list[dict]:
     return out
 
 
-def _check_track(t: dict, errors: list) -> bool:
+def check_track(t: dict, errors: list) -> bool:
     where, ok = t["id"], c.check_common(t, t["id"], errors)
     filt = t.get("applies_to")
     ids = t.get("items")
@@ -106,7 +106,7 @@ def _side_of(spec, where: str, label: str, errors: list) -> dict | None:
     return {"item": spec.get("item"), "match": spec.get("match"), "count": count}
 
 
-def _check_recipe(r: dict, errors: list) -> dict | None:
+def check_recipe(r: dict, errors: list) -> dict | None:
     where, ok = r["id"], c.check_common(r, r["id"], errors)
     raw = r.get("inputs")
     if not (isinstance(raw, list) and raw):
@@ -228,9 +228,9 @@ def validate(data: dict, items: dict | None = None, drop_tables: dict | None = N
     for key, raw in (("enhance", raw_tracks), ("recipes", raw_recipes)):
         if not isinstance(raw, list):
             _err(errors, "schema", key, f"{key}는 배열이어야 합니다.")
-    tracks = [t for _, t in c.check_identity(raw_tracks if isinstance(raw_tracks, list) else [], "enhance", errors) if _check_track(t, errors)]
+    tracks = [t for _, t in c.check_identity(raw_tracks if isinstance(raw_tracks, list) else [], "enhance", errors) if check_track(t, errors)]
     recipe_entries = [r for _, r in c.check_identity(raw_recipes if isinstance(raw_recipes, list) else [], "recipes", errors)]
-    recipes = [x for x in (_check_recipe(r, errors) for r in recipe_entries) if x]
+    recipes = [x for x in (check_recipe(r, errors) for r in recipe_entries) if x]
     item_spec = (budget or {}).get("sides", {}).get("items")
     tol = (budget or {}).get("tolerance", bg.DEFAULT_TOLERANCE)
     unchecked = 0 if items is not None else 1

@@ -58,6 +58,10 @@ description: "Models item enhancement (cost, success rate, and keep/downgrade/de
 
 한 번에 하나만 바꾼다(성공률, 비용, 수량, 보너스 중 하나). 숫자를 손으로 맞춰 경고를 없애지 않는다. 바꿨다면 무엇을 왜 바꿨는지와 전·후 표를 남긴다. 강화·합성 수치는 기획 판단이라 처음에는 `provenance`가 `assumed`다.
 
+## 다른 스킬과의 연결
+
+[economy-flow](../economy-flow/SKILL.md)가 강화 기대 비용과 합성 비용을 구매 가격으로 가져와 언제 살 수 있는지 계산한다.
+
 ## 보고
 
 - 강화 대상별 최고 단계까지의 기대 비용·기대 시도, 비용이 급격히 늘어나는 단계

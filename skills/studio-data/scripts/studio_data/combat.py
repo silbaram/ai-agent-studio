@@ -113,8 +113,7 @@ def read_settings(data: dict, errors: list) -> dict | None:
             if m not in METRICS:
                 _err(errors, "schema", f"combat.targets.{rank}", f"알 수 없는 지표 '{m}'.{did_you_mean(m, METRICS)}")
                 ok = False
-            elif not (isinstance(rng, list) and len(rng) == 2 and all(v is None or c.is_number(v) for v in rng)
-                      and rng != [None, None] and (None in rng or rng[0] <= rng[1])):
+            elif not c.valid_range(rng):
                 _err(errors, "schema", f"combat.targets.{rank}.{m}", "목표 범위는 [최소, 최대]이고 한쪽은 null로 비울 수 있습니다(최소 ≤ 최대).")
                 ok = False
     if not ok:
@@ -331,12 +330,10 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
                             _err(warnings, "target_unchecked", f"combat.targets.{e.get('rank')}.{m}",
                                  f"{METRIC_LABEL[m]} 목표를 검사하지 못했습니다: {side}에 공격 속도(attack_rate 역할) 값이 없습니다.")
                         continue
-                    lo, hi = rng
-                    if (lo is not None and v < lo) or (hi is not None and v > hi):
+                    if c.out_of_range(v, rng):
                         r["out_of_range"].append(m)
-                        span = f"{'' if lo is None else lo}~{'' if hi is None else hi}"
                         _err(warnings, "target_out_of_range", ewhere,
-                             f"{METRIC_LABEL[m]} {v}가 {RANK_LABEL.get(e.get('rank'), e.get('rank'))} 목표 {span}를 벗어납니다.", owner=where)
+                             f"{METRIC_LABEL[m]} {v}가 {RANK_LABEL.get(e.get('rank'), e.get('rank'))} 목표 {c.range_text(rng)}를 벗어납니다.", owner=where)
                 rows.append(r)
     summary = c.summary_counts(stages)
     prov = (data.get("combat") or {}).get("provenance") if isinstance(data.get("combat"), dict) else None

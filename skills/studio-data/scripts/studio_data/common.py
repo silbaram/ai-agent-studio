@@ -1,4 +1,4 @@
-"""게임 설계 데이터(컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·강화·합성·플레이 기록)의 읽기, 종류 판별, 공통 필드 검사. 표준 라이브러리만 사용한다."""
+"""게임 설계 데이터(컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·강화·합성·재화 흐름·플레이 기록)의 읽기, 종류 판별, 공통 필드 검사. 표준 라이브러리만 사용한다."""
 from __future__ import annotations
 
 import csv
@@ -12,10 +12,10 @@ STATUSES = ("proposed", "approved", "cut")
 PROVENANCE_KINDS = {"assumed": "assumed", "computed": "computed", "measured": "measured",
                     "가정": "assumed", "계산": "computed", "측정": "measured"}
 TEXT_FIELDS = ("name", "effect", "intent")
-DATASET_KINDS = ("concepts", "items", "upgrades", "enemies", "combat", "budget", "crafting", "playtests")
+DATASET_KINDS = ("concepts", "items", "upgrades", "enemies", "combat", "budget", "crafting", "economy", "playtests")
 KIND_LABELS = {"concepts": "컨셉", "items": "아이템", "upgrades": "영구 강화", "enemies": "적", "combat": "전투 계산",
-               "budget": "스탯 예산", "crafting": "강화·합성", "playtests": "플레이 기록"}
-LIST_KEYS = {"combat": ("stages",), "budget": ("archetypes",), "crafting": ("enhance", "recipes")}  # 항목 배열의 키가 종류 이름과 다른 경우
+               "budget": "스탯 예산", "crafting": "강화·합성", "economy": "재화 흐름", "playtests": "플레이 기록"}
+LIST_KEYS = {"combat": ("stages",), "budget": ("archetypes",), "crafting": ("enhance", "recipes"), "economy": ("stages", "purchases")}  # 항목 배열의 키가 종류 이름과 다른 경우
 SUBFOLDERS = ("design", "data")
 STAT_PREFIX = "stat."
 
@@ -38,6 +38,22 @@ def did_you_mean(name: str, known) -> str:
     """오타 안내 문장. 비슷한 이름이 없으면 빈 문자열."""
     close = difflib.get_close_matches(name, list(known), n=1, cutoff=0.6)
     return f" '{close[0]}'의 오타인가요?" if close else ""
+
+
+def valid_range(rng) -> bool:
+    """목표 범위 [최소, 최대]. 한쪽은 None(열림)일 수 있고, 둘 다 있으면 최소 ≤ 최대."""
+    return (isinstance(rng, list) and len(rng) == 2 and all(v is None or is_number(v) for v in rng)
+            and rng != [None, None] and (None in rng or rng[0] <= rng[1]))
+
+
+def out_of_range(v, rng) -> bool:
+    lo, hi = rng
+    return (lo is not None and v < lo) or (hi is not None and v > hi)
+
+
+def range_text(rng) -> str:
+    lo, hi = rng
+    return f"{'' if lo is None else f'{lo:g}'}~{'' if hi is None else f'{hi:g}'}"
 
 
 def is_number(v) -> bool:

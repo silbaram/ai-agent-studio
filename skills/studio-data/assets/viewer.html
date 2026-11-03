@@ -218,12 +218,15 @@ const LABEL = {
           over_budget: "예산 넘침", under_budget: "예산 모자람", stat_without_cost: "원가 없는 스탯", multiplier_missing: "배수 없음",
           curve_missing_point: "곡선 값 없음", curve_field_missing: "기준 필드 없음", curve_not_positive: "기대 예산 0 이하",
           suggestions_unavailable: "원가 제안 실패", enhance_overtakes_tier: "강화가 상위 티어 넘음", match_empty: "맞는 아이템 없음",
-          recipe_loses_value: "합성 손해", value_loop: "증식 고리", unobtainable: "얻을 수 없음" },
+          recipe_loses_value: "합성 손해", value_loop: "증식 고리", unobtainable: "얻을 수 없음",
+          reward_missing: "보상 없음", unknown_recipe: "없는 합성", unknown_enhance: "없는 강화", price_missing: "가격 없음",
+          unaffordable: "살 수 없음", currency_piles_up: "재화 남음", rarity_empty: "희귀도 비어 있음", price_source_invalid: "가격 출처 오류",
+          unknown_stage: "없는 단계" },
 };
 const KIND_LABEL = { concepts: "컨셉", items: "아이템", upgrades: "영구 강화", enemies: "적", combat: "전투 계산", budget: "스탯 예산",
-                     crafting: "강화·합성", playtests: "플레이 기록" };
-const KIND_ORDER = ["concepts", "items", "upgrades", "enemies", "combat", "budget", "crafting", "playtests"];
-const OBJECT_KINDS = ["combat", "budget", "crafting"];  // 최상위가 배열이 아니라 객체인 종류
+                     crafting: "강화·합성", economy: "재화 흐름", playtests: "플레이 기록" };
+const KIND_ORDER = ["concepts", "items", "upgrades", "enemies", "combat", "budget", "crafting", "economy", "playtests"];
+const OBJECT_KINDS = ["combat", "budget", "crafting", "economy"];  // 최상위가 배열이 아니라 객체인 종류
 const DEFAULT_SEARCH = ["id", "name", "effect", "intent"];
 const statusLabels = (ds) => KINDS[ds.kind].statusLabels || LABEL.status;
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
@@ -271,6 +274,12 @@ const KINDS = {
   },
   crafting: {
     listKey: "recipes", groupName: "", custom: (ds, idx) => renderCrafting(ds, idx),
+    searchFields: ["id", "name", "intent"],
+    groupOf: () => "all", groupLabel: () => "", defaultSort: { key: "id", desc: false },
+    columns: () => [], tieBreak: () => () => 0, groupMeta: () => null, extras: () => null,
+  },
+  economy: {
+    listKey: "purchases", groupName: "", custom: (ds, idx) => renderEconomy(ds, idx),
     searchFields: ["id", "name", "intent"],
     groupOf: () => "all", groupLabel: () => "", defaultSort: { key: "id", desc: false },
     columns: () => [], tieBreak: () => () => 0, groupMeta: () => null, extras: () => null,
@@ -858,6 +867,55 @@ function renderCrafting(ds, idx) {
   return out;
 }
 
+function renderEconomy(ds, idx) {
+  const r = ds.report || {};
+  const unit = r.time_unit || "초";
+  const small = (heads, body, empty) => el("div", { class: "tw" }, el("table", {}, el("thead", {}, el("tr", {}, ...heads.map((h) => el("th", {}, h)))),
+    el("tbody", {}, body.length ? body : [el("tr", {}, el("td", { colspan: String(heads.length), class: "muted", text: empty }))])));
+  const num = (v) => (v === null || v === undefined ? dash() : fmt(v));
+  const amounts = (o) => (o && Object.keys(o).length ? Object.entries(o).map(([k, v]) => `${k} ${fmt(v)}`).join(" · ") : "–");
+  const badges = (issues) => (issues && issues.length ? el("div", { class: "badges" }, issues.map((x) => el("span", { class: "tag " + x.level, title: x.message, text: LABEL.code[x.code] || x.code }))) : null);
+  const carry = (cur) => !!((r.currencies || {})[cur] || {}).carry;
+  const raw = { stages: Array.isArray(ds.data.stages) ? ds.data.stages : [], purchases: Array.isArray(ds.data.purchases) ? ds.data.purchases : [] };
+  const known = new Set([...raw.stages, ...raw.purchases].filter((x) => x && typeof x === "object").map((x) => x.id));
+  const general = idx.all.filter((x) => !known.has(x.where)).map((x) => el("div", { class: "group-note", text: "⚠ " + x.message }));
+  const stageRows = (ds.report ? r.stages : raw.stages.filter((x) => x && typeof x === "object")).map((st) => {
+    const issues = idx.byEntry[st.id] || [];
+    const src = st.sources || {};
+    const parts = Object.entries(src).filter(([, p]) => p.kills + p.drops + p.other > 0)
+      .map(([k, p]) => `${k}: 처치 ${fmt(p.kills)} · 드랍 판매 ${fmt(p.drops)} · 기타 ${fmt(p.other)}`).join(" / ");
+    return el("tr", { "data-id": st.id, class: issues.length ? "has-warn" : "" },
+      el("td", { class: "name" }, el("div", {}, el("span", { class: "nm", text: st.name || st.id })), st.name ? el("div", { class: "mono muted", text: st.id }) : null, badges(issues)),
+      el("td", { class: "num" }, num(st.duration)), el("td", {}, ds.report ? amounts(st.income) : dash("서버 모드")),
+      el("td", {}, ds.report ? amounts(st.rate) : dash()), el("td", {}, ds.report ? amounts(st.cumulative) : dash()),
+      el("td", { class: "text muted" }, parts || dash()));
+  });
+  const buyRows = (ds.report ? r.purchases : []).filter((p) => matches(ds, raw.purchases.find((x) => x && x.id === p.id) || p, idx.byEntry[p.id])).map((p) => {
+    const issues = idx.byEntry[p.id] || [];
+    const bad = !p.affordable || p.out_of_range;
+    const when = carry(p.currency) ? (p.runs === null ? dash() : `${p.runs}번째 판`) : (p.at === null ? (p.affordable ? dash() : "살 수 없음") : `${fmt(p.at)}${unit}`);
+    return el("tr", { "data-id": p.id, class: issues.length ? "has-warn" : "" },
+      el("td", { class: "name" }, el("div", {}, el("span", { class: "nm", text: p.name || p.id })), p.name ? el("div", { class: "mono muted", text: p.id }) : null, badges(issues)),
+      el("td", { text: p.currency + (carry(p.currency) ? " (판 사이 유지)" : "") }), el("td", { class: "num" }, num(p.price)),
+      el("td", { class: "num" + (bad ? " off" : "") }, when), el("td", { class: "mono" }, p.stage || dash()));
+  });
+  const left = Object.entries(r.leftover || {}).map(([k, v]) => el("tr", {}, el("td", { class: "mono", text: k }), el("td", { class: "num" }, num(v.amount)),
+    el("td", { class: "num" + ((r.warnings || []).some((w) => w.code === "currency_piles_up" && w.where.endsWith("." + k)) ? " off" : "") }, Math.round(v.share * 100) + "%")));
+  return [
+    ...(general.length ? [el("section", { class: "panel" }, el("div", { class: "ph" }, el("h2", {}, "전체")), ...general)] : []),
+    el("section", { class: "panel", id: "group-all" },
+      el("div", { class: "ph" }, el("h2", {}, "단계별 수입"),
+        el("span", { class: "group-meta", text: `길이 단위: ${unit}. 처치 수·드랍 횟수는 기획 가정입니다. 기대값 계산이며 실제 체감이나 재미를 판정하지 않습니다.` })),
+      small(["단계", `길이(${unit})`, "수입", `${unit}당`, "누적", "출처"], stageRows, "단계가 없습니다.")),
+    el("section", { class: "panel" },
+      el("div", { class: "ph" }, el("h2", {}, "구매 계획", el("span", { class: "muted", text: "적은 순서대로 삽니다" })),
+        el("span", { class: "group-meta", text: "판 안 재화는 살 수 있는 시점, 판 사이에 남는 재화는 몇 번째 판에 사는지 봅니다." })),
+      small(["구매", "재화", "가격", "시점", "단계"], buyRows, ds.report ? "구매 계획이 없습니다." : "계산은 서버 모드에서 보입니다.")),
+    ...(left.length ? [el("section", { class: "panel" }, el("div", { class: "ph" }, el("h2", {}, "판 끝에 남는 재화")),
+      small(["재화", "남는 양", "한 판 수입 중"], left, ""))] : []),
+  ];
+}
+
 function renderPlaytests(ds, idx) {
   const sessions = (Array.isArray(ds.data.playtests) ? ds.data.playtests : []).filter((e) => e && typeof e === "object");
   const verdicts = (Array.isArray(ds.data.verdicts) ? ds.data.verdicts : []).filter((v) => v && typeof v === "object");
@@ -942,7 +1000,7 @@ function render() {
 }
 
 function renderEmpty(snap) {
-  const files = [["design/concepts.json", "컨셉 탐색 기록"], ["data/items.json", "아이템"], ["data/upgrades.json", "영구 강화"], ["data/enemies.json", "적"], ["data/combat.json", "전투 계산"], ["data/budget.json", "스탯 예산"], ["data/crafting.json", "강화·합성"], ["data/playtests.json", "플레이 기록과 가설 판정"]];
+  const files = [["design/concepts.json", "컨셉 탐색 기록"], ["data/items.json", "아이템"], ["data/upgrades.json", "영구 강화"], ["data/enemies.json", "적"], ["data/combat.json", "전투 계산"], ["data/budget.json", "스탯 예산"], ["data/crafting.json", "강화·합성"], ["data/economy.json", "재화 흐름"], ["data/playtests.json", "플레이 기록과 가설 판정"]];
   return el("section", { class: "panel", id: "empty" },
     el("div", { class: "ph" }, el("h2", {}, "아직 데이터가 없습니다")),
     el("div", { class: "doc" },
@@ -1002,7 +1060,7 @@ async function loadFileTexts(named) {
     if (!name.toLowerCase().endsWith(".json")) { ds.error = "파일 모드에서는 JSON만 읽습니다. CSV는 서버 모드로 보세요."; return ds; }
     try {
       const data = JSON.parse(text), kind = detectKind(data);
-      if (!kind) ds.error = "컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·강화·합성·플레이 기록 데이터가 아닙니다 (최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat / budget / crafting 객체가 필요합니다).";
+      if (!kind) ds.error = "컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·강화·합성·재화 흐름·플레이 기록 데이터가 아닙니다 (최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat / budget / crafting / economy 객체가 필요합니다).";
       else Object.assign(ds, { ok: true, kind, data });
     } catch (e) { ds.error = "JSON 형식 오류: " + e.message; }
     return ds;
