@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _studio import SAMPLE, concepts as cc, playtests as pt, provenance as cp, run_cli
+from _studio import datasets, SAMPLE, concepts as cc, playtests as pt, provenance as cp, run_cli
 
 
 def sample(rel):
@@ -42,7 +42,9 @@ class Sample(unittest.TestCase):
     def test_sample_playtests_have_no_errors_or_warnings(self):
         r = pt.validate(sample("data/playtests.json"), ctx())
         self.assertEqual((r["errors"], r["warnings"]), ([], []))
-        self.assertEqual(r["unchecked"], 0)
+        self.assertEqual(r["unchecked"], len(r["unchecked_refs"]))    # 컨셉 참조는 확인했다. 단계 기록의 참조는 프로젝트 검사에서 본다
+        full = next(d["report"] for d in datasets.collect([SAMPLE]) if d["kind"] == "playtests")
+        self.assertEqual((full["errors"], full["warnings"], full["unchecked"]), ([], [], 0))
 
     def test_sample_gate_lists_hypotheses_without_a_confirmed_verdict(self):
         r = pt.validate(sample("data/playtests.json"), ctx())

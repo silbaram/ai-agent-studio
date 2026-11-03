@@ -1,6 +1,6 @@
 ---
 name: playtest-verdict
-description: "Records prototype playtest sessions as data, has a read-only judge propose a verdict (holds, refuted, unknown) for each concept hypothesis from those records, and promotes measured numbers from assumed to measured with a checkable source. Use after playing a prototype, when deciding whether a concept's hypotheses survived, or before turning an assumed number into a measured one."
+description: "Records prototype playtest sessions as data, has a read-only judge propose a verdict (holds, refuted, unknown) for each concept hypothesis from those records, promotes measured numbers from assumed to measured with a checkable source, and calibrates assumptions from recorded stage statistics: compares assumed levels, durations, kills, and income with the records, compares simulated stage clear rates with measured ones, and suggests survival curve values. Use after playing a prototype, when deciding whether a concept's hypotheses survived, before turning an assumed number into a measured one, or when checking balance assumptions against real runs."
 ---
 
 # 플레이 기록과 가설 판정
@@ -24,6 +24,7 @@ description: "Records prototype playtest sessions as data, has a read-only judge
 | `python3 .claude/skills/studio-data/scripts/studio.py check .` | 판정이 근거 세션을 가리키는가, 그 세션이 있고 그 가설을 관찰했는가, 가설·컨셉 id가 맞는가, 세션의 판 수·사람 수 | 관찰값이 정말 틀렸다는 신호에 해당하는가 |
 | `… check . --fail-on-assumed` | 선택한 컨셉의 가설 중 확정된 버팀·틀림이 아닌 것이 남았는가 | 가설이 좋은 가설인가 |
 | `… provenance design/ --check-paths` | `[측정: data/playtests.json#세션 id]`의 세션이 실제 기록에 있는가 | 측정값을 옮겨 적을 때 틀리지 않았는가 |
+| `… calibrate data/meta_combat.json` | 가정값과 기록의 차이, 단계 통과율의 예측과 실측, 기록에 맞는 생존 곡선 값 제안 | 재미, 실제 난이도. 파일을 고치지 않는다 |
 
 Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.py setup claude .`를 실행해 판정 에이전트와 훅을 설치한다([setup](../studio-data/SKILL.md#claude-code-연결)). 스킬을 다시 설치한 뒤에도 다시 실행한다.
 
@@ -60,7 +61,20 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 - 판정 기준의 문턱값(예: `80% [가정]`)은 측정값이 아니다. 기획 판단이므로 `[가정]`으로 둔다.
 - 올린 뒤 `provenance design/ --check-paths`로 세션이 실제로 있는지 확인한다.
 
-### 5. 틀렸으면 되돌아간다
+### 5. 가정값을 보정한다
+
+세션에 단계 기록(`stage_stats`)과 그때 가진 영구 강화(`upgrades`)를 적었으면 `calibrate`로 기획의 가정값과 비교한다. 형식과 읽는 법은 [references/calibration.md](references/calibration.md).
+
+```bash
+python3 .claude/skills/studio-data/scripts/studio.py calibrate data/meta_combat.json --out reports/calibrate.json
+```
+
+- 가정값 비교: 판 안 성장의 단계별 레벨, 재화 흐름의 길이·처치 수·수입을 기록의 평균과 나란히 놓는다. 시뮬레이터 설정 없이 폴더(`calibrate .`)만 넘겨도 된다.
+- 통과율 비교: 그 세션의 강화·레벨로 다시 계산한 예측이 실측의 95% 구간 안인지 본다. 구간이 넓으면 표본이 적은 것이다.
+- 생존 곡선 제안: 기록에 맞는 `slope`·`even_margin`을 제안한다. 근거가 모자란 값은 제안하지 않고 이유를 남긴다.
+- 제안은 자동으로 적용하지 않는다. 사용자에게 보여 주고 어느 값을 옮길지 정한다. 옮긴 값에는 출처를 남긴다(기록을 그대로 옮기면 측정, 평균이나 제안이면 `reports/calibrate.json`을 출처로 한 계산). 기획 목표 범위는 의도이므로 바꾸지 않는다.
+
+### 6. 틀렸으면 되돌아간다
 
 `refuted`가 확정되면 다음 중 하나를 사용자에게 제안한다. 결정은 사용자가 한다.
 
@@ -73,6 +87,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 - `check` 결과 그대로: 판정별 버팀·틀림·모름, 근거 세션 수·판 수·사람 수, 오류·경고 수, `INCOMPLETE` 여부
 - 확정되지 않은 가설 목록(`--fail-on-assumed`의 gate 줄)
 - 이번에 `[측정]`으로 올린 수치와 그 출처
+- `calibrate`를 돌렸으면: 쓴 세션과 표본, 표시된 차이, 구간을 벗어난 단계, 제안과 옮긴 값
 - 사용자 확인이 필요한 것: 제안 판정의 확정, 틀린 가설 이후의 방향
 - 실행하지 못한 검사가 있으면 그 사실
 
@@ -80,7 +95,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 - 검사기는 판정이 **증거를 가리키는지**만 본다. 관찰값이 틀렸다는 신호에 해당하는지는 판정 에이전트와 사용자가 본다.
 - 표본이 충분한지 숫자로 막지 않는다. 판 수·사람 수를 보여 줄 뿐이고, 가설의 `test`에 적은 계획과 비교하는 것은 판정 에이전트가 한다.
-- 시뮬레이터(`simulate`)를 플레이 기록으로 보정하는 절차는 아직 없다. 그 전까지 시뮬레이션 결과로 난이도를 판정하지 않는다.
+- 보정 값은 기록한 빌드와 플레이어에서 나온 값이다. 보정해도 시뮬레이션 결과로 재미나 실제 난이도를 판정하지 않는다.
 - 판정 에이전트와 훅은 Claude Code 전용이다. 훅 입력의 에이전트 이름(`agent_type`)으로 판정 에이전트를 구분한다(Claude Code 2.1.316, WSL에서 확인. Windows는 미확인).
 
 예시: `studio-data/assets/sample-project/data/playtests.json` (실제 플레이 기록이 아니다).

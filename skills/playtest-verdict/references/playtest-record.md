@@ -40,9 +40,10 @@
 | `build` | 예 | 빌드를 다시 만들 수 있는 이름. 보통 커밋 해시 |
 | `players` | 예 | 플레이한 사람 이름 배열. 같은 사람은 같은 이름으로 쓴다(사람 수를 센다) |
 | `runs` | 예 | 이 세션의 판 수 합계 |
-| `observations` | 아니오 | `[{hypothesis, value, metric, n, source, note}]`. `hypothesis`(가설 id)와 `value`(문자열 또는 수)가 필수. 없으면 경고 |
+| `observations` | 아니오 | `[{hypothesis, value, metric, n, source, note}]`. `hypothesis`(가설 id)와 `value`(문자열 또는 수)가 필수. 없고 단계 기록도 없으면 경고 |
 | `notes` | 아니오 | `[{kind: observation / preference, text}]` |
 | `logs` | 아니오 | 원본 기록 파일 경로 배열 |
+| `stage_stats`, `upgrades`, `growth_build` | 아니오 | 단계별 판 수와 평균 레벨·길이·처치·수입, 그때 가진 영구 강화, 판 안 성장 빌드. 가정값을 보정할 때 쓴다([calibration](calibration.md)) |
 | `acknowledged` | 아니오 | 확인을 마친 경고 `{경고 코드: 이유}` |
 
 `value`에는 해석이 아니라 본 것을 적는다. "개선됨" 대신 "42% → 18%". 사람마다 다르면 사람별로 적는다.
@@ -80,7 +81,8 @@
 | `session_concept_mismatch` | 오류 | 판정이 다른 컨셉의 세션을 가리킴 |
 | `observation_missing` | 오류 | 버팀·틀림인데 근거 세션에 그 가설의 관찰값이 없음 |
 | `duplicate_verdict` | 오류 | 한 가설에 `cut`이 아닌 판정이 둘 이상 |
-| `session_without_observations` | 경고 | 세션에 관찰값이 하나도 없음 |
+| `session_without_observations` | 경고 | 세션에 관찰값도 단계 기록도 없음 |
+| `stage_counts_mismatch`, `unknown_reference` | 경고 | 단계 기록의 판 수가 이어지지 않음, 지금 데이터에 없는 id([calibration](calibration.md)) |
 
 - 컨셉 데이터를 함께 넘기지 않으면 컨셉·가설 참조를 확인하지 못해 `INCOMPLETE`다. 프로젝트 폴더(`check .`)로 검사한다.
 - `--fail-on-assumed`는 선택(approved)한 컨셉의 가설 중 **확정(approved)된 버팀·틀림**이 아닌 것이 있으면 실패한다. 제안 판정과 모름은 확정이 아니다.
