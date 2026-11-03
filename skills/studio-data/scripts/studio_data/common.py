@@ -1,4 +1,4 @@
-"""게임 설계 데이터(컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·플레이 기록)의 읽기, 종류 판별, 공통 필드 검사. 표준 라이브러리만 사용한다."""
+"""게임 설계 데이터(컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·강화·합성·플레이 기록)의 읽기, 종류 판별, 공통 필드 검사. 표준 라이브러리만 사용한다."""
 from __future__ import annotations
 
 import csv
@@ -12,14 +12,14 @@ STATUSES = ("proposed", "approved", "cut")
 PROVENANCE_KINDS = {"assumed": "assumed", "computed": "computed", "measured": "measured",
                     "가정": "assumed", "계산": "computed", "측정": "measured"}
 TEXT_FIELDS = ("name", "effect", "intent")
-DATASET_KINDS = ("concepts", "items", "upgrades", "enemies", "combat", "budget", "playtests")
+DATASET_KINDS = ("concepts", "items", "upgrades", "enemies", "combat", "budget", "crafting", "playtests")
 KIND_LABELS = {"concepts": "컨셉", "items": "아이템", "upgrades": "영구 강화", "enemies": "적", "combat": "전투 계산",
-               "budget": "스탯 예산", "playtests": "플레이 기록"}
-LIST_KEYS = {"combat": "stages", "budget": "archetypes"}  # 항목 배열의 키가 종류 이름과 다른 경우
+               "budget": "스탯 예산", "crafting": "강화·합성", "playtests": "플레이 기록"}
+LIST_KEYS = {"combat": ("stages",), "budget": ("archetypes",), "crafting": ("enhance", "recipes")}  # 항목 배열의 키가 종류 이름과 다른 경우
 SUBFOLDERS = ("design", "data")
 STAT_PREFIX = "stat."
 
-# CSV 열 중 수로 읽을 것과 목록(;로 구분)으로 읽을 것. 컨셉·전투 계산·스탯 예산·플레이 기록은 CSV를 지원하지 않는다.
+# CSV 열 중 수로 읽을 것과 목록(;로 구분)으로 읽을 것. 아이템·영구 강화·적만 CSV를 지원한다.
 CSV_KINDS = ("items", "upgrades", "enemies")
 CSV_NUMERIC = {
     "items": ("tier", "price"),
@@ -207,8 +207,9 @@ def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
     확인한 경고는 경고 수와 --strict에서 빠지지만 지워지지 않고 이유와 함께 남는다. 오류는 옮기지 않는다.
     경고에 owner가 있으면 그 항목의 확인으로 본다(예: 전투 계산의 '단계.적' 경고는 단계가 주인)."""
     report.setdefault("acknowledged", [])
-    entries = data.get(LIST_KEYS.get(kind, kind))
-    if not isinstance(entries, list):
+    lists = [data.get(k) for k in LIST_KEYS.get(kind, (kind,))]
+    entries = [e for lst in lists if isinstance(lst, list) for e in lst]
+    if not entries:
         return
     acks: dict = {}
     for e in entries:

@@ -66,6 +66,10 @@ python3 .claude/skills/studio-data/scripts/studio.py draft . --archetype tank --
 
 원형에 맞는 것이 없으면 `archetypes`에 새 원형을 제안한다. 원형도 기획 판단이라 `provenance`는 `assumed`다.
 
+## 다른 스킬과의 연결
+
+[crafting-balance](../crafting-balance/SKILL.md)가 이 원가로 합성의 가치 비율과 강화한 아이템이 다음 티어를 넘는지 계산한다.
+
 ## 보고
 
 - 곡선(기준, 형태, 값)과 원가, 그 출처 (가정임을 함께)

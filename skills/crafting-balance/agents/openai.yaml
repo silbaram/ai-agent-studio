@@ -1,0 +1,4 @@
+interface:
+  display_name: "강화·합성"
+  short_description: "강화 단계별 기대 비용·시도, 합성의 가치 비율과 무작위 결과의 기대 횟수를 계산하고, 아이템 증식 고리와 얻을 수 없는 아이템을 찾음"
+  default_prompt: "Use $crafting-balance to model this game's enhancement levels and crafting recipes, compute expected costs and value ratios, and report loops and unobtainable items."

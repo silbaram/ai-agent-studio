@@ -6,12 +6,12 @@ import json
 from pathlib import Path
 
 from . import common as c
-from . import budget, combat, concepts, enemies, items, playtests, upgrades
+from . import budget, combat, concepts, crafting, enemies, items, playtests, upgrades
 
 VALIDATORS = {"concepts": concepts, "items": items, "upgrades": upgrades, "enemies": enemies, "combat": combat,
-              "budget": budget, "playtests": playtests}
-NOT_DATA = ("컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·플레이 기록 데이터가 아닙니다 "
-            "(최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat / budget 객체가 필요합니다).")
+              "budget": budget, "crafting": crafting, "playtests": playtests}
+NOT_DATA = ("컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·강화·합성·플레이 기록 데이터가 아닙니다 "
+            "(최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat / budget / crafting 객체가 필요합니다).")
 
 
 def read(path: Path) -> dict:
@@ -99,6 +99,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
     """읽은 항목들에 검사 결과(report)를 붙인다. 적의 드랍 테이블은 함께 읽은 아이템 데이터로,
     플레이 기록의 컨셉·가설 참조는 함께 읽은 컨셉 데이터로, 전투 계산은 함께 읽은 아이템·영구 강화·적 데이터로 확인한다.
     스탯 예산은 아이템·적 데이터와 비교하고, 전투 계산이 있으면 그 공식으로 잰 스탯 원가 제안을 붙인다.
+    강화·합성은 아이템 데이터와 드랍 테이블로 참조·획득 경로를, 스탯 예산이 있으면 가치를 확인한다.
     검사기가 예상하지 못한 예외를 내면 그 파일만 오류로 표시하고 나머지는 계속 검사한다."""
     loaded_items = [d for d in entries if d["ok"] and d["kind"] == "items"]
     broken_items = [d for d in entries if not d["ok"] and d.get("kind") == "items"]
@@ -110,6 +111,8 @@ def validate_all(entries: list[dict]) -> list[dict]:
             if isinstance(tables, dict):
                 drop_tables.update(tables)
     by_id = {k: _index(entries, k) for k in ("items", "upgrades", "enemies")}
+    budget_data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "budget"), None)
+    budget_settings = budget.read_settings(budget_data, []) if budget_data is not None else None
     suggestions = None
     combat_data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "combat"), None)
     if combat_data is not None and any(d["ok"] and d["kind"] == "budget" for d in entries):  # 쓰는 곳이 있을 때만 잰다
@@ -138,6 +141,8 @@ def validate_all(entries: list[dict]) -> list[dict]:
                 d["report"] = combat.validate(d["data"], **by_id)
             elif d["kind"] == "budget":
                 d["report"] = budget.validate(d["data"], items=by_id["items"], enemies=by_id["enemies"], suggestions=suggestions)
+            elif d["kind"] == "crafting":
+                d["report"] = crafting.validate(d["data"], items=by_id["items"], drop_tables=drop_tables, budget=budget_settings)
             elif d["kind"] == "playtests":
                 d["report"] = playtests.validate(d["data"], hypotheses, concepts_unreadable=bool(broken_concepts))
             else:

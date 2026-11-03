@@ -190,6 +190,9 @@ const LABEL = {
   side: { items: "아이템", enemies: "적" },
   flag: { ok: "곡선 안", over: "넘침", under: "모자람", excluded: "판정 제외", unchecked: "미확인" },
   growth: { linear: "선형", exponential: "지수", table: "표" },
+  onFail: { keep: "그대로", down: "한 단계 하락", destroy: "파괴" },
+  valueSkipped: { no_items: "아이템 데이터를 함께 검사하지 않았거나 읽지 못함", no_budget: "스탯 예산(budget.json)이 없거나 형식이 틀림",
+                  no_items_side: "스탯 예산에 아이템 쪽(budget.items)이 없거나 그 설정이 틀림" },
   cost: { small: "작음", medium: "중간", large: "큼" },
   constraint: { note: "메모", platform: "플랫폼·입력", session: "한 판 길이", feeling: "원하는 감정", team: "제작 규모",
                 engines: "엔진 후보", avoid: "피할 것", references: "참고 게임", assumed: "가정으로 둔 값",
@@ -214,11 +217,13 @@ const LABEL = {
           bad_stat: "쓸 수 없는 값", target_unchecked: "목표 미검사", requirement_missing: "선행 강화 없음",
           over_budget: "예산 넘침", under_budget: "예산 모자람", stat_without_cost: "원가 없는 스탯", multiplier_missing: "배수 없음",
           curve_missing_point: "곡선 값 없음", curve_field_missing: "기준 필드 없음", curve_not_positive: "기대 예산 0 이하",
-          suggestions_unavailable: "원가 제안 실패" },
+          suggestions_unavailable: "원가 제안 실패", enhance_overtakes_tier: "강화가 상위 티어 넘음", match_empty: "맞는 아이템 없음",
+          recipe_loses_value: "합성 손해", value_loop: "증식 고리", unobtainable: "얻을 수 없음" },
 };
-const KIND_LABEL = { concepts: "컨셉", items: "아이템", upgrades: "영구 강화", enemies: "적", combat: "전투 계산", budget: "스탯 예산", playtests: "플레이 기록" };
-const KIND_ORDER = ["concepts", "items", "upgrades", "enemies", "combat", "budget", "playtests"];
-const OBJECT_KINDS = ["combat", "budget"];  // 최상위가 배열이 아니라 객체인 종류
+const KIND_LABEL = { concepts: "컨셉", items: "아이템", upgrades: "영구 강화", enemies: "적", combat: "전투 계산", budget: "스탯 예산",
+                     crafting: "강화·합성", playtests: "플레이 기록" };
+const KIND_ORDER = ["concepts", "items", "upgrades", "enemies", "combat", "budget", "crafting", "playtests"];
+const OBJECT_KINDS = ["combat", "budget", "crafting"];  // 최상위가 배열이 아니라 객체인 종류
 const DEFAULT_SEARCH = ["id", "name", "effect", "intent"];
 const statusLabels = (ds) => KINDS[ds.kind].statusLabels || LABEL.status;
 const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
@@ -261,6 +266,12 @@ const KINDS = {
   budget: {
     listKey: "archetypes", groupName: "", custom: (ds, idx) => renderBudget(ds, idx),
     searchFields: ["id", "for", "intent"],
+    groupOf: () => "all", groupLabel: () => "", defaultSort: { key: "id", desc: false },
+    columns: () => [], tieBreak: () => () => 0, groupMeta: () => null, extras: () => null,
+  },
+  crafting: {
+    listKey: "recipes", groupName: "", custom: (ds, idx) => renderCrafting(ds, idx),
+    searchFields: ["id", "name", "intent"],
     groupOf: () => "all", groupLabel: () => "", defaultSort: { key: "id", desc: false },
     columns: () => [], tieBreak: () => () => 0, groupMeta: () => null, extras: () => null,
   },
@@ -790,6 +801,63 @@ function renderBudget(ds, idx) {
   return out;
 }
 
+function renderCrafting(ds, idx) {
+  const r = ds.report || {};
+  const small = (heads, body, empty) => el("div", { class: "tw" }, el("table", {}, el("thead", {}, el("tr", {}, ...heads.map((h) => el("th", {}, h)))),
+    el("tbody", {}, body.length ? body : [el("tr", {}, el("td", { colspan: String(heads.length), class: "muted", text: empty }))])));
+  const num = (v) => (v === null || v === undefined ? dash() : fmt(v));
+  const pct = (v) => (v === null || v === undefined ? dash() : Math.round(v * 100) + "%");
+  const badges = (issues) => (issues && issues.length ? el("div", { class: "badges" }, issues.map((x) => el("span", { class: "tag " + x.level, title: x.message, text: LABEL.code[x.code] || x.code }))) : null);
+  const side = (x) => (x && typeof x === "object" ? `${x.count ?? 1}× ` + (x.item || JSON.stringify(x.match || {})) : "?");
+  const tracks = (Array.isArray(ds.data.enhance) ? ds.data.enhance : []).filter((t) => t && typeof t === "object" && matches(ds, t, idx.byEntry[t.id]));
+  const recipes = (Array.isArray(ds.data.recipes) ? ds.data.recipes : []).filter((x) => x && typeof x === "object" && matches(ds, x, idx.byEntry[x.id]));
+  // 검색·상태 필터로 숨긴 항목의 경고도 '전체'로 옮기지 않는다: 모든 강화·합성 id를 기준으로 가른다
+  const known = new Set([...(Array.isArray(ds.data.enhance) ? ds.data.enhance : []), ...(Array.isArray(ds.data.recipes) ? ds.data.recipes : [])]
+    .filter((x) => x && typeof x === "object").map((x) => x.id));
+  const out = [];
+  const general = idx.all.filter((x) => !known.has(x.where)).map((x) => el("div", { class: "group-note", text: "⚠ " + x.message }));
+  if (general.length || (ds.report && r.value_skipped)) out.push(el("section", { class: "panel" },
+    el("div", { class: "ph" }, el("h2", {}, "전체")), ...general,
+    ds.report && r.value_skipped ? el("div", { class: "group-note", style: "color: var(--muted)", text: "가치 비교는 하지 않았습니다: " + (LABEL.valueSkipped[r.value_skipped] || r.value_skipped) }) : null));
+  for (const t of tracks) {
+    const info = (r.tracks || {})[t.id];
+    const levels = info ? info.levels : (Array.isArray(t.levels) ? t.levels.map((lv, i) => ({ level: i + 1, cost: lv.cost, success: lv.success ?? 1, on_fail: lv.on_fail || "keep", bonus_pct: null, expected_cost: null, expected_attempts: null })) : []);
+    const issues = idx.byEntry[t.id] || [];
+    out.push(el("section", { class: "panel", id: "group-" + t.id },
+      el("div", { class: "ph" }, el("h2", {}, "강화 · " + (t.name || t.id) + " ", el("span", { class: "mono muted", text: t.id })),
+        el("span", { class: "group-meta", text: (info ? `대상 ${info.items.length}개` : "대상 계산은 서버 모드") + (t.replace_cost !== undefined ? ` · 파괴 시 대체 비용 ${fmt(t.replace_cost)}` : "") })),
+      ...issues.map((x) => el("div", { class: "group-note", text: "⚠ " + x.message })),
+      t.intent ? el("div", { class: "group-note", style: "color: var(--muted)", text: "의도: " + t.intent }) : null,
+      small(["단계", "성공률", "실패 시", "비용", "누적 보너스", "0에서 기대 비용", "기대 시도"], levels.map((lv) => el("tr", {},
+        el("td", { text: "+" + lv.level }), el("td", { class: "num" }, pct(lv.success)), el("td", { text: LABEL.onFail[lv.on_fail] || lv.on_fail }),
+        el("td", { class: "num" }, num(lv.cost)), el("td", { class: "num" }, pct(lv.bonus_pct)),
+        el("td", { class: "num" }, num(lv.expected_cost)), el("td", { class: "num" }, num(lv.expected_attempts)))), "단계가 없습니다.")));
+  }
+  const body = recipes.map((x) => {
+    const info = (r.recipes || {})[x.id] || {};
+    const issues = idx.byEntry[x.id] || [];
+    const low = issues.some((i) => i.code === "recipe_loses_value");  // 강조는 검사기의 경고를 따른다(허용 오차를 여기서 다시 정하지 않는다)
+    const st = x.status || "unspecified";
+    return el("tr", { "data-id": x.id, class: [st === "cut" ? "cut" : "", issues.some((i) => i.level === "err") ? "has-err" : issues.length ? "has-warn" : ""].join(" ").trim() },
+      el("td", { class: "name" }, el("div", {}, el("span", { class: "nm", text: x.name || x.id })), x.name ? el("div", { class: "mono muted", text: x.id }) : null, badges(issues)),
+      el("td", { class: "text" }, (Array.isArray(x.inputs) ? x.inputs : []).map(side).join(" + ") || dash()),
+      el("td", { class: "text" }, side(x.output)),
+      el("td", { class: "num" }, num(x.cost ?? 0)), el("td", { class: "num" }, pct(x.success ?? 1)),
+      el("td", { class: "num" + (low ? " off" : ""), title: info.value_note || null }, info.value_ratio === null || info.value_ratio === undefined ? dash(info.value_note ? "– (" + info.value_note + ")" : "–") : pct(info.value_ratio)),
+      el("td", { class: "num" }, num(info.outcomes)), el("td", { class: "num" }, info.outcomes > 1 ? num(info.crafts_for_specific) : dash()),
+      el("td", {}, el("span", { class: "pill st-" + st, text: LABEL.status[st] || st })));
+  });
+  out.push(el("section", { class: "panel", id: "group-all" },
+    el("div", { class: "ph" }, el("h2", {}, "합성", el("span", { class: "muted", text: `${recipes.length}` })),
+      el("span", { class: "group-meta", text: "가치 비율 = 결과 예산 × 성공률 ÷ 재료 예산. 무작위 결과는 특정 아이템 하나를 얻기까지의 기대 합성 횟수를 함께 봅니다." })),
+    small(["합성", "재료", "결과", "비용", "성공률", "가치 비율", "결과 가짓수", "특정 결과까지", "상태"], body, ds.report ? "합성이 없습니다." : "계산은 서버 모드에서 보입니다.")));
+  if (r.unobtainable && r.unobtainable.length) out.push(el("section", { class: "panel" },
+    el("div", { class: "ph" }, el("h2", {}, "얻을 수 없는 아이템", el("span", { class: "muted", text: `${r.unobtainable.length}` }))),
+    el("div", { class: "doc" }, el("p", { class: "mono", text: r.unobtainable.join(", ") }),
+      el("p", { class: "muted", text: "드랍 테이블·합성 결과·crafting.other_sources 어디에도 없습니다. 시작 장비나 상점이면 other_sources에 적습니다." }))));
+  return out;
+}
+
 function renderPlaytests(ds, idx) {
   const sessions = (Array.isArray(ds.data.playtests) ? ds.data.playtests : []).filter((e) => e && typeof e === "object");
   const verdicts = (Array.isArray(ds.data.verdicts) ? ds.data.verdicts : []).filter((v) => v && typeof v === "object");
@@ -874,7 +942,7 @@ function render() {
 }
 
 function renderEmpty(snap) {
-  const files = [["design/concepts.json", "컨셉 탐색 기록"], ["data/items.json", "아이템"], ["data/upgrades.json", "영구 강화"], ["data/enemies.json", "적"], ["data/combat.json", "전투 계산"], ["data/budget.json", "스탯 예산"], ["data/playtests.json", "플레이 기록과 가설 판정"]];
+  const files = [["design/concepts.json", "컨셉 탐색 기록"], ["data/items.json", "아이템"], ["data/upgrades.json", "영구 강화"], ["data/enemies.json", "적"], ["data/combat.json", "전투 계산"], ["data/budget.json", "스탯 예산"], ["data/crafting.json", "강화·합성"], ["data/playtests.json", "플레이 기록과 가설 판정"]];
   return el("section", { class: "panel", id: "empty" },
     el("div", { class: "ph" }, el("h2", {}, "아직 데이터가 없습니다")),
     el("div", { class: "doc" },
@@ -934,7 +1002,7 @@ async function loadFileTexts(named) {
     if (!name.toLowerCase().endsWith(".json")) { ds.error = "파일 모드에서는 JSON만 읽습니다. CSV는 서버 모드로 보세요."; return ds; }
     try {
       const data = JSON.parse(text), kind = detectKind(data);
-      if (!kind) ds.error = "컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·플레이 기록 데이터가 아닙니다 (최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat / budget 객체가 필요합니다).";
+      if (!kind) ds.error = "컨셉·아이템·영구 강화·적·전투 계산·스탯 예산·강화·합성·플레이 기록 데이터가 아닙니다 (최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat / budget / crafting 객체가 필요합니다).";
       else Object.assign(ds, { ok: true, kind, data });
     } catch (e) { ds.error = "JSON 형식 오류: " + e.message; }
     return ds;

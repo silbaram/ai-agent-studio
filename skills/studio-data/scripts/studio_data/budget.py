@@ -38,6 +38,26 @@ def _multiplier(spec: dict | None, entry: dict) -> tuple[float | None, object]:
     return (v if c.is_number(v) else None), key
 
 
+def entry_budget(spec: dict, entry: dict) -> float | None:
+    """항목의 예산 Σ(스탯 × 원가). 원가 없는 스탯이 있거나 형식이 틀리면 None. 다른 검사기(강화·합성)도 쓴다."""
+    stats = entry.get("stats") or {}
+    if not isinstance(stats, dict) or not all(k in spec["costs"] and c.is_number(v) for k, v in stats.items()):
+        return None
+    return sum(v * spec["costs"][k] for k, v in stats.items())
+
+
+def expected_budget(spec: dict, entry: dict, at=None) -> float | None:
+    """항목의 기대 예산(곡선 × 배수). at을 주면 그 기준 값에서. 계산할 수 없거나 0 이하면 None."""
+    at = entry.get(spec["curve"]["by"]) if at is None else at
+    if not c.is_number(at):
+        return None
+    base = curve_value(spec["curve"], at)
+    mult, _ = _multiplier(spec["multiplier"], entry)
+    if base is None or mult is None or base * mult <= 0:
+        return None
+    return base * mult
+
+
 def _round(v: float) -> float:
     if abs(v) >= 10:
         return round(v)
@@ -198,7 +218,7 @@ def validate(data: dict, items: dict | None = None, enemies: dict | None = None,
                              f"배수 표({spec['multiplier']['field']})에 {key!r}가 없어 그 {SIDE_LABEL[side]}를 비교하지 못했습니다.")
                     unchecked += 1
                     continue
-                actual = sum(v * spec["costs"][k] for k, v in stats.items())
+                actual = entry_budget(spec, e)
                 expected = base * mult
                 if expected <= 0:
                     if at not in not_positive:

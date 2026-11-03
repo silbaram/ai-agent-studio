@@ -1,0 +1,35 @@
+{
+  "_note": "예시 데이터다. 실제 게임 수치가 아니다. 형식: crafting-balance/references/crafting-format.md",
+  "crafting": {
+    "other_sources": { "rusty_sword": "시작 장비" },
+    "provenance": { "kind": "assumed", "note": "강화 비용·성공률과 합성 수량은 기획 판단" }
+  },
+  "enhance": [
+    { "id": "weapon_plus", "name": "무기 강화", "applies_to": { "slot": "weapon" },
+      "levels": [
+        { "cost": 50, "bonus_pct": 0.1 },
+        { "cost": 100, "success": 0.8, "bonus_pct": 0.1 },
+        { "cost": 200, "success": 0.6, "on_fail": "down", "bonus_pct": 0.15 }
+      ],
+      "intent": "+3에서 실패하면 한 단계 내려가 긴장을 준다", "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "armor_plus", "name": "방어구 강화", "applies_to": { "slot": "armor" }, "replace_cost": 30,
+      "levels": [
+        { "cost": 40, "bonus_pct": 0.1 },
+        { "cost": 120, "success": 0.5, "on_fail": "destroy", "bonus_pct": 0.2 }
+      ],
+      "intent": "+2는 파괴 위험이 있는 도박", "status": "proposed", "provenance": { "kind": "assumed" } }
+  ],
+  "recipes": [
+    { "id": "forge_iron", "name": "철검 단조", "inputs": [{ "item": "rusty_sword", "count": 1 }, { "item": "whetstone", "count": 2 }],
+      "output": { "item": "iron_sword" }, "cost": 30, "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "merge_t1_weapons", "name": "1티어 무기 합치기", "inputs": [{ "match": { "tier": 1, "slot": "weapon" }, "count": 2 }],
+      "output": { "match": { "tier": 2, "slot": "weapon", "rarity": "uncommon" } }, "cost": 20,
+      "intent": "남는 1티어 무기를 2티어 고급 무기 중 무작위 하나로", "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "storm_upgrade", "name": "폭풍검 강화", "inputs": [{ "item": "iron_sword", "count": 1 }, { "item": "whetstone", "count": 3 }],
+      "output": { "item": "storm_blade" }, "cost": 100, "status": "proposed", "provenance": { "kind": "assumed" } },
+    { "id": "salvage_daggers", "name": "쌍단검 분해", "inputs": [{ "item": "twin_daggers", "count": 1 }],
+      "output": { "item": "whetstone", "count": 3 },
+      "intent": "쓰지 않는 무기를 숫돌로", "status": "approved", "provenance": { "kind": "assumed" },
+      "acknowledged": { "recipe_loses_value": "분해는 일부러 손해를 본다. 쓰지 않는 아이템을 정리하는 용도" } }
+  ]
+}
