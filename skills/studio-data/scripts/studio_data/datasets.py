@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 
 from . import common as c
-from . import concepts, enemies, items, upgrades
+from . import concepts, enemies, items, playtests, upgrades
 
-VALIDATORS = {"concepts": concepts, "items": items, "upgrades": upgrades, "enemies": enemies}
-NOT_DATA = "컨셉·아이템·영구 강화·적 데이터가 아닙니다 (최상위에 concepts / items / upgrades / enemies 배열이 필요합니다)."
+VALIDATORS = {"concepts": concepts, "items": items, "upgrades": upgrades, "enemies": enemies, "playtests": playtests}
+NOT_DATA = "컨셉·아이템·영구 강화·적·플레이 기록 데이터가 아닙니다 (최상위에 concepts / items / upgrades / enemies / playtests 배열이 필요합니다)."
 
 
 def read(path: Path) -> dict:
@@ -78,7 +78,8 @@ def discover(targets: list[Path]) -> list[Path]:
 
 
 def validate_all(entries: list[dict]) -> list[dict]:
-    """읽은 항목들에 검사 결과(report)를 붙인다. 적의 드랍 테이블은 함께 읽은 아이템 데이터로 확인한다.
+    """읽은 항목들에 검사 결과(report)를 붙인다. 적의 드랍 테이블은 함께 읽은 아이템 데이터로,
+    플레이 기록의 컨셉·가설 참조는 함께 읽은 컨셉 데이터로 확인한다.
     검사기가 예상하지 못한 예외를 내면 그 파일만 오류로 표시하고 나머지는 계속 검사한다."""
     loaded_items = [d for d in entries if d["ok"] and d["kind"] == "items"]
     broken_items = [d for d in entries if not d["ok"] and d.get("kind") == "items"]
@@ -89,12 +90,25 @@ def validate_all(entries: list[dict]) -> list[dict]:
             tables = d["data"].get("drop_tables") or {}
             if isinstance(tables, dict):
                 drop_tables.update(tables)
+    loaded_concepts = [d for d in entries if d["ok"] and d["kind"] == "concepts"]
+    broken_concepts = [d for d in entries if not d["ok"] and d.get("kind") == "concepts"]
+    hypotheses = None
+    for d in loaded_concepts:
+        index = concepts.hypothesis_index(d["data"])
+        if index is None:
+            broken_concepts.append(d)
+            continue
+        hypotheses = hypotheses or {}
+        for cid, info in index.items():
+            hypotheses.setdefault(cid, info)
     for d in entries:
         if not d["ok"]:
             continue
         try:
             if d["kind"] == "enemies":
                 d["report"] = enemies.validate(d["data"], drop_tables, items_unreadable=bool(broken_items))
+            elif d["kind"] == "playtests":
+                d["report"] = playtests.validate(d["data"], hypotheses, concepts_unreadable=bool(broken_concepts))
             else:
                 d["report"] = VALIDATORS[d["kind"]].validate(d["data"])
             c.apply_acknowledged(d["kind"], d["data"], d["report"])

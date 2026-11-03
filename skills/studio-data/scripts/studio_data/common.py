@@ -1,4 +1,4 @@
-"""게임 설계 데이터(컨셉·아이템·영구 강화·적)의 읽기, 종류 판별, 공통 필드 검사. 표준 라이브러리만 사용한다."""
+"""게임 설계 데이터(컨셉·아이템·영구 강화·적·플레이 기록)의 읽기, 종류 판별, 공통 필드 검사. 표준 라이브러리만 사용한다."""
 from __future__ import annotations
 
 import csv
@@ -11,12 +11,12 @@ STATUSES = ("proposed", "approved", "cut")
 PROVENANCE_KINDS = {"assumed": "assumed", "computed": "computed", "measured": "measured",
                     "가정": "assumed", "계산": "computed", "측정": "measured"}
 TEXT_FIELDS = ("name", "effect", "intent")
-DATASET_KINDS = ("concepts", "items", "upgrades", "enemies")
-KIND_LABELS = {"concepts": "컨셉", "items": "아이템", "upgrades": "영구 강화", "enemies": "적"}
+DATASET_KINDS = ("concepts", "items", "upgrades", "enemies", "playtests")
+KIND_LABELS = {"concepts": "컨셉", "items": "아이템", "upgrades": "영구 강화", "enemies": "적", "playtests": "플레이 기록"}
 SUBFOLDERS = ("design", "data")
 STAT_PREFIX = "stat."
 
-# CSV 열 중 수로 읽을 것과 목록(;로 구분)으로 읽을 것. 컨셉은 CSV를 지원하지 않는다.
+# CSV 열 중 수로 읽을 것과 목록(;로 구분)으로 읽을 것. 컨셉과 플레이 기록은 CSV를 지원하지 않는다.
 CSV_KINDS = ("items", "upgrades", "enemies")
 CSV_NUMERIC = {
     "items": ("tier", "price"),

@@ -17,16 +17,17 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 
 | 스킬 | 하는 일 |
 | --- | --- |
-| [studio-data](skills/studio-data/SKILL.md) | **공용 도구.** 실행 파일 `studio.py` 하나로 검사(check)·뷰어(view)·시뮬레이션(simulate)·수치 출처 검사(provenance). 다른 스킬과 함께 설치 |
+| [studio-data](skills/studio-data/SKILL.md) | **공용 도구.** 실행 파일 `studio.py` 하나로 검사(check)·뷰어(view)·시뮬레이션(simulate)·수치 출처 검사(provenance)·Claude Code 연결(setup). 다른 스킬과 함께 설치 |
 | [concept-exploration](skills/concept-exploration/SKILL.md) | 막연한 방향을 구조가 다른 게임 가설로 펼치고, 단순 전략으로 반증하고, 고른 안을 필러·가설·최소 프로토타입이 있는 브리프로 정리 |
 | [numeric-provenance](skills/numeric-provenance/SKILL.md) | 기획 수치를 `[가정]` / `[계산: 출처]` / `[측정: 출처]`로 표시하고, 확정 판정 전에 스크립트로 검사 |
 | [progression-economy](skills/progression-economy/SKILL.md) | 아이템·영구 강화·적 데이터의 단일 원본 관리와 뷰어, 티어 역전·완전 열위·드랍 천장·강화 사슬·적 위협도 진행 검사, 로그라이크 메타 성장 시뮬레이션 |
+| [playtest-verdict](skills/playtest-verdict/SKILL.md) | 프로토타입 플레이를 데이터로 기록하고, 읽기 전용 판정 에이전트가 기록만 보고 가설을 버팀·틀림·모름으로 판정, 측정값을 세션 출처와 함께 `[측정]`으로 올림 |
 
 첫 대상은 **액션 로그라이크 + 메타 성장형** 게임이다. 데이터는 JSON/CSV로 다뤄 Godot·Unity·Unreal·Roblox 어디에도 묶이지 않는다.
 
 ## 설치
 
-**스킬을 사용할 게임 프로젝트 폴더에서** 실행한다. 네 스킬을 모두 설치한다. `studio-data`가 빠지면 다른 스킬의 검사와 뷰어가 동작하지 않는다.
+**스킬을 사용할 게임 프로젝트 폴더에서** 실행한다. 다섯 스킬을 모두 설치한다. `studio-data`가 빠지면 다른 스킬의 검사와 뷰어가 동작하지 않는다.
 
 필요한 것:
 
@@ -55,7 +56,13 @@ npx skills add silbaram/ai-agent-studio --skill '*' --agent codex --copy
 - `--copy`는 독립 사본을 만든다. 이 저장소가 갱신돼도 설치본은 자동으로 바뀌지 않는다.
 - **갱신하려면 같은 명령을 다시 실행한다.** 기존 설치본을 덮어쓰므로, 설치본을 직접 고쳤다면 그 내용은 사라진다. 고칠 것이 있으면 설치본이 아니라 이 저장소를 고친다.
 - 받아 둔 이 저장소의 로컬 사본(작업 중인 브랜치 등)으로 설치하려면 `silbaram/ai-agent-studio` 대신 그 폴더 경로를 쓴다.
-- Node.js 없이 설치하려면 이 저장소의 `skills/` 안 네 폴더를 위 표의 설치 위치로 그대로 복사한다.
+- Node.js 없이 설치하려면 이 저장소의 `skills/` 안 다섯 폴더를 위 표의 설치 위치로 그대로 복사한다.
+
+Claude Code는 설치한 뒤 한 번 더 실행한다. `npx skills`는 스킬만 설치하므로, 판정 에이전트와 훅은 이 명령이 게임 프로젝트의 `.claude/agents/`와 `.claude/settings.json`에 넣는다. 스킬을 다시 설치한 뒤에도 다시 실행한다. 자세한 내용은 [studio-data의 Claude Code 연결](skills/studio-data/SKILL.md#claude-code-연결).
+
+```bash
+python3 .claude/skills/studio-data/scripts/studio.py setup claude .
+```
 
 설치 후 도구는 설치 위치에서 실행한다. 예를 들어 Claude Code에서 게임 프로젝트의 데이터를 뷰어로 보려면 게임 프로젝트 폴더에서 다음을 실행한다(Windows는 아래 표 참고).
 
@@ -94,7 +101,7 @@ python3 .claude/skills/studio-data/scripts/studio.py view . --no-browser
 
 ## 사용 예시
 
-보통 순서: 컨셉 탐색 → 프로토타입으로 가설 확인 → 데이터·수치 관리.
+보통 순서: 컨셉 탐색 → 프로토타입 플레이와 가설 판정 → 데이터·수치 관리.
 
 ```text
 $concept-exploration으로 액션 로그라이크에 성장 요소가 있는 게임 컨셉을 찾아줘.
@@ -104,6 +111,11 @@ $concept-exploration으로 액션 로그라이크에 성장 요소가 있는 게
 ```text
 $numeric-provenance로 design/economy.md의 모든 수치에 출처 태그를 달아줘.
 에이전트가 제안한 값은 가정으로 두고, 확정 판정은 하지 마.
+```
+
+```text
+$playtest-verdict로 오늘 플레이한 것을 기록해줘. 나, 친구 2명이 각각 3판씩 했고 빌드는 지금 커밋이야.
+관찰값은 내가 말한 것과 로그 파일에 있는 것만 적고, 판정은 studio-judge에게 맡겨서 제안만 보여줘.
 ```
 
 ```text
@@ -122,7 +134,7 @@ python3 skills/studio-data/scripts/studio.py simulate skills/studio-data/assets/
 python3 skills/studio-data/scripts/studio.py provenance design/
 ```
 
-`view`는 프로젝트의 `design/`·`data/`에 있는 컨셉·아이템·영구 강화·적 데이터를 브라우저에서 탭으로 보여 주는 읽기 전용 뷰어다. 문서를 따로 생성하지 않으므로 동기화할 것이 없고, 원본을 고치면 화면이 자동으로 갱신된다. Python 없이 `skills/studio-data/assets/viewer.html`을 직접 열어 '불러오기'로 볼 수도 있지만, 그때는 검사·계산 없이 원본 값만 보인다.
+`view`는 프로젝트의 `design/`·`data/`에 있는 컨셉·아이템·영구 강화·적·플레이 기록을 브라우저에서 탭으로 보여 주는 읽기 전용 뷰어다. 문서를 따로 생성하지 않으므로 동기화할 것이 없고, 원본을 고치면 화면이 자동으로 갱신된다. Python 없이 `skills/studio-data/assets/viewer.html`을 직접 열어 '불러오기'로 볼 수도 있지만, 그때는 검사·계산 없이 원본 값만 보인다.
 
 확정 판정 직전에는 `check`와 `provenance`에 `--fail-on-assumed`를 붙인다. 가정인 수치가 하나라도 남으면 실패한다.
 시뮬레이터는 추상 모델이다. 결과는 경제·성장 곡선의 구조를 보는 용도이며 실제 난이도나 재미 판정이 아니다.

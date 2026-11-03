@@ -89,7 +89,7 @@ class NoSilentPass(Workspace):
 
     def test_with_items_the_same_enemies_pass_15(self):
         shutil.copytree(SAMPLE / "data", self.dir / "data")
-        code, out = run_cli("check", self.dir / "data")
+        code, out = run_cli("check", self.dir / "data/enemies.json", self.dir / "data/items.json")
         self.assertEqual(code, 0)
         self.assertIn("→ PASS", out)
 

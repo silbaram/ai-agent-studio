@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import difflib
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -117,9 +118,14 @@ def _parse_tags(text: str, line: int, report: FileReport, base_dirs: list[Path],
             report.findings.append(Finding("error", line, f"'{m.group(0)}' 태그에 출처가 없습니다. 예: [{m.group(1)}: {SOURCE_EXAMPLE[kind]}]"))
             continue
         if check_paths and kind in SOURCE_REQUIRED and PATHLIKE.search(source):
-            target = source.split("#", 1)[0].strip()
-            if not any((b / target).exists() for b in base_dirs):
+            target, _, anchor = (part.strip() for part in source.partition("#"))
+            found = next((b / target for b in base_dirs if (b / target).exists()), None)
+            if found is None:
                 report.findings.append(Finding("error", line, f"출처 경로를 찾을 수 없습니다: {target}"))
+            elif anchor:
+                missing = _missing_session(found, anchor.split()[0])
+                if missing:
+                    report.findings.append(Finding("error", line, missing))
         report.counts[kind] += 1
         report.tags.append(Tag(kind, source, line))
     for m in LOOSE_TAG.finditer(text):
@@ -129,6 +135,21 @@ def _parse_tags(text: str, line: int, report: FileReport, base_dirs: list[Path],
         guess = _tag_typo(m.group(1))
         if guess:
             report.findings.append(Finding("error", line, f"알 수 없는 태그 이름 '[{m.group(1)}:'. '{guess}'의 오타인가요?"))
+
+
+def _missing_session(path: Path, sid: str) -> str | None:
+    """출처가 플레이 기록 파일#세션 id이면 그 세션이 기록에 있는지 본다. 플레이 기록이 아닌 파일은 보지 않는다."""
+    if path.suffix.lower() != ".json" or not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not (isinstance(data, dict) and isinstance(data.get("playtests"), list)):
+        return None
+    if any(isinstance(s, dict) and s.get("id") == sid for s in data["playtests"]):
+        return None
+    return f"플레이 기록 {path.name}에 없는 세션입니다: {sid}. 측정값은 기록된 세션만 출처로 씁니다."
 
 
 def _tag_typo(name: str) -> str | None:

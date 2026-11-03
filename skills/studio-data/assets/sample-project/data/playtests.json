@@ -1,0 +1,33 @@
+{
+  "_note": "예시 데이터다. 실제 플레이 기록이 아니다. 형식: playtest-verdict/references/playtest-record.md",
+  "playtests": [
+    {
+      "id": "pt_20261105_1",
+      "date": "2026-11-05",
+      "concept": "parry_tempo",
+      "build": "3f2a9c1",
+      "players": ["self", "friend_a", "friend_b"],
+      "runs": 15,
+      "logs": ["playtests/pt_20261105_1/hits.csv"],
+      "observations": [
+        { "hypothesis": "learn_timing", "metric": "같은 패턴에 같은 방식으로 맞은 비율, 1판 → 5판",
+          "value": "self 42% → 18%, friend_a 50% → 31%, friend_b 38% → 36%", "n": 15,
+          "source": "playtests/pt_20261105_1/hits.csv" },
+        { "hypothesis": "tempo_choice", "metric": "패링 성공률 상위 1명의 회피 선택 비율",
+          "value": "61%", "n": 5, "note": "상위 1명뿐이라 표본이 작다" }
+      ],
+      "notes": [
+        { "kind": "observation", "text": "friend_b는 3판부터 예고를 보지 않고 거리만 벌렸다" },
+        { "kind": "preference", "text": "self: 패링 소리가 좋다" }
+      ]
+    }
+  ],
+  "verdicts": [
+    { "concept": "parry_tempo", "hypothesis": "learn_timing", "result": "holds", "sessions": ["pt_20261105_1"],
+      "reason": "3명 중 2명에서 같은 방식 피격 비율이 줄었다. 틀렸다는 신호(5판 동안 줄지 않음)가 2명에게서 나오지 않았다.",
+      "status": "approved" },
+    { "concept": "parry_tempo", "hypothesis": "tempo_choice", "result": "unknown", "sessions": ["pt_20261105_1"],
+      "reason": "패링 성공률이 높은 사람이 1명뿐이라 '높은 사람도 회피를 고른다'를 판단할 표본이 없다.",
+      "status": "proposed" }
+  ]
+}

@@ -120,7 +120,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check design/concepts.json 
 
 ## 다음 단계
 
-프로토타입 결과로 가설을 판정한다. 틀렸다는 신호가 나오면 브리프를 고치거나 다른 후보로 돌아간다. 가설이 버티면 아이템·강화·적 데이터를 [progression-economy](../progression-economy/SKILL.md)로 시작한다.
+프로토타입을 플레이하고 [playtest-verdict](../playtest-verdict/SKILL.md)로 기록과 판정을 남긴다. 판정 전에 가설마다 `id`를 넣는다. 틀렸다는 신호가 나오면 브리프를 고치거나 다른 후보로 돌아간다(이 스킬의 7단계 선택으로). 가설이 버티면 아이템·강화·적 데이터를 [progression-economy](../progression-economy/SKILL.md)로 시작한다.
 
 검사와 뷰어는 공용 도구 [studio-data](../studio-data/SKILL.md)에 있다. 이 스킬과 함께 설치한다. 기록을 보기 좋게 보려면 문서를 따로 만들지 않고 뷰어를 연다.
 

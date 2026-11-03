@@ -25,16 +25,17 @@ class ProjectDiscovery(unittest.TestCase):
 
     def test_project_root_finds_design_and_data_but_skips_meta(self):
         names = sorted(p.relative_to(self.root).as_posix() for p in datasets.discover([self.root]))
-        self.assertEqual(names, ["data/enemies.json", "data/items.json", "data/upgrades.json", "design/concepts.json"])
+        self.assertEqual(names, ["data/enemies.json", "data/items.json", "data/playtests.json", "data/upgrades.json", "design/concepts.json"])
 
     def test_deeper_folders_are_not_scanned(self):
         (self.root / "data" / "old").mkdir()
         shutil.copy(self.root / "data/items.json", self.root / "data/old/items.json")
-        self.assertNotIn("old", " ".join(str(p) for p in datasets.discover([self.root])))
+        found = [p.relative_to(self.root).parts for p in datasets.discover([self.root])]
+        self.assertFalse(any("old" in parts for parts in found))  # 임시 폴더 이름에 old가 들어가도 흔들리지 않게 상대 경로로 본다
 
     def test_same_file_given_twice_is_listed_once(self):
-        self.assertEqual(len(datasets.discover([self.root / "data", self.root / "data/items.json"])), 3)
-        self.assertEqual(len(datasets.discover([self.root / "data", self.root / "data" / ".." / "data" / "items.json"])), 3)
+        self.assertEqual(len(datasets.discover([self.root / "data", self.root / "data/items.json"])), 4)
+        self.assertEqual(len(datasets.discover([self.root / "data", self.root / "data" / ".." / "data" / "items.json"])), 4)
 
     def test_wrong_shaped_key_is_still_that_kind(self):
         # 형식이 틀려도 종류로 인정해야 검사기가 형식 오류를 보고한다 (조용히 건너뛰면 안 된다).
@@ -56,17 +57,17 @@ class Check(unittest.TestCase):
     def test_whole_sample_project_passes(self):
         code, out = run_cli("check", self.root)
         self.assertEqual(code, 0)
-        self.assertIn("전체: 파일 4개 · 오류 0 · 경고 0 → PASS", out)
+        self.assertIn("전체: 파일 5개 · 오류 0 · 경고 0 → PASS", out)
 
     def test_json_payload_lists_every_dataset(self):
         code, out = run_cli("check", self.root, "--json")
         data = json.loads(out)
-        self.assertEqual(sorted(d["kind"] for d in data["datasets"]), ["concepts", "enemies", "items", "upgrades"])
+        self.assertEqual(sorted(d["kind"] for d in data["datasets"]), ["concepts", "enemies", "items", "playtests", "upgrades"])
 
     def test_assumption_gate_applies_to_data_and_brief_criteria(self):
         code, out = run_cli("check", self.root, "--fail-on-assumed")
         self.assertEqual(code, 1)
-        self.assertEqual(out.count("gate:"), 4)
+        self.assertEqual(out.count("gate:"), 5)
         code, out = run_cli("check", self.root / "design", "--fail-on-assumed")
         self.assertEqual(code, 1)
         self.assertIn("parry_tempo.brief.hypotheses[0].failure_signal", out)
@@ -133,7 +134,7 @@ class ReviewRegressions(unittest.TestCase):
                 code, out = run_cli("check", self.root)
                 self.assertEqual(code, 1)
                 self.assertIn(f"{key} 배열이 필요합니다", out)
-                self.assertIn("파일 4개", out)
+                self.assertIn("파일 5개", out)
                 self.save(rel, original)
 
     def test_non_string_origin_is_a_schema_error_not_a_crash(self):
@@ -215,7 +216,7 @@ class ReviewRegressions(unittest.TestCase):
             datasets.collect([self.root])
         finally:
             datasets.read = original
-        self.assertEqual(sorted(calls), ["concepts.json", "enemies.json", "items.json", "meta.json", "upgrades.json"])
+        self.assertEqual(sorted(calls), ["concepts.json", "enemies.json", "items.json", "meta.json", "playtests.json", "upgrades.json"])
 
 
 class ViewWithoutData(unittest.TestCase):
@@ -294,7 +295,7 @@ class ViewerWithConcepts(unittest.TestCase):
             server.shutdown()
             server.server_close()
         kinds = {d["kind"]: d for d in snap["datasets"]}
-        self.assertEqual(set(kinds), {"concepts", "items", "upgrades", "enemies"})
+        self.assertEqual(set(kinds), {"concepts", "items", "upgrades", "enemies", "playtests"})
         self.assertEqual(kinds["concepts"]["report"]["approved"], ["parry_tempo"])
 
     def test_page_file_exists_where_the_server_looks(self):
