@@ -135,6 +135,16 @@ def simulate_trials(choices: list[dict], build: dict, levels: list[int], offers:
     return out
 
 
+def stat_bonus(stats_of: dict, counts, base: dict | None = None) -> dict:
+    """선택 횟수 ((선택지, 횟수), ...)로 더해지는 스탯 Σ(스탯 × 횟수). base에 더한 새 dict를 돌려준다.
+    메타 성장 시뮬레이터도 영구 강화((강화, 1), ...)와 레벨업 선택을 이 규칙으로 더한다."""
+    out = dict(base or {})
+    for ch, times in counts:
+        for k, v in stats_of[ch].items():
+            out[k] = out.get(k, 0) + v * times
+    return out
+
+
 def _build_rows(choices: list[dict], build: dict, order: list[str], levels: list[int], settings: dict, prep: dict) -> tuple[dict, list, tuple | None]:
     """빌드 하나의 (단계별 평균 선택·스탯, 시행마다 전투 결과를 평균한 행, 계산할 수 없었던 (시행 수, 이유)).
     전투는 평균 스탯이 아니라 시행마다 계산해 평균한다(올림이 있는 타수는 평균 스탯으로 구하면 기대값과 다르다)."""
@@ -152,11 +162,7 @@ def _build_rows(choices: list[dict], build: dict, order: list[str], levels: list
                 pick_sum[k] = pick_sum.get(k, 0) + v
             key = (sid, counts)
             if key not in cache:  # 같은 선택 결과는 다시 계산하지 않는다
-                bonus: dict = {}
-                for ch, times in counts:
-                    for k, v in stats_of[ch].items():
-                        bonus[k] = bonus.get(k, 0) + v * times
-                cache[key] = cb.evaluate(prep, sid, bonus)
+                cache[key] = cb.evaluate(prep, sid, stat_bonus(stats_of, counts))
             got, problem = cache[key]
             if got is None:
                 bad = (bad[0] + 1 if bad else 1, problem)
@@ -166,10 +172,7 @@ def _build_rows(choices: list[dict], build: dict, order: list[str], levels: list
                 for m in METRICS:
                     acc[m] = None if acc[m] is None or r[m] is None else acc[m] + r[m]
         picks = {k: round(v / n, 4) for k, v in pick_sum.items()}
-        bonus = {}
-        for ch, times in picks.items():
-            for k, v in stats_of[ch].items():
-                bonus[k] = round(bonus.get(k, 0) + v * times, 4)
+        bonus = {k: round(v, 4) for k, v in stat_bonus(stats_of, picks.items()).items()}
         stages[sid] = {"level": level, "picks": picks, "bonus": bonus}
         for eid, acc in sums.items():
             rows.append({"stage": sid, "enemy": eid, "rank": acc["rank"],
@@ -193,7 +196,7 @@ def _better_or_equal(a: dict, b: dict) -> tuple[bool, bool]:
     return ge, gt
 
 
-def _choice_stats(choices: list[dict], items: dict | None, errors: list, warnings: list) -> tuple[dict, bool]:
+def choice_stats(choices: list[dict], items: dict | None, errors: list, warnings: list) -> tuple[dict, bool]:
     """선택지마다 한 번 고를 때 더해지는 스탯. 아이템을 주는 선택지(item)는 그 아이템 스탯에 자기 stats를 더한다.
     (선택지 id → 스탯, 아이템 데이터가 없어 확인하지 못했는가). 없거나 삭제된 아이템을 주는 선택지는 빠진다."""
     out, unchecked = {}, False
@@ -267,7 +270,7 @@ def validate(data: dict, combat: dict | None = None, items: dict | None = None, 
                 if lb < la:
                     _err(warnings, "level_decreases", bid, f"{b}의 레벨 {lb}가 앞 단계 {a}의 {la}보다 낮습니다. 레벨은 판 안에서 줄지 않습니다.",
                          **({"owner": bid} if bid != "growth.level_at" else {}))
-        gains, items_unchecked = _choice_stats(active_choices, items, errors, warnings)
+        gains, items_unchecked = choice_stats(active_choices, items, errors, warnings)
         if items_unchecked:
             unchecked_kinds.append("items")
         if not unknown and not items_unchecked:

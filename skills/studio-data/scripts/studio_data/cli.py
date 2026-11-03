@@ -176,7 +176,8 @@ def cmd_check(args) -> int:
 # ---------- simulate ----------
 def _write_curve_csv(path: str, rows: list[dict], with_policy: bool) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    fields = (["policy"] if with_policy else []) + ["run", "median_depth", "median_bank", "median_meta_power"]
+    # 추상 모델은 메타 힘(median_meta_power), 전투 계산 모델은 산 강화 수(median_upgrades_owned)
+    fields = list(rows[0]) if rows else (["policy"] if with_policy else []) + ["run", "median_depth", "median_bank"]
     with open(path, "w", encoding="utf-8", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=fields)
         w.writeheader()
@@ -187,12 +188,14 @@ def _compare_policies(args) -> int:
     """같은 설정 파일로 구매 정책만 바꿔 돌려 나란히 보여 준다. 파일을 복사하거나 고치지 않는다."""
     results = {}
     try:
-        for policy in meta_sim.POLICIES:
+        cfg = meta_sim.load_config(args.config)  # 정책 목록만 정한다(시뮬레이션은 정책마다 한 번)
+        policies = meta_sim.POLICIES + ((meta_sim.ECONOMY_POLICY,) if "economy" in cfg else ())  # 재화 흐름 연결이 있으면 그 계획 순서도
+        for policy in policies:
             cfg, results[policy] = meta_sim.run_config(args.config, policy)
     except meta_sim.ConfigError as exc:
         print(f"설정 오류: {exc}", file=sys.stderr)
         return 2
-    payload = {"compare_policies": list(meta_sim.POLICIES), "results": results}
+    payload = {"compare_policies": list(policies), "results": results}
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -202,7 +205,7 @@ def _compare_policies(args) -> int:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
     width = max(len(p) for p in results)
-    print(f"구매 정책 비교 · 시행 {cfg['trials']} · 최대 런 {cfg['max_runs']} · seed {cfg['seed']} (설정 파일은 그대로, 정책만 바꿈)")
+    print(f"구매 정책 비교 · {_model_label(cfg)} · 시행 {cfg['trials']} · 최대 런 {cfg['max_runs']} · seed {cfg['seed']} (설정 파일은 그대로, 정책만 바꿈)")
     first = results[meta_sim.POLICIES[0]]
     sections = [(f"마일스톤 {mid}", lambda r, mid=mid: r["milestones"][mid]) for mid in first["milestones"]]
     sections += [(f"강화 {uid}", lambda r, uid=uid: r["upgrades"][uid]) for uid in first["upgrades"]]
@@ -217,10 +220,30 @@ def _compare_policies(args) -> int:
         s = r["longest_stall_runs"]
         print(f"  {policy:<{width}}  중앙 {s['median']} / p90 {s['p90']} / 최대 {s['max']}")
     print("정책에 따라 결론이 다르면 그 자체를 발견으로 보고합니다. 한쪽만 골라 보고하지 않습니다.")
-    print("주의: 추상 모델 결과입니다. 실제 난이도·재미 판정이 아닙니다.")
+    print(_caution(cfg))
     if args.out:
         print(f"문서 인용: [계산: {args.out}]")
     return 0
+
+
+def _model_label(cfg: dict) -> str:
+    return f"전투 계산 모델({Path(cfg['combat_file']).name})" if cfg["model"] == "combat" else "추상 모델"
+
+
+def _caution(cfg: dict) -> str:
+    if cfg["model"] == "combat":
+        return ("주의: 전투 계산의 기대값과 생존 곡선 가정(slope·even_margin·skill)에서 나온 결과입니다. "
+                "실제 난이도·재미 판정이 아닙니다. 플레이 기록으로 보정하기 전에는 가정입니다.")
+    return "주의: 추상 모델 결과입니다. 실제 난이도·재미 판정이 아닙니다."
+
+
+def _print_combat_overview(result: dict) -> None:
+    for s in result["survival_by_stage"]:
+        f = lambda m: "피해를 받지 않음" if m is None else f"{m:g}배"  # noqa: E731
+        print(f"단계 {s['stage']}: 여유 {f(s['margin_none'])} → 통과 {s['p_none']:.0%} (강화·성장 없음) · "
+              f"여유 {f(s['margin_all'])} → 통과 {s['p_all']:.0%} (계획한 강화 모두 + 판 안 성장 평균) · 재화 {result['stage_income'][s['stage']]:g}")
+    if result["upgrades_without_combat_effect"]:
+        print("전투 계산에 효과가 없는 강화(전투 역할에 연결된 스탯이 없음): " + ", ".join(result["upgrades_without_combat_effect"]))
 
 
 def cmd_simulate(args) -> int:
@@ -240,16 +263,21 @@ def cmd_simulate(args) -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     override = " (--policy로 바꿈)" if args.policy else ""
-    print(f"시행 {cfg['trials']} · 최대 런 {cfg['max_runs']} · 구매 정책 {cfg['purchase_policy']}{override} · seed {cfg['seed']}")
+    print(f"{_model_label(cfg)} · 시행 {cfg['trials']} · 최대 런 {cfg['max_runs']} · 구매 정책 {cfg['purchase_policy']}{override} · seed {cfg['seed']}"
+          + (f" · 판 안 성장 빌드 {cfg['build']}" if cfg.get("build") else ""))
+    if cfg["model"] == "combat":
+        _print_combat_overview(result)
     for mid, d in result["milestones"].items():
         print(f"마일스톤 {mid}: {meta_sim.fmt_dist(d)}")
+    plan = set(meta_sim.targets(cfg))
     for uid, d in result["upgrades"].items():
-        print(f"강화 {uid}: {meta_sim.fmt_dist(d)}")
+        print(f"강화 {uid}: " + (meta_sim.fmt_dist(d) if uid in plan else "구매 계획에 없음(사지 않음)"))
     if result["all_upgrades_bought"]:
-        print(f"전체 강화 구매: {meta_sim.fmt_dist(result['all_upgrades_bought'])}")
+        label = "계획한 강화 모두 구매" if cfg["purchase_policy"] == meta_sim.ECONOMY_POLICY else "전체 강화 구매"
+        print(f"{label}: {meta_sim.fmt_dist(result['all_upgrades_bought'])}")
     s = result["longest_stall_runs"]
     print(f"가장 긴 정체(목표가 남은 상태에서 구매도 최고 기록 갱신도 없는 연속 런): 중앙 {s['median']} / p90 {s['p90']} / 최대 {s['max']}")
-    print("주의: 추상 모델 결과입니다. 실제 난이도·재미 판정이 아닙니다.")
+    print(_caution(cfg))
     if args.out:
         print(f"문서 인용: [계산: {args.out}]")
     return 0
@@ -397,7 +425,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--csv", help="런별 중앙값 곡선을 CSV로 저장합니다.")
     s.add_argument("--json", action="store_true", help="결과 JSON을 표준 출력으로 냅니다.")
     pol = s.add_mutually_exclusive_group()
-    pol.add_argument("--policy", choices=meta_sim.POLICIES, help="설정 파일을 고치지 않고 구매 정책만 바꿔 실행합니다.")
+    pol.add_argument("--policy", choices=meta_sim.ALL_POLICIES,
+                     help="설정 파일을 고치지 않고 구매 정책만 바꿔 실행합니다. economy는 재화 흐름의 구매 계획 순서(economy 연결이 있을 때).")
     pol.add_argument("--compare-policies", action="store_true", help="모든 구매 정책으로 돌려 나란히 보여 줍니다. --out에는 정책별 결과를 함께 저장합니다.")
     s.set_defaults(func=cmd_simulate)
 
