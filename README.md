@@ -1,27 +1,27 @@
 # AI Agent Studio
 
-AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관리하기 위한 스킬과 도구를 만든다.
-개발이 처음 의도에서 벗어나지 않도록 수치·판정·범위를 증거와 스크립트로 통제하는 것이 목표다.
+AI 에이전트와 함께 게임에 등장하는 요소들의 **밸런스를 기획**하는 스킬과 도구를 만든다.
+아이템 종류·스탯, 강화, 합성, 몹 종류·스탯, 재화와 가격을 단일 원본 데이터로 두고, 에이전트가 감으로 정한 숫자가 검증된 숫자처럼 쓰이지 않도록 계산과 출처 태그로 확인한다.
 
-> 초기 단계다. 구조와 원칙은 [설계 문서](docs/architecture.md)에 있다.
+> 초기 단계다. 구조·원칙·로드맵은 [설계 문서](docs/architecture.md)에 있다. 개발 과정 관리(일정, 범위, 수명주기, 그래픽 인계)는 다루지 않는다.
 
-## 층 구조
+## 지금 할 수 있는 것과 앞으로
 
-| 층 | 담당 |
+| 지금 | 다음 ([로드맵](docs/architecture.md#로드맵)) |
 | --- | --- |
-| 수명주기 뼈대 (기획 → 설계 → 태스크 → 구현 → 검증) | 검증된 외부 도구를 시험 후 채택 (spec-kit 또는 OpenSpec 후보) |
-| 게임 설계 (컨셉·시스템·레벨·아이템·경제·밸런스·재미 검증) | **이 저장소** |
-| 그래픽 (도트·메시·VFX) | [game-art-skills](https://github.com/silbaram/game-art-skills) |
+| 아이템·영구 강화·적 데이터의 단일 원본, 티어 역전·열위·드랍 천장·강화 사슬·위협도 검사, 메타 성장 시뮬레이션, 수치 출처 검사, 뷰어 | 공통 스탯과 전투 공식으로 처치 시간·버티는 타격 수 계산, 예산 곡선에서 표 제안, 아이템 강화와 합성, 재화 흐름 |
 
 ## 포함된 스킬
 
 | 스킬 | 하는 일 |
 | --- | --- |
 | [studio-data](skills/studio-data/SKILL.md) | **공용 도구.** 실행 파일 `studio.py` 하나로 검사(check)·뷰어(view)·시뮬레이션(simulate)·수치 출처 검사(provenance)·Claude Code 연결(setup). 다른 스킬과 함께 설치 |
-| [concept-exploration](skills/concept-exploration/SKILL.md) | 막연한 방향을 구조가 다른 게임 가설로 펼치고, 단순 전략으로 반증하고, 고른 안을 필러·가설·최소 프로토타입이 있는 브리프로 정리 |
-| [numeric-provenance](skills/numeric-provenance/SKILL.md) | 기획 수치를 `[가정]` / `[계산: 출처]` / `[측정: 출처]`로 표시하고, 확정 판정 전에 스크립트로 검사 |
 | [progression-economy](skills/progression-economy/SKILL.md) | 아이템·영구 강화·적 데이터의 단일 원본 관리와 뷰어, 티어 역전·완전 열위·드랍 천장·강화 사슬·적 위협도 진행 검사, 로그라이크 메타 성장 시뮬레이션 |
-| [playtest-verdict](skills/playtest-verdict/SKILL.md) | 프로토타입 플레이를 데이터로 기록하고, 읽기 전용 판정 에이전트가 기록만 보고 가설을 버팀·틀림·모름으로 판정, 측정값을 세션 출처와 함께 `[측정]`으로 올림 |
+| [numeric-provenance](skills/numeric-provenance/SKILL.md) | 기획 수치를 `[가정]` / `[계산: 출처]` / `[측정: 출처]`로 표시하고, 확정 판정 전에 스크립트로 검사 |
+| [concept-exploration](skills/concept-exploration/SKILL.md) | *보류.* 막연한 방향을 구조가 다른 게임 가설로 펼치고, 단순 전략으로 반증하고, 고른 안을 브리프로 정리 |
+| [playtest-verdict](skills/playtest-verdict/SKILL.md) | *보류.* 플레이 기록을 데이터로 남기고, 읽기 전용 판정 에이전트가 기록만 보고 가설을 판정, 측정값을 `[측정]`으로 올림. 밸런스 수치를 실측으로 보정할 때 쓴다 |
+
+*보류*: 고치지만 넓히지 않는다. 밸런스 기획과 직접 관계없는 단계라 [설계 문서](docs/architecture.md#보류-지우지-않고-넓히지-않는다)에 이유를 적었다.
 
 첫 대상은 **액션 로그라이크 + 메타 성장형** 게임이다. 데이터는 JSON/CSV로 다뤄 Godot·Unity·Unreal·Roblox 어디에도 묶이지 않는다.
 
@@ -101,11 +101,11 @@ python3 .claude/skills/studio-data/scripts/studio.py view . --no-browser
 
 ## 사용 예시
 
-보통 순서: 컨셉 탐색 → 프로토타입 플레이와 가설 판정 → 데이터·수치 관리.
+밸런스 데이터를 다루는 예시가 먼저, 보류한 스킬의 예시가 뒤에 있다.
 
 ```text
-$concept-exploration으로 액션 로그라이크에 성장 요소가 있는 게임 컨셉을 찾아줘.
-1인 개발, 한 판 20분 안팎. 재미 점수로 고르지 말고 구조가 다른 후보를 비교표로 보여줘.
+$progression-economy로 2구역에 나올 정예 적을 하나 추가해줘.
+제안 상태로 넣고 검사 경고가 있으면 알려줘. 바뀐 행만 보여줘.
 ```
 
 ```text
@@ -114,13 +114,13 @@ $numeric-provenance로 design/economy.md의 모든 수치에 출처 태그를 �
 ```
 
 ```text
-$playtest-verdict로 오늘 플레이한 것을 기록해줘. 나, 친구 2명이 각각 3판씩 했고 빌드는 지금 커밋이야.
-관찰값은 내가 말한 것과 로그 파일에 있는 것만 적고, 판정은 studio-judge에게 맡겨서 제안만 보여줘.
+$concept-exploration으로 액션 로그라이크에 성장 요소가 있는 게임 컨셉을 찾아줘.
+1인 개발, 한 판 20분 안팎. 재미 점수로 고르지 말고 구조가 다른 후보를 비교표로 보여줘.
 ```
 
 ```text
-$progression-economy로 2구역에 나올 정예 적을 하나 추가해줘.
-제안 상태로 넣고 검사 경고가 있으면 알려줘. 바뀐 행만 보여줘.
+$playtest-verdict로 오늘 플레이한 것을 기록해줘. 나, 친구 2명이 각각 3판씩 했고 빌드는 지금 커밋이야.
+관찰값은 내가 말한 것과 로그 파일에 있는 것만 적고, 판정은 studio-judge에게 맡겨서 제안만 보여줘.
 ```
 
 도구는 모두 `studio.py` 하나로 실행한다. 아래는 이 저장소를 받은 폴더에서 예시 프로젝트로 바로 해 보는 명령이다. 게임 프로젝트에 설치했다면 경로 앞부분을 설치 위치(`.claude/skills/...` 또는 `.agents/skills/...`)로 바꾼다. Windows PowerShell은 `python3` 대신 `py`.
