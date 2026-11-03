@@ -3,6 +3,7 @@
 세션의 단계 기록으로 기획의 가정값을 실측과 나란히 놓고, 메타 성장 시뮬레이터의 생존 곡선 값을 제안한다. 도구는 파일을 고치지 않는다. 결과를 보고 사용자가 정한 값만 원본에 옮긴다.
 
 ```bash
+python3 .claude/skills/studio-data/scripts/studio.py runlog playtests/pt_20261112_1/runs.csv
 python3 .claude/skills/studio-data/scripts/studio.py calibrate data/meta_combat.json --out reports/calibrate.json
 python3 .claude/skills/studio-data/scripts/studio.py calibrate .
 ```
@@ -12,7 +13,7 @@ python3 .claude/skills/studio-data/scripts/studio.py calibrate .
 | 시뮬레이터 설정(전투 계산 모델) | 가정값 비교 + 단계 통과율의 예측·실측 비교 + 생존 곡선 제안 |
 | 프로젝트·데이터 폴더 | 가정값 비교만 |
 
-`--sessions a,b`는 쓸 세션을 고른다(빌드가 바뀌었으면 지금 빌드의 세션만). 고르지 않으면 단계 기록이 있는 세션을 모두 합치고, 빌드나 컨셉이 섞이면 그렇다고 알린다. `--tolerance 0.3`은 표시할 차이의 기준이다(기본 0.2). 단계 기록이 없으면 종료 코드 2다(아무것도 비교하지 않았으므로 통과가 아니다). 플레이 기록에 오류가 있거나 설정이 쓰는 데이터에 오류가 있어도 2다.
+`--sessions a,b`는 쓸 세션을 고른다(빌드가 바뀌었으면 지금 빌드의 세션만). 고르지 않으면 단계 기록이 있는 세션을 모두 합치고, 빌드나 컨셉이 섞이면 그렇다고 알린다. `--tolerance 0.3`은 표시할 차이의 기준이다(0 이상, 기본 0.2). `--off-only`는 차이가 표시된 줄만 보인다. 단계 기록이 없으면 종료 코드 2다(아무것도 비교하지 않았으므로 통과가 아니다). 설정을 넘겼는데 통과율을 비교할 기록이 하나도 없어도, 플레이 기록이나 설정이 쓰는 데이터에 오류가 있어도 2다.
 
 ## 세션에 적는 것
 
@@ -33,7 +34,8 @@ python3 .claude/skills/studio-data/scripts/studio.py calibrate .
 
 | 필드 | 필수 | 뜻 |
 |---|---|---|
-| `upgrades` | 통과율 비교에 예 | 이 세션의 플레이어가 판을 시작할 때 가진 영구 강화 id. 없었으면 `[]`. 세션 중에 바뀌면 세션을 나눈다. 적지 않으면 그 세션은 통과율 비교에서 빠진다 |
+| `upgrades` | 통과율 비교에 예 | 이 세션의 플레이어가 판을 시작할 때 가진 영구 강화 id. 없었으면 `[]`. 적지 않으면 그 세션은 통과율 비교에서 빠진다. 판 사이에 강화를 사서 바뀌면 `groups`를 쓴다 |
+| `groups` | 아니오 | 세션 안의 강화 상태별 묶음 `[{upgrades, growth_build, stage_stats}]`. 쓰면 세션의 `upgrades`·`stage_stats`는 적지 않는다. 판을 합친 `entered`는 세션의 `runs`를 넘지 못한다 |
 | `growth_build` | 아니오 | 플레이어가 주로 고른 방식에 가까운 판 안 성장 빌드 id. 없으면 시뮬레이터 설정의 `build` |
 | `stage_stats` | 아니오 | 단계 기록 배열. 판에서 지나는 순서대로 |
 | `stage` | 예 | 전투 계산의 단계 id |
@@ -46,12 +48,34 @@ python3 .claude/skills/studio-data/scripts/studio.py calibrate .
 
 값은 로그에서 읽거나 플레이한 사람이 말한 것만 적는다. 값을 지어내지 않는다.
 
+### 판별 로그 모으기 (`runlog`)
+
+`stage_stats`의 평균을 손으로 내지 않는다. 프로토타입이 판별 로그(CSV)를 남기게 하고 `runlog`로 모은다. 강화 상태(와 빌드)별 묶음을 JSON으로 출력하며 파일에는 쓰지 않는다(표준 출력은 JSON뿐이고 안내는 표준 오류로 나온다). 출력을 세션(`id`, `date`, `concept`, `build`)에 합쳐 `data/playtests.json`에 넣는다.
+
+```csv
+run,player,upgrades,stage,cleared,level,duration,kills.slime,income.soul
+1,self,,zone_1,1,1,280,40,8
+1,self,,zone_2,0,5,,,
+2,self,weapon_1;vitality_1,zone_1,1,1,260,44,10
+```
+
+| 열 | 필수 | 뜻 |
+|---|---|---|
+| `run`, `stage`, `cleared` | 예 | 판 id, 그 판이 들어간 단계(한 줄에 하나), 넘겼는가(1/0) |
+| `upgrades` | 아니오 | 그 판을 시작할 때 가진 영구 강화 id(`;`로 구분). 판 안의 줄은 모두 같아야 한다 |
+| `growth_build`, `player` | 아니오 | 빌드 id, 플레이한 사람 |
+| `level`, `duration` | 아니오 | 들어설 때의 레벨, 그 단계의 길이 |
+| `kills.<적 id>`, `income.<재화>` | 아니오 | 그 단계의 처치 수, 수입 |
+| `_`로 시작하는 열 | 아니오 | 쓰지 않는 열(`_seed` 등). 그대로 넘어간다 |
+
+레벨은 들어간 판의 평균, 길이·처치·수입은 넘긴 판의 평균으로 모은다. 다음은 종료 코드 2다: 같은 판에 같은 단계가 두 번 있음, 실패한 뒤에 단계가 이어짐, 칸이 열보다 많음, 수가 아니거나 유한하지 않은 값(`inf`, `nan`), 위 표에 없는 열, 이름이 겹치는 열. 모르는 열을 거부하는 까닭은 열 이름이 틀리면 값이 조용히 사라지기 때문이다.
+
 검사(`check`):
 
 | 코드 | 수준 | 조건 |
 |---|---|---|
-| `schema` | 오류 | 형식 위반, 모르는 키, 판 수가 맞지 않음(`cleared` > `entered`, `entered` > `runs`), 한 세션에 같은 단계 기록이 둘 |
-| `stage_counts_mismatch` | 경고 | 단계에 들어간 판이 앞 단계를 넘긴 판보다 많음(단계를 골라 시작하는 게임이면 그 세션의 `acknowledged`) |
+| `schema` | 오류 | 형식 위반, 모르는 키, 판 수가 맞지 않음(`cleared` > `entered`, `entered` > `runs`), 한 묶음에 같은 단계 기록이 둘, `groups`와 세션의 `stage_stats`·`upgrades`를 함께 씀 |
+| `stage_counts_mismatch` | 경고 | 단계에 들어간 판이 앞 단계를 넘긴 판보다 많음(단계를 골라 시작하는 게임이면 그 세션의 `acknowledged`). `calibrate`는 그대로 계산하고 참고 줄로 알린다 |
 | `unknown_reference` | 경고 | 지금 데이터에 없는 단계·영구 강화·적·빌드·재화. 기록은 지난 빌드의 사실이라 고치지 않으므로 오류가 아니다. 오타면 고치고, 그 뒤에 바뀐 것이면 그대로 둔다. `calibrate`의 통과율 비교는 지금 데이터로 계산할 수 없는 기록(없는 강화·빌드의 세션, 없는 단계의 기록)을 빼고 이유를 적는다. 가정값 비교에는 남는다 |
 
 전투 계산·영구 강화·적·판 안 성장·재화 흐름 중 기록이 가리키는 데이터를 함께 넘기지 않으면 그 참조는 미확인이다(`INCOMPLETE`).
@@ -81,23 +105,23 @@ python3 .claude/skills/studio-data/scripts/studio.py calibrate .
 
 ## 생존 곡선 제안 (`survival.fit`)
 
-기록에 가장 잘 맞는(최대 가능도) `slope`와 등급별 `even_margin`을 찾아 제안한다.
+기록에 가장 잘 맞는(최대 가능도) `slope`와 등급별 `even_margin`을 찾아 제안한다. 값을 맞추면 가능도는 늘 조금 오르므로, 기록이 지금 값과 구분될 때만 제안한다(가능도 비 검정, 95%). 구분되지 않으면 "제안 없음"이고 지금 값을 둔다. 잡음을 값으로 옮기지 않기 위해서다. 제안한 값에는 대략의 범위(다른 값을 고정하고 그 값만 움직인 95% 범위)를 함께 낸다. 범위가 넓으면 표본이 적은 것이다.
 
 - `skill`은 고치지 않는다. `skill`과 `even_margin`은 같은 자리에 들어가 기록만으로 나눌 수 없다. 설정의 값으로 고정하고 `even_margin`을 맞춘다.
 - `skill_spread`는 제안하지 않는다. 사람별 기록을 나누지 않으므로 잴 수 없다.
 - 등급의 `even_margin`은 그 등급이 정한 단계에서 넘긴 판과 실패한 판이 모두 있어야 제안한다.
 - `slope`는 여유가 서로 다른 기록이 셋 이상이어야 제안한다.
 - 찾는 범위의 끝에 닿은 값은 제안하지 않고, 그 값을 지금 값으로 둔 채 나머지를 다시 맞춘다.
-- `even_margin`이 수 하나였어도 제안은 등급별 표다. 맞추지 않은 등급은 지금 값을 그대로 담는다.
+- `even_margin`이 수 하나였어도 제안은 등급별 표다. 맞추지 않은 등급은 지금 값을 그대로 담고, 출력에 "기록으로 확인되지 않은 등급"으로 따로 적는다. 그 등급은 어떤 단계도 정하지 않아 기록으로 잴 수 없다.
 - 제안하지 못한 값은 지금 값을 두고 이유를 `notes`에 남긴다. `predicted_suggested`는 제안 값으로 다시 낸 예측이다.
 
 ## 원본에 옮기기
 
-한 번에 하나씩 옮기고 다시 돌린다. 값마다 출처를 남긴다.
+한 번에 하나씩 옮기고 다시 돌린다. 값마다 출처를 남긴다. 레벨을 먼저 옮긴다. 제안은 측정 레벨로 맞춘 값이라, 생존 곡선만 먼저 옮기면 `simulate`가 옛 `level_at`으로 돌아 결과가 어긋난다.
 
 - 기록의 값을 그대로 옮긴 값은 측정값이다: `{"kind": "measured", "source": "data/playtests.json#세션 id"}`.
 - 여러 세션의 평균이나 `calibrate`의 제안은 계산값이다: `{"kind": "computed", "source": "reports/calibrate.json"}`. `--out`으로 저장한 파일을 출처로 쓴다.
-- 시뮬레이터 설정은 최상위 `provenance`에 적는다. 그러면 `simulate`의 주의 문구가 "보정값"과 그 출처로 바뀐다.
+- 시뮬레이터 설정은 최상위 `provenance`에 적는다. 그러면 `simulate`의 주의 문구가 "보정값"과 그 출처로 바뀌고, `check --fail-on-assumed`의 게이트에서 빠진다(출처가 가정이거나 비어 있거나, `simulate`가 거부할 형식이거나, 파일이 깨져 읽지 못한 시뮬레이터 설정은 게이트가 실패시킨다).
 - 기획 목표(전투 계산의 목표 범위, 재화 흐름의 `target` 등)는 측정값으로 바꾸지 않는다. 의도이기 때문이다.
 
 ## 한계

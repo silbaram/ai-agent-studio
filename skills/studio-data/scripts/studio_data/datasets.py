@@ -12,10 +12,12 @@ VALIDATORS = {"concepts": concepts, "items": items, "upgrades": upgrades, "enemi
               "growth": growth, "budget": budget, "crafting": crafting, "economy": economy, "playtests": playtests}
 NOT_DATA = ("컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·플레이 기록 데이터가 아닙니다 "
             "(최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat / growth / budget / crafting / economy 객체가 필요합니다).")
+CONFIG_KEY = b'"max_runs"'  # 시뮬레이터 설정의 필수 키. 파일이 깨져 읽지 못해도 설정임을 알아보는 표시다
 
 
 def read(path: Path) -> dict:
-    """파일 하나를 읽어 {name, path, ok, kind, label, version, data | error}를 돌려준다. 예외를 던지지 않는다."""
+    """파일 하나를 읽어 {name, path, ok, kind, label, version, data | error}를 돌려준다. 예외를 던지지 않는다.
+    시뮬레이터 설정이면 config에 내용을 담는다(깨져서 읽지 못했으면 None)."""
     path = Path(path)
     entry: dict = {"name": path.name, "path": str(path), "ok": False, "kind": None, "version": None}
     try:
@@ -29,9 +31,13 @@ def read(path: Path) -> dict:
     except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         entry["kind"] = c.kind_from_filename(path)
         entry["error"] = f"파일 형식 오류: {exc}"
+        if CONFIG_KEY in raw:
+            entry["config"] = None
         return entry
     if kind not in c.DATASET_KINDS:
         entry["meta"] = kind == "meta"
+        if entry["meta"]:
+            entry["config"] = data
         named = path.stem.lower()
         if kind is None and named in c.DATASET_KINDS:
             # 이름이 concepts.json 같은데 최상위 키가 없으면 건너뛰지 않고 이유를 알린다(예: 제약만 적은 직후).
@@ -50,8 +56,20 @@ def _wanted_in_folder(entry: dict) -> bool:
     return entry["ok"] or (entry.get("kind") in c.DATASET_KINDS and not entry.get("meta"))
 
 
+def _files(targets: list[Path]):
+    """훑을 파일 (경로, 직접 지정했는가). 파일은 그대로, 폴더는 그 안과 design/·data/ 하위 폴더(한 단계)의 JSON·CSV."""
+    for t in (Path(t) for t in targets):
+        if t.is_dir():
+            for d in [t] + [t / s for s in c.SUBFOLDERS if (t / s).is_dir()]:
+                for f in sorted(d.iterdir()):
+                    if f.is_file() and f.suffix.lower() in (".json", ".csv"):
+                        yield f, False
+        elif t.is_file():
+            yield t, True
+
+
 def scan(targets: list[Path]) -> list[dict]:
-    """파일은 그대로, 폴더는 그 안과 design/·data/ 하위 폴더(한 단계)를 훑는다. 각 파일은 한 번만 읽는다."""
+    """_files의 파일 중 데이터 파일을 읽어 돌려준다. 각 파일은 한 번만 읽는다."""
     entries: list[dict] = []
     seen: set = set()
 
@@ -64,15 +82,32 @@ def scan(targets: list[Path]) -> list[dict]:
             seen.add(key)
             entries.append(entry)
 
-    for t in (Path(t) for t in targets):
-        if t.is_dir():
-            for d in [t] + [t / s for s in c.SUBFOLDERS if (t / s).is_dir()]:
-                for f in sorted(d.iterdir()):
-                    if f.is_file() and f.suffix.lower() in (".json", ".csv"):
-                        add(f, explicit=False)
-        elif t.is_file():
-            add(t, explicit=True)
+    for path, explicit in _files(targets):
+        add(path, explicit)
     return entries
+
+
+def _config_sourced(config: dict | None) -> bool:
+    """설정의 출처가 계산이나 측정인가. 형식은 simulate와 같은 규칙(check_common)으로 본다."""
+    prov = (config or {}).get("provenance")
+    if not isinstance(prov, dict):
+        return False
+    entry = {"provenance": dict(prov)}
+    return c.check_common(entry, "provenance", []) and entry["provenance"]["kind"] != "assumed"
+
+
+def unverified_configs(targets: list[Path]) -> list[str]:
+    """시뮬레이터 설정 중 출처가 가정이거나, 비어 있거나, 형식이 틀리거나, 깨져서 읽지 못한 것의 경로(--fail-on-assumed).
+    데이터 파일이 아니라 scan이 돌려주지 않으므로 같은 파일을 따로 읽는다."""
+    out, seen = [], set()
+    for path, _ in _files(targets):
+        key = path.resolve()
+        if key not in seen:
+            seen.add(key)
+            entry = read(path)
+            if "config" in entry and not _config_sourced(entry["config"]):
+                out.append(str(path))
+    return out
 
 
 def discover(targets: list[Path]) -> list[Path]:

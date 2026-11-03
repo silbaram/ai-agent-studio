@@ -39,6 +39,25 @@
       ]
     },
     {
+      "id": "pt_20261115_1",
+      "date": "2026-11-15",
+      "concept": "parry_tempo",
+      "build": "8c1d2e0",
+      "players": ["self"],
+      "runs": 12,
+      "growth_build": "balanced",
+      "logs": ["playtests/pt_20261115_1/runs.csv"],
+      "groups": [
+        { "upgrades": [], "stage_stats": [
+          { "stage": "zone_1", "entered": 5, "cleared": 3, "level": 1 },
+          { "stage": "zone_2", "entered": 3, "cleared": 1, "level": 5 } ] },
+        { "upgrades": ["weapon_1"], "stage_stats": [
+          { "stage": "zone_1", "entered": 7, "cleared": 6, "level": 1 },
+          { "stage": "zone_2", "entered": 6, "cleared": 4, "level": 5 },
+          { "stage": "zone_3", "entered": 4, "cleared": 1, "level": 10 } ] }
+      ]
+    },
+    {
       "id": "pt_20261119_1",
       "date": "2026-11-19",
       "concept": "parry_tempo",

@@ -67,7 +67,7 @@ class Check(unittest.TestCase):
     def test_assumption_gate_applies_to_data_and_brief_criteria(self):
         code, out = run_cli("check", self.root, "--fail-on-assumed")
         self.assertEqual(code, 1)
-        self.assertEqual(out.count("gate:"), 10)
+        self.assertEqual(out.count("gate:"), 12)     # 데이터 10 + 시뮬레이터 설정 2
         code, out = run_cli("check", self.root / "design", "--fail-on-assumed")
         self.assertEqual(code, 1)
         self.assertIn("parry_tempo.brief.hypotheses[0].failure_signal", out)

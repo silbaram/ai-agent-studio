@@ -17,6 +17,7 @@ DECIDED = ("holds", "refuted")
 NOTE_KINDS = ("observation", "preference")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 STAGE_FIELDS = {"stage", "entered", "cleared", "level", "duration", "kills", "income", "source", "note"}
+GROUP_FIELDS = {"upgrades", "growth_build", "stage_stats"}
 REF_LABEL = {"stages": "전투 단계", "upgrades": "영구 강화", "enemies": "적", "builds": "판 안 성장 빌드", "currencies": "재화"}
 UNCHECKED_REASON = {
     "no_concepts": "컨셉 데이터를 함께 검사하지 않음 — 프로젝트 폴더나 design/concepts.json을 같이 넘기세요",
@@ -32,23 +33,16 @@ def _amounts(v) -> bool:
     return isinstance(v, dict) and all(isinstance(k, str) and is_number(x) and x >= 0 for k, x in v.items())
 
 
-def check_stage_stats(s: dict, errors: list, warnings: list) -> bool:
-    """세션의 단계 기록(stage_stats)과 그때의 상태(upgrades, growth_build). 판 수는 정수, 나머지는 판 평균이다."""
-    where, ok = s["id"], True
-    upgrades = s.get("upgrades", [])
-    if not (isinstance(upgrades, list) and all(_text(x) for x in upgrades)):
-        _err(errors, "schema", where, "upgrades는 이 세션의 플레이어가 가진 영구 강화 id 배열입니다(없으면 []).")
-        ok = False
-    if "growth_build" in s and not _text(s["growth_build"]):
-        _err(errors, "schema", where, f"growth_build는 판 안 성장의 빌드 id입니다: {s['growth_build']!r}")
-        ok = False
-    stats = s.get("stage_stats", [])
+def _check_records(holder: dict, label: str, runs, where: str, errors: list, warnings: list) -> bool:
+    """단계 기록 배열 하나(세션 또는 묶음). 판 수는 정수, 나머지는 판 평균이다."""
+    ok = True
+    stats = holder.get("stage_stats", [])
     if not isinstance(stats, list):
-        _err(errors, "schema", where, "stage_stats는 단계 기록 배열입니다(판에서 지나는 순서대로).")
+        _err(errors, "schema", where, f"{label}stage_stats는 단계 기록 배열입니다(판에서 지나는 순서대로).")
         return False
     seen: set = set()
     for n, x in enumerate(stats):
-        at = f"stage_stats[{n}]"
+        at = f"{label}stage_stats[{n}]"
         if not (isinstance(x, dict) and _text(x.get("stage")) and is_int(x.get("entered"), 0) and is_int(x.get("cleared"), 0)):
             _err(errors, "schema", where, f"{at}에 stage(전투 단계 id)와 정수 entered(들어간 판), cleared(넘긴 판)가 필요합니다.")
             ok = False
@@ -58,14 +52,14 @@ def check_stage_stats(s: dict, errors: list, warnings: list) -> bool:
             _err(errors, "schema", where, f"{at}: 알 수 없는 키 {', '.join(unknown)}.{''.join(did_you_mean(k, STAGE_FIELDS) for k in unknown)}")
             ok = False
         if x["stage"] in seen:
-            _err(errors, "schema", where, f"{at}: 단계 {x['stage']}의 기록이 둘입니다. 세션마다 단계 하나에 기록 하나입니다.")
+            _err(errors, "schema", where, f"{at}: 단계 {x['stage']}의 기록이 둘입니다. 묶음마다 단계 하나에 기록 하나입니다.")
             ok = False
         seen.add(x["stage"])
         if x["cleared"] > x["entered"]:
             _err(errors, "schema", where, f"{at}: cleared {x['cleared']}가 entered {x['entered']}보다 큽니다.")
             ok = False
-        if is_int(s.get("runs")) and x["entered"] > s["runs"]:
-            _err(errors, "schema", where, f"{at}: entered {x['entered']}가 세션의 판 수 {s['runs']}보다 큽니다.")
+        if is_int(runs) and x["entered"] > runs:
+            _err(errors, "schema", where, f"{at}: entered {x['entered']}가 세션의 판 수 {runs}보다 큽니다.")
             ok = False
         if "level" in x and not (is_number(x["level"]) and x["level"] >= 1):
             _err(errors, "schema", where, f"{at}: level은 1 이상의 수입니다(그 단계에 들어설 때의 평균 레벨): {x['level']!r}")
@@ -85,12 +79,75 @@ def check_stage_stats(s: dict, errors: list, warnings: list) -> bool:
     return ok
 
 
+def _upgrade_list(v) -> bool:
+    return isinstance(v, list) and all(_text(x) for x in v)
+
+
+def check_stage_stats(s: dict, errors: list, warnings: list) -> bool:
+    """세션의 단계 기록과 그때의 상태. 강화가 한 가지면 세션에 stage_stats·upgrades를, 판 사이에 바뀌면 groups에 상태별로 적는다."""
+    where, ok = s["id"], True
+    if "growth_build" in s and not _text(s["growth_build"]):
+        _err(errors, "schema", where, f"growth_build는 판 안 성장의 빌드 id입니다: {s['growth_build']!r}")
+        ok = False
+    groups = s.get("groups")
+    if groups is None:
+        if not _upgrade_list(s.get("upgrades", [])):
+            _err(errors, "schema", where, "upgrades는 이 세션의 플레이어가 가진 영구 강화 id 배열입니다(없으면 []).")
+            ok = False
+        return _check_records(s, "", s.get("runs"), where, errors, warnings) and ok
+    if not (isinstance(groups, list) and groups and all(isinstance(g, dict) for g in groups)):
+        _err(errors, "schema", where, "groups는 강화 상태별 묶음 {upgrades, growth_build, stage_stats} 배열입니다.")
+        return False
+    for key in ("stage_stats", "upgrades"):
+        if key in s:
+            _err(errors, "schema", where, f"groups를 쓰면 세션의 {key}를 함께 쓰지 않습니다. 묶음마다 적습니다.")
+            ok = False
+    totals: dict = {}
+    for n, g in enumerate(groups):
+        label = f"groups[{n}]."
+        unknown = sorted(set(g) - GROUP_FIELDS)
+        if unknown:
+            _err(errors, "schema", where, f"{label[:-1]}: 알 수 없는 키 {', '.join(unknown)}.{''.join(did_you_mean(k, GROUP_FIELDS) for k in unknown)}")
+            ok = False
+        if not _upgrade_list(g.get("upgrades")):
+            _err(errors, "schema", where, f"{label}upgrades가 필요합니다(그 묶음의 판을 시작할 때 가진 영구 강화 id, 없으면 []).")
+            ok = False
+        if "growth_build" in g and not _text(g["growth_build"]):
+            _err(errors, "schema", where, f"{label}growth_build는 판 안 성장의 빌드 id입니다: {g['growth_build']!r}")
+            ok = False
+        if not (isinstance(g.get("stage_stats"), list) and g["stage_stats"]):
+            _err(errors, "schema", where, f"{label}stage_stats(단계 기록 배열)가 필요합니다.")
+            ok = False
+            continue
+        ok = _check_records(g, label, s.get("runs"), where, errors, warnings) and ok
+        for x in g["stage_stats"]:
+            if isinstance(x, dict) and _text(x.get("stage")) and is_int(x.get("entered"), 0):
+                totals[x["stage"]] = totals.get(x["stage"], 0) + x["entered"]
+    over = [k for k, v in totals.items() if is_int(s.get("runs")) and v > s["runs"]]
+    if over:
+        _err(errors, "schema", where, f"묶음을 합친 entered가 세션의 판 수 {s.get('runs')}보다 큰 단계: {', '.join(over)}")
+        ok = False
+    return ok
+
+
+def _holders(s: dict) -> list:
+    """세션의 단계 기록을 담은 곳: groups가 있으면 묶음들, 없으면 세션 자신."""
+    return s["groups"] if s.get("groups") else [s]
+
+
 def _used_refs(s: dict) -> dict:
-    stats = s.get("stage_stats", [])
-    build = s.get("growth_build")
-    return {"stages": [x["stage"] for x in stats], "upgrades": s.get("upgrades", []) if stats else [],
-            "enemies": [k for x in stats for k in x.get("kills", {})], "builds": [build] if build and stats else [],
-            "currencies": [k for x in stats for k in x.get("income", {})]}
+    out: dict = {"stages": [], "upgrades": [], "enemies": [], "builds": [], "currencies": []}
+    for h in _holders(s):
+        stats = h.get("stage_stats", [])
+        if not stats:
+            continue
+        build = h.get("growth_build", s.get("growth_build"))
+        out["stages"] += [x["stage"] for x in stats]
+        out["upgrades"] += h.get("upgrades", [])
+        out["enemies"] += [k for x in stats for k in x.get("kills", {})]
+        out["builds"] += [build] if build else []
+        out["currencies"] += [k for x in stats for k in x.get("income", {})]
+    return out
 
 
 def check_refs(s: dict, refs: dict | None, warnings: list, missing: set) -> None:
@@ -147,7 +204,7 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
         _err(errors, "schema", where, "logs는 기록 파일 경로(문자열) 배열이어야 합니다.")
         ok = False
     ok = check_stage_stats(s, errors, warnings) and ok
-    if ok and not obs and not s.get("stage_stats"):
+    if ok and not obs and not s.get("stage_stats") and not s.get("groups"):
         warnings.append({"code": "session_without_observations", "where": where,
                          "message": "가설에 대한 관찰값이 없습니다. 이 세션은 어떤 가설의 증거도 되지 못합니다."})
     return ok

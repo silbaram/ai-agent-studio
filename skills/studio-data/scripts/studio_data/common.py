@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import difflib
 import json
+import math
 import re
 from pathlib import Path
 
@@ -94,7 +95,8 @@ def is_int(v, minimum: int | None = None) -> bool:
 
 
 def is_number(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
+    """유한한 수. JSON의 Infinity·NaN은 파이썬이 읽어 주지만 수치로 쓸 수 없다."""
+    return isinstance(v, int) and not isinstance(v, bool) or isinstance(v, float) and math.isfinite(v)
 
 
 def _num(value: str):
@@ -190,7 +192,7 @@ def check_common(entry: dict, where: str, errors: list) -> bool:
         if not isinstance(prov, dict):
             errors.append({"code": "provenance", "where": where, "message": "provenance는 {kind, source, note} 객체여야 합니다."})
             return False
-        kind = PROVENANCE_KINDS.get(prov.get("kind"))
+        kind = PROVENANCE_KINDS.get(prov.get("kind")) if isinstance(prov.get("kind"), str) else None
         if kind is None:
             errors.append({"code": "provenance", "where": where, "message": f"provenance.kind는 assumed/computed/measured(가정/계산/측정) 중 하나입니다: {prov.get('kind')!r}"})
             return False

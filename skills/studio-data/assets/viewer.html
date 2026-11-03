@@ -1015,9 +1015,12 @@ function renderPlaytests(ds, idx) {
         ? el("ul", {}, e.observations.map((o) => el("li", {}, el("span", { class: "mono", text: ((o && o.hypothesis) || "?") + ": " }),
             String(o && o.value !== undefined ? o.value : "?") + (o && o.n !== undefined ? ` (n=${o.n})` : ""),
             o && o.metric ? el("div", { class: "muted", text: o.metric }) : null))) : dash("관찰값 없음");
-      const stageStats = Array.isArray(e.stage_stats) && e.stage_stats.length
-        ? el("ul", {}, e.stage_stats.map((x) => el("li", {}, el("span", { class: "mono", text: ((x && x.stage) || "?") + ": " }),
-            `${x && x.cleared}/${x && x.entered}판 통과` + (x && x.level !== undefined ? ` · 레벨 ${fmt(x.level)}` : "") + (x && x.duration !== undefined ? ` · 길이 ${fmt(x.duration)}` : "")))) : null;
+      const stageItems = (list) => (Array.isArray(list) ? list : []).map((x) => el("li", {}, el("span", { class: "mono", text: ((x && x.stage) || "?") + ": " }),
+        `${x && x.cleared}/${x && x.entered}판 통과` + (x && x.level !== undefined ? ` · 레벨 ${fmt(x.level)}` : "") + (x && x.duration !== undefined ? ` · 길이 ${fmt(x.duration)}` : "")));
+      const groupItems = (Array.isArray(e.groups) ? e.groups : []).filter((g) => g && typeof g === "object").flatMap((g) => [
+        el("li", { class: "muted", text: "강화: " + (Array.isArray(g.upgrades) && g.upgrades.length ? g.upgrades.join(", ") : "없음") }), ...stageItems(g.stage_stats)]);
+      const stageList = [...stageItems(e.stage_stats), ...groupItems];
+      const stageStats = stageList.length ? el("ul", {}, stageList) : null;
       const notes = Array.isArray(e.notes) && e.notes.length
         ? el("ul", {}, e.notes.map((n) => el("li", {}, el("span", { class: "tag info", text: LABEL.note[n && n.kind] || (n && n.kind) || "?" }), (n && n.text) || ""))) : dash();
       return el("tr", { "data-id": e.id || "", class: rowClass(issues) },

@@ -43,7 +43,7 @@
 | `observations` | 아니오 | `[{hypothesis, value, metric, n, source, note}]`. `hypothesis`(가설 id)와 `value`(문자열 또는 수)가 필수. 없고 단계 기록도 없으면 경고 |
 | `notes` | 아니오 | `[{kind: observation / preference, text}]` |
 | `logs` | 아니오 | 원본 기록 파일 경로 배열 |
-| `stage_stats`, `upgrades`, `growth_build` | 아니오 | 단계별 판 수와 평균 레벨·길이·처치·수입, 그때 가진 영구 강화, 판 안 성장 빌드. 가정값을 보정할 때 쓴다([calibration](calibration.md)) |
+| `stage_stats`, `upgrades`, `growth_build`, `groups` | 아니오 | 단계별 판 수와 평균 레벨·길이·처치·수입, 그때 가진 영구 강화, 판 안 성장 빌드, 강화 상태별 묶음. 가정값을 보정할 때 쓴다([calibration](calibration.md)) |
 | `acknowledged` | 아니오 | 확인을 마친 경고 `{경고 코드: 이유}` |
 
 `value`에는 해석이 아니라 본 것을 적는다. "개선됨" 대신 "42% → 18%". 사람마다 다르면 사람별로 적는다.
