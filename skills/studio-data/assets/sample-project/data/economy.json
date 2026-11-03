@@ -1,7 +1,7 @@
 {
   "_note": "예시 데이터다. 실제 게임 수치가 아니다. 형식: economy-flow/references/economy-format.md",
   "economy": {
-    "currencies": { "gold": { "name": "골드" }, "soul": { "name": "영혼", "carry": true } },
+    "currencies": { "gold": { "name": "골드" }, "soul": { "name": "영혼", "carry": true, "meta_config": "meta_combat.json" } },
     "kill_reward": "gold",
     "sell": { "currency": "gold", "ratio": 0.5 },
     "prices": { "items": "gold", "enhance": "gold", "recipes": "gold", "upgrades": "soul" },

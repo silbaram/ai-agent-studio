@@ -27,7 +27,7 @@ description: "Models currency income per stage (kills times enemy rewards, expec
 
 `economy.currencies`에 재화를 적는다. 판이 끝나면 사라지는 재화(골드 등)와 판 사이에 남는 재화(`carry: true`, 메타 재화)를 구분한다. 처치 보상(`kill_reward`, 적 데이터 `reward`의 재화는 여기서 정한다), 드랍을 팔 때의 재화와 비율(`sell`), 가격 출처별 재화(`prices`: 아이템·강화·합성·영구 강화)를 정한다.
 
-메타 성장 시뮬레이터(`simulate`)의 설정 파일이 있으면 그 판 사이 재화에 `meta_config`로 이어 둔다. 한 판 수입과 영구 강화 구매 순서가 두 파일에서 다르면 경고한다.
+메타 성장 시뮬레이터(`simulate`)의 설정 파일이 있으면 그 판 사이 재화에 `meta_config`로 이어 둔다. 시뮬레이터의 전투 계산 모델은 이 파일의 단계 수입과 구매 계획 순서를 그대로 읽을 수 있다(`economy` 연결, 구매 정책 `economy`). 한 판 수입과 영구 강화 구매 순서가 두 파일에서 다르면 경고한다.
 
 ### 2. 단계를 적는다
 

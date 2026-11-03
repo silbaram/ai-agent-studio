@@ -309,12 +309,6 @@ def _combat_foes(stage: dict, enemies: dict | None) -> set | None:
     return None if found is None else {e["id"] for e in found}
 
 
-def _meta_income(cfg: dict) -> float:
-    """메타 성장 설정(simulate)에서 한 판을 끝까지 깼을 때의 재화: 방마다 per_room + 보너스 방."""
-    cur = cfg["currency"]
-    return cur["per_room"] * cfg["rooms"] + sum(v for r, v in cur["bonus_rooms"].items() if 1 <= r <= cfg["rooms"])
-
-
 # ---------- 시점 ----------
 def _stage_at(stages: list[dict], t: float) -> str:
     """판 안 시점 t가 속한 단계(경계는 다음 단계)."""
@@ -362,6 +356,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
     timeline: list = []
     rows: list = []
     leftover: dict = {}
+    affected: set = set()  # 미확인 때문에 시점·판 수·남는 양을 다 내지 못한 재화
     combat_stages = {x["id"]: x for x in (combat or {}).get("stages") or [] if isinstance(x, dict) and isinstance(x.get("id"), str)} \
         if isinstance((combat or {}).get("stages"), list) else {}
     if settings is not None:
@@ -491,6 +486,8 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
                          f"한 판 수입 {per_run[k]:g} {k} 중 {share:.0%}({left:g})가 구매 계획 뒤에도 남습니다(허용 {settings['leftover_max']:.0%}). "
                          "쓸 곳을 늘리거나 수입을 줄입니다.")
         _check_meta(settings, meta, complete, blocked, per_run, upgrade_order, errors, warnings, missing)
+        if missing:
+            affected = set(cur) if not complete or "*" in blocked else set(blocked) & set(cur)
         if not timeline and not errors and not missing:
             missing.add("nothing")  # 계산한 단계가 없으면 통과가 아니다(빈 stages, 모두 삭제)
     summary = c.summary_counts(stages + buys)
@@ -510,6 +507,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
         "leftover": leftover,
         "unchecked": len(missing),
         "unchecked_kinds": sorted(missing),
+        "unchecked_currencies": sorted(affected),
         "errors": errors,
         "warnings": warnings,
     }
@@ -557,11 +555,13 @@ def _check_meta(settings: dict, meta: dict | None, complete: bool, blocked: dict
             continue
         if not complete or k in blocked or "*" in blocked:
             continue
-        sim = _meta_income(cfg)
-        if abs(sim - per_run[k]) > 1e-6 * max(1.0, abs(sim)):
+        sim = meta_sim.full_run_income(cfg)  # None: 설정이 재화 흐름에서 수입을 읽는다(같은 원본)
+        if sim is not None and abs(sim - per_run[k]) > 1e-6 * max(1.0, abs(sim)):
             _err(warnings, "meta_income_differs", where,
-                 f"한 판 수입이 다릅니다: 재화 흐름 {c.num_text(per_run[k])} {k}, 메타 성장 설정({v['meta_config']})의 끝까지 깬 판 {c.num_text(sim)}"
-                 f"(방 {cfg['rooms']} × {c.num_text(cfg['currency']['per_room'])} + 보너스). 한쪽을 원본으로 정해 맞춥니다.")
+                 f"한 판 수입이 다릅니다: 재화 흐름 {c.num_text(per_run[k])} {k}, 메타 성장 설정({v['meta_config']})의 끝까지 깬 판 {c.num_text(sim)}. "
+                 "한쪽을 원본으로 정해 맞추거나, 설정이 재화 흐름에서 수입을 읽게(economy 연결) 합니다.")
+        if cfg["purchase_policy"] == meta_sim.ECONOMY_POLICY:
+            continue  # 시뮬레이터가 이 구매 계획 순서대로 산다
         _, order = meta_sim.buy(cfg, float("inf"), set())
         ours = [u for u in upgrade_order.get(k, []) if u in order]
         theirs = [u for u in order if u in ours]

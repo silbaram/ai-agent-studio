@@ -1,8 +1,11 @@
 # 메타 성장 모델
 
-`studio.py simulate`의 모델과 설정 형식이다. 이 모델은 일부러 단순하다. 실제 전투를 재현하지 않고, 경제와 성장 곡선의 구조를 보는 데만 쓴다.
+`studio.py simulate`의 모델과 설정 형식이다. 모델은 두 가지다.
 
-## 모델
+- **추상 모델**(기본, `model` 없음 또는 `"abstract"`): 방마다 추상 "힘"과 난이도 곡선으로 생존을 정한다. 전투 데이터가 아직 없을 때 경제·성장 곡선의 구조를 본다.
+- **전투 계산 모델**(`"model": "combat"`): [combat-balance](../../combat-balance/SKILL.md)의 단계를 차례로 지나며, 그 판까지 산 영구 강화의 스탯과 [run-growth](../../run-growth/SKILL.md)의 레벨업 선택을 기준 장비에 더해 처치·버팀으로 생존을 정한다. 전투 데이터가 있으면 이쪽을 쓴다. 아래 [전투 계산 모델](#전투-계산-모델) 절.
+
+## 추상 모델
 
 한 **시행(trial)**은 플레이어 한 명의 경력이다. 시행마다 최대 `max_runs`번 런을 한다.
 
@@ -54,7 +57,9 @@
 | `survival.slope` | 예 | 클수록 힘 차이에 민감. `floor`·`ceiling` 기본 0·1 |
 | `currency.per_room` | 예 | `bonus_rooms` 기본 없음, `keep_on_death` 기본 1 |
 | `upgrades_file` | 아니오 | 영구 강화 원본 파일 경로(설정 파일 폴더 기준). **권장.** `studio.py check` 기준으로 강화 데이터에 오류가 있거나 활성 강화에 `power`가 없으면 실행을 거부한다. `cut` 강화는 빠지고, 목록 순서는 파일 순서다. 결과에 파일 경로와 해시가 남는다 |
-| `upgrades` | 아니오 | 빠른 실험용 인라인 목록(`id`, `cost`, `power`, `requires`). `upgrades_file`과 함께 쓸 수 없다. `requires`에 없는 id나 순환이 있으면 오류 |
+| `upgrades` | 아니오 | 빠른 실험용 인라인 목록(`id`, `cost`, `power`, `requires`, 전투 계산 모델이면 `stats`). `upgrades_file`과 함께 쓸 수 없다. `requires`에 없는 id나 순환이 있으면 오류 |
+| `purchase_policy` | 아니오 | `listed_order`(기본), `cheapest_first`, `economy`(재화 흐름의 구매 계획 순서. 아래 `economy` 연결이 필요) |
+| `economy` | 아니오 | `{file: 재화 흐름 파일, currency: 판 사이 재화 id}`. 구매 정책 `economy`가 그 파일의 구매 계획에서 이 재화로 사는 영구 강화 순서를 쓴다. 전투 계산 모델은 단계별 수입도 여기서 읽는다(추상 모델은 순서만). 재화 흐름에 오류가 있거나 이 재화의 수입·구매가 미확인이면 실행을 거부한다. 다른 재화만 미확인(예: 골드로 사는 합성의 데이터가 없음)이면 그대로 쓴다 |
 | `milestones` | 아니오 | `clear_room`은 1 ~ `rooms` |
 
 ## 출력
@@ -75,8 +80,63 @@
 - **p10과 p90이 크게 벌어진다**: 실력 차이(`skill_spread`)에 결과가 민감하다. 의도라면 괜찮고, 아니라면 보정 장치(실패 시 재화 보존 등)를 검토한다.
 - **도달률이 100% 미만**: `max_runs` 안에 못 가는 플레이어가 있다. 그 비율 자체가 결과다.
 
+## 전투 계산 모델
+
+```json
+{
+  "model": "combat", "seed": 7, "trials": 200, "max_runs": 40,
+  "combat_file": "combat.json",
+  "growth_file": "growth.json", "build": "balanced",
+  "survival": { "slope": 3.0, "even_margin": 0.12, "floor": 0.0, "ceiling": 0.99 },
+  "player": { "skill": 0.5, "skill_spread": 0.5 },
+  "currency": { "keep_on_death": 1.0 },
+  "economy": { "file": "economy.json", "currency": "soul" },
+  "purchase_policy": "economy",
+  "upgrades_file": "upgrades.json",
+  "milestones": [ { "id": "first_clear", "clear_stage": "zone_3" } ]
+}
+```
+
+판은 방 대신 전투 계산의 단계를 순서대로 지난다. 단계마다:
+
+1. 플레이어 = 그 단계의 기준 장비(`base`·`items`, 강화한 아이템 포함) + **그 판까지 산 영구 강화의 `stats`** + **그 판의 레벨업 선택**(빌드 정책으로 판마다 새로 뽑음). 전투 계산의 단계에 적은 `player.upgrades`는 쓰지 않는다(그 대신 실제로 산 강화를 더한다).
+2. 적마다 처치·버팀을 계산하고, **여유** = 버티는 시간 ÷ 처치 시간(공격 속도가 없으면 버티는 타수 ÷ 처치 타수)을 낸다. 단계의 여유는 가장 어려운 적의 값이다. 피해를 줄 수 없는 적이 있으면 0, 어떤 적도 피해를 주지 못하면 무한대.
+3. 넘길 확률 = `clamp(sigmoid(slope × ln(여유 ÷ even_margin) + skill), floor, ceiling)`. 여유가 `even_margin`이면 평균 실력(skill 0)의 플레이어가 절반의 확률로 넘긴다.
+4. 넘기면 그 단계의 재화를 얻는다. 실패하면 판이 끝나고 그 판 재화의 `keep_on_death`만 남는다. 판이 끝나면 구매 정책대로 영구 강화를 산다.
+
+| 키 | 필수 | 비고 |
+|---|---|---|
+| `model` | 예 | `"combat"`. `rooms`·`difficulty`는 쓰지 않는다 |
+| `combat_file` | 예 | 전투 계산 파일(설정 파일 폴더 기준). 같은 폴더의 아이템·적·강화·합성 데이터와 함께 `check`와 같은 규칙으로 검사하고, 오류·미확인이 있으면 실행을 거부한다 |
+| `stages` | 아니오 | 판에서 지나는 전투 단계 id 순서. 없으면 전투 계산의 활성 단계 전부(파일 순서) |
+| `growth_file`, `build` | 아니오 | 판 안 성장 파일과 빌드 id. 둘을 함께 쓴다. 레벨은 그 빌드의 단계별 레벨(`level_at`)이고, 레벨이 없는 단계는 앞 단계의 레벨을 잇는다 |
+| `survival.slope` | 예 | 여유 차이에 얼마나 민감한가. `ln(여유)`에 곱한다 |
+| `survival.even_margin` | 아니오 | 평균 실력이 절반의 확률로 넘기는 여유(기본 1). 기대값 계산에는 회피가 없으므로, 피하며 싸우는 액션 게임은 1보다 훨씬 작다 |
+| `player.skill`, `player.skill_spread` | 아니오 | 추상 모델과 같다(기본 0) |
+| `currency.per_stage` | `economy`가 없으면 예 | `{전투 단계 id: 판 사이 재화}`. 없으면 `economy` 연결의 수입을 쓴다: 재화 흐름 단계의 그 재화 수입을 그 단계의 `combat_stage`로 모은다(`combat_stage`가 없는 단계에 수입이 있으면 오류) |
+| `upgrades_file` | 예(권장) | 영구 강화의 `stats`를 전투 계산에 더한다. `power`는 쓰지 않는다 |
+| `milestones` | 아니오 | `clear_stage`: 그 단계까지 넘기면 도달 |
+
+추가 출력:
+
+| 키 | 뜻 |
+|---|---|
+| `survival_by_stage` | 단계마다 영구 강화·판 안 성장 없이와, 계획한 강화를 모두 사고 판 안 성장(평균)을 더했을 때의 여유(`margin_none`, `margin_all`)와 넘길 확률(평균 실력). 어디가 벽인지, 강화로 넘을 수 있는 벽인지 본다. 피해를 받지 않는 단계의 여유는 `null` |
+| `stage_income` | 단계마다 넘기면 얻는 판 사이 재화 |
+| `upgrades_without_combat_effect` | 스탯이 전투 역할에 연결되지 않아 이 모델에서 효과가 없는 강화(편의·슬롯 등) |
+| `curve` | 추상 모델의 `median_meta_power` 대신 `median_upgrades_owned`(산 강화 수) |
+
+구매 정책 `economy`면 재화 흐름의 구매 계획에 없는 강화는 사지 않고, `all_upgrades_bought`는 계획한 강화를 모두 산 판이다.
+
+구매 정책으로 살 수 있는 강화를 모두 산 상태의 스탯이 계산에 쓸 수 없는 값(치명 확률이 1을 넘는 등)이면 실행 전에 거부한다(비싸서 닿지 않는 강화도). 판 안 성장까지 더한 조합은 판마다 뽑으므로, 쓸 수 없는 판이 나오면 그 단계·영구 강화·레벨업 선택을 적고 멈춘다.
+
+### 재화 흐름과 같은 원본 쓰기
+
+[economy-flow](../../economy-flow/SKILL.md)의 판 사이 재화에 `meta_config`로 이 설정을 이어 두면, 재화 흐름 검사가 두 정의를 맞춰 본다. 이 설정이 `economy` 연결로 수입을 읽고 구매 정책이 `economy`이면 수입과 순서가 같은 원본이라 비교할 것이 없다. 이렇게 두면 시뮬레이터의 판 수와 재화 흐름의 판 수(매 판 끝까지 깬 최소값) 차이는 지는 판 때문이다.
+
 ## 한계
 
-- 방마다 독립적인 생존 확률을 쓴다. 체력이 누적으로 깎이는 구조, 회복, 빌드 시너지, 런 내 아이템 선택은 모델에 없다.
+- 방(단계)마다 독립적인 생존 확률을 쓴다. 체력이 누적으로 깎이는 구조, 회복은 모델에 없다. 추상 모델에는 빌드 시너지와 런 내 아이템 선택도 없다.
+- 전투 계산 모델의 생존은 단계에서 가장 어려운 적과의 1대1 기대값 여유로 정한다. 적 무리, 회피, 조작은 `even_margin`·`slope`·`skill`이라는 가정에 뭉쳐 있다.
 - 구매 정책 두 가지는 실제 플레이어 행동의 근사다.
-- 입력 파라미터가 `[가정]`인 동안 결과는 그 가정 아래의 계산값이다. 실제 플레이 기록으로 `slope`와 `skill`을 보정하기 전에는 난이도 판정에 쓰지 않는다.
+- 입력 파라미터가 `[가정]`인 동안 결과는 그 가정 아래의 계산값이다. 실제 플레이 기록으로 `slope`·`even_margin`·`skill`을 보정하기 전에는 난이도 판정에 쓰지 않는다.

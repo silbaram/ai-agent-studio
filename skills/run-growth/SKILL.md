@@ -67,6 +67,6 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table growth
 - 스탯은 더하기만 한다. 곱셈 보너스와 선택지끼리의 시너지는 없다. 아이템을 주는 선택지는 그 아이템 스탯을 더할 뿐이라, 무기를 하나 더 얻는 선택지는 전투 계산의 한계(무기마다 따로인 공격이 없다)를 그대로 따른다.
 - 빌드는 정해진 규칙으로 고른다. 상황을 보고 바꾸는 플레이어는 모델에 없다.
 - 단계별 레벨은 입력이다. 경험치 곡선에서 레벨을 계산하지 않는다. 경험치·수집 선택지의 가치는 모른다(빌드의 `level_at`에 가정으로 적는 것까지만).
-- 메타 성장 시뮬레이터(`simulate`)의 추상 "힘"과는 아직 이어지지 않았다(로드맵 B5b).
+- 메타 성장 시뮬레이터의 전투 계산 모델(`simulate`, `"model": "combat"`)은 빌드 하나를 골라 판마다 레벨업을 새로 뽑아 영구 강화와 함께 계산한다([meta-model](../progression-economy/references/meta-model.md#전투-계산-모델)). 이 스킬은 영구 강화 없는 한 판의 빌드 비교다.
 
 예시: `studio-data/assets/sample-project/data/growth.json` (실제 게임 수치가 아니다).

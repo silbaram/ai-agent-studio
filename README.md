@@ -161,13 +161,14 @@ $progression-economy로 2구역에 나올 정예 적을 하나 추가해줘.
 python3 skills/studio-data/scripts/studio.py view skills/studio-data/assets/sample-project
 python3 skills/studio-data/scripts/studio.py check skills/studio-data/assets/sample-project --table
 python3 skills/studio-data/scripts/studio.py simulate skills/studio-data/assets/sample-project/data/meta.json
+python3 skills/studio-data/scripts/studio.py simulate skills/studio-data/assets/sample-project/data/meta_combat.json
 python3 skills/studio-data/scripts/studio.py provenance design/
 ```
 
 `view`는 프로젝트의 `design/`·`data/`에 있는 컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·플레이 기록을 브라우저에서 탭으로 보여 주는 읽기 전용 뷰어다. 문서를 따로 생성하지 않으므로 동기화할 것이 없고, 원본을 고치면 화면이 자동으로 갱신된다. Python 없이 `skills/studio-data/assets/viewer.html`을 직접 열어 '불러오기'로 볼 수도 있지만, 그때는 검사·계산 없이 원본 값만 보인다.
 
 확정 판정 직전에는 `check`와 `provenance`에 `--fail-on-assumed`를 붙인다. 가정인 수치가 하나라도 남으면 실패한다.
-시뮬레이터는 추상 모델이다. 결과는 경제·성장 곡선의 구조를 보는 용도이며 실제 난이도나 재미 판정이 아니다.
+시뮬레이터는 추상 모델(`meta.json`)과 전투 계산 모델(`meta_combat.json`: 전투 계산·판 안 성장·재화 흐름 데이터로 판을 돌린다)이 있다. 어느 쪽이든 결과는 가정 아래의 계산값이며 실제 난이도나 재미 판정이 아니다.
 
 ## 개발
 

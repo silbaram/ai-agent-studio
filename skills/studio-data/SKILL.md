@@ -25,7 +25,7 @@ description: "Shared tooling for the game-design skills: one entry script (studi
 |---|---|
 | `python3 .claude/skills/studio-data/scripts/studio.py view .` | 프로젝트의 설계 데이터를 브라우저에서 본다 (읽기 전용, 자동 갱신) |
 | `python3 .claude/skills/studio-data/scripts/studio.py check .` | 컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·플레이 기록을 한 번에 검사한다 |
-| `python3 .claude/skills/studio-data/scripts/studio.py simulate data/meta.json` | 메타 성장을 추상 모델로 시뮬레이션한다 |
+| `python3 .claude/skills/studio-data/scripts/studio.py simulate data/meta.json` | 메타 성장을 시뮬레이션한다(추상 모델, 또는 `"model": "combat"`이면 전투 계산 데이터로) |
 | `python3 .claude/skills/studio-data/scripts/studio.py provenance design/` | 기획 문서(md)의 수치 출처 태그를 검사한다 |
 | `python3 .claude/skills/studio-data/scripts/studio.py draft . --archetype <원형> --at <기준 값>` | 스탯 예산의 곡선과 원형으로 아이템·적 초안을 JSON으로 출력한다 (파일에 쓰지 않음) |
 | `python3 .claude/skills/studio-data/scripts/studio.py setup claude .` | 판정 에이전트와 훅을 게임 프로젝트에 설치한다 (Claude Code, [아래](#claude-code-연결)) |
@@ -35,7 +35,7 @@ description: "Shared tooling for the game-design skills: one entry script (studi
 - **미확인은 통과가 아니다.** `check`에서 함께 검사할 데이터가 없어 확인하지 못한 참조가 남으면 최종 줄이 `INCOMPLETE`다(종료 코드 0, `--strict`나 `--fail-on-assumed`를 붙이면 1). 계산 파일(전투 계산·판 안 성장·재화 흐름)에 오류 없이 계산한 것이 하나도 없을 때(빈 배열, 모두 삭제)도, 강화·합성의 가치 비교를 스탯 예산이 없어 하지 못했을 때도 같다. `provenance`에 md 파일이 하나도 없으면 종료 코드 2다.
 - **확인한 경고.** 의도를 확인한 경고는 그 항목의 `acknowledged`에 `{경고 코드: 이유}`로 적는다. 경고 수와 `--strict`에서 빠지고 "확인한 경고"로 이유와 함께 따로 보인다. 오류는 확인으로 끌 수 없다. 한 항목에 대상이 여럿인 경고(전투 단계의 적별 행)는 `{경고 코드: {대상 id: 이유}}`로 그 대상만 확인한다. 문자열 이유는 그 항목의 그 코드 경고를 모두 덮어 나중에 생기는 경고도 숨긴다.
 - `check --table`: 컨셉 비교표, 전투 계산표(단계 × 적), 빌드 비교표, 예산 비교표, 강화·합성 표, 재화 흐름 표를 마크다운으로 출력한다. `--table combat,growth`처럼 종류(`concepts`, `combat`, `growth`, `budget`, `crafting`, `economy`)를 쉼표로 고르면 그 표만 낸다. 검사할 경로는 `--table` 앞에 적는다. `--ids a,b,c`는 컨셉 비교표에 고른 후보만 그 순서로 보인다.
-- `simulate --policy cheapest_first` / `--compare-policies`: 설정 파일을 고치지 않고 구매 정책을 바꾸거나 두 정책을 나란히 비교한다.
+- `simulate --policy cheapest_first` / `--compare-policies`: 설정 파일을 고치지 않고 구매 정책을 바꾸거나 정책들을 나란히 비교한다. 설정에 재화 흐름 연결(`economy`)이 있으면 `economy`(그 구매 계획 순서)도 쓰고 비교에 넣는다.
 
 ## 프로젝트 배치
 

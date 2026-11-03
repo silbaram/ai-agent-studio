@@ -216,7 +216,7 @@ class ReviewRegressions(unittest.TestCase):
             datasets.collect([self.root])
         finally:
             datasets.read = original
-        self.assertEqual(sorted(calls), ["budget.json", "combat.json", "concepts.json", "crafting.json", "economy.json", "enemies.json", "growth.json", "items.json", "meta.json", "playtests.json", "upgrades.json"])
+        self.assertEqual(sorted(calls), ["budget.json", "combat.json", "concepts.json", "crafting.json", "economy.json", "enemies.json", "growth.json", "items.json", "meta.json", "meta_combat.json", "playtests.json", "upgrades.json"])
 
 
 class ViewWithoutData(unittest.TestCase):

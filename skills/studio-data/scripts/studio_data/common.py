@@ -111,8 +111,8 @@ def detect_kind(data, path: Path | None = None) -> str | None:
     """JSON 최상위 키로 종류를 판단한다. 시뮬레이터 설정은 'meta'로 구분한다."""
     if not isinstance(data, dict):
         return None
-    if "rooms" in data and "difficulty" in data:
-        return "meta"
+    if ("rooms" in data and "difficulty" in data) or data.get("model") == "combat":
+        return "meta"  # 메타 성장 시뮬레이터 설정(추상 모델 또는 전투 계산 모델)
     for kind in DATASET_KINDS:
         if kind in data:
             return kind  # 형식이 틀려도 종류로 인정해야 검사기가 형식 오류를 보고한다

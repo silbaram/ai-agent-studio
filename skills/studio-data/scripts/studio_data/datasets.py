@@ -151,6 +151,11 @@ def _choice_items(growth_data: dict | None) -> dict:
     return out
 
 
+def indexes(entries: list[dict]) -> dict:
+    """아이템·영구 강화·적의 {id: 항목}(읽지 못했거나 없으면 None). 전투 계산과 메타 성장 시뮬레이터가 같은 규칙으로 참조한다."""
+    return {k: _index(entries, k) for k in ("items", "upgrades", "enemies")}
+
+
 def validate_all(entries: list[dict]) -> list[dict]:
     """읽은 항목들에 검사 결과(report)를 붙인다. 적의 드랍 테이블은 함께 읽은 아이템 데이터로,
     플레이 기록의 컨셉·가설 참조는 함께 읽은 컨셉 데이터로, 전투 계산은 함께 읽은 아이템·영구 강화·적 데이터로 확인한다.
@@ -170,7 +175,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
             tables = d["data"].get("drop_tables") or {}
             if isinstance(tables, dict):
                 drop_tables.update(tables)
-    by_id = {k: _index(entries, k) for k in ("items", "upgrades", "enemies")}
+    by_id = indexes(entries)
     budget_data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "budget"), None)
     crafting_data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "crafting"), None)
     budget_settings = budget.read_settings(budget_data, []) if budget_data is not None else None
