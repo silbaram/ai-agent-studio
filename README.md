@@ -21,6 +21,10 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 | [concept-exploration](skills/concept-exploration/SKILL.md) | 막연한 방향을 구조가 다른 게임 가설로 펼치고, 단순 전략으로 반증하고, 고른 안을 필러·가설·최소 프로토타입이 있는 브리프로 정리 |
 | [numeric-provenance](skills/numeric-provenance/SKILL.md) | 기획 수치를 `[가정]` / `[계산: 출처]` / `[측정: 출처]`로 표시하고, 확정 판정 전에 스크립트로 검사 |
 | [progression-economy](skills/progression-economy/SKILL.md) | 아이템·영구 강화·적 데이터의 단일 원본 관리와 뷰어, 티어 역전·완전 열위·드랍 천장·강화 사슬·적 위협도 진행 검사, 로그라이크 메타 성장 시뮬레이션 |
+| [run-growth](skills/run-growth/SKILL.md) | 레벨업 선택지와 빌드 정책(우선순위·고르게)으로 단계별로 얻는 스탯을 시뮬레이션해 전투 계산에 더하고, 빌드끼리 처치·버팀을 비교해 모든 곳에서 밀리는 빌드를 찾음 |
+| [stat-budget](skills/stat-budget/SKILL.md) | 티어·구역별 스탯 예산 곡선과 원가로 아이템·적의 넘침·모자람을 찾고, 원형(아키타입)으로 새 항목 초안을 만들고, 전투 공식으로 스탯 원가를 제안 |
+| [crafting-balance](skills/crafting-balance/SKILL.md) | 강화 단계별 기대 비용·시도(실패 시 유지·하락·파괴), 합성의 가치 비율과 무작위 합성의 특정 결과까지 기대 횟수, 아이템 증식 고리, 얻을 수 없는 아이템 |
+| [economy-flow](skills/economy-flow/SKILL.md) | 단계별 수입(처치 보상·드랍 판매·기타)과 구매 계획(아이템·강화·합성·영구 강화 가격)을 이어 구매 시점, 메타 재화의 판 수, 판 끝에 남는 재화를 계산 |
 | [combat-balance](skills/combat-balance/SKILL.md) | 플레이어·아이템·강화·적을 하나의 스탯과 방어 공식(고정값·비율·레벨 비율·퍼센트 중 선택)으로 잇고, 단계·적마다 처치·버팀 타수와 시간을 계산해 목표 이탈을 찾음 |
 | [playtest-verdict](skills/playtest-verdict/SKILL.md) | 프로토타입 플레이를 데이터로 기록하고, 읽기 전용 판정 에이전트가 기록만 보고 가설을 버팀·틀림·모름으로 판정, 측정값을 세션 출처와 함께 `[측정]`으로 올림 |
 
@@ -28,7 +32,7 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 
 ## 설치
 
-**스킬을 사용할 게임 프로젝트 폴더에서** 실행한다. 여섯 스킬을 모두 설치한다. `studio-data`가 빠지면 다른 스킬의 검사와 뷰어가 동작하지 않는다.
+**스킬을 사용할 게임 프로젝트 폴더에서** 실행한다. 열 스킬을 모두 설치한다. `studio-data`가 빠지면 다른 스킬의 검사와 뷰어가 동작하지 않는다.
 
 필요한 것:
 
@@ -57,7 +61,7 @@ npx skills add silbaram/ai-agent-studio --skill '*' --agent codex --copy
 - `--copy`는 독립 사본을 만든다. 이 저장소가 갱신돼도 설치본은 자동으로 바뀌지 않는다.
 - **갱신하려면 같은 명령을 다시 실행한다.** 기존 설치본을 덮어쓰므로, 설치본을 직접 고쳤다면 그 내용은 사라진다. 고칠 것이 있으면 설치본이 아니라 이 저장소를 고친다.
 - 받아 둔 이 저장소의 로컬 사본(작업 중인 브랜치 등)으로 설치하려면 `silbaram/ai-agent-studio` 대신 그 폴더 경로를 쓴다.
-- Node.js 없이 설치하려면 이 저장소의 `skills/` 안 여섯 폴더를 위 표의 설치 위치로 그대로 복사한다.
+- Node.js 없이 설치하려면 이 저장소의 `skills/` 안 열 폴더를 위 표의 설치 위치로 그대로 복사한다.
 
 Claude Code는 설치한 뒤 한 번 더 실행한다. `npx skills`는 스킬만 설치하므로, 판정 에이전트와 훅은 이 명령이 게임 프로젝트의 `.claude/agents/`와 `.claude/settings.json`에 넣는다. 스킬을 다시 설치한 뒤에도 다시 실행한다. 자세한 내용은 [studio-data의 Claude Code 연결](skills/studio-data/SKILL.md#claude-code-연결).
 
@@ -125,6 +129,26 @@ $combat-balance로 구역마다 기준 장비를 정하고, 일반·정예·보�
 ```
 
 ```text
+$stat-budget으로 아이템 티어별 예산 곡선을 지금 데이터에 맞춰 제안하고, 곡선을 벗어난 아이템을 알려줘.
+그다음 티어 3 공속 무기 초안을 하나 만들어서 제안 상태로 넣어줘. 원가 제안과 지금 원가가 크게 다르면 짚어줘.
+```
+
+```text
+$crafting-balance로 무기 강화 +1~+5를 설계해줘. +4부터는 실패하면 한 단계 떨어지게 하고, 단계별 기대 비용 표를 보여줘.
+1티어 무기 2개를 합쳐 2티어 무작위 하나를 주는 합성도 넣고, 손해인지와 특정 무기를 얻기까지 평균 몇 번인지 알려줘.
+```
+
+```text
+$economy-flow로 구역마다 평범하게 깼을 때의 골드 수입을 정리하고, 철검 구입과 무기 +3 강화를 언제 할 수 있는지 보여줘.
+영구 강화 2단계를 몇 번째 판에 사는지도 알려주고, 판 끝에 골드가 너무 남으면 짚어줘.
+```
+
+```text
+$run-growth로 레벨업 선택지 6개와 빌드 3개(공격 위주, 버티기, 고르게)를 정의하고,
+구역마다 빌드별로 정예와 보스를 몇 대에 잡는지 비교해줘. 모든 곳에서 밀리는 빌드나 아무도 안 고르는 선택지가 있으면 알려줘.
+```
+
+```text
 $progression-economy로 2구역에 나올 정예 적을 하나 추가해줘.
 제안 상태로 넣고 검사 경고가 있으면 알려줘. 바뀐 행만 보여줘.
 ```
@@ -140,7 +164,7 @@ python3 skills/studio-data/scripts/studio.py simulate skills/studio-data/assets/
 python3 skills/studio-data/scripts/studio.py provenance design/
 ```
 
-`view`는 프로젝트의 `design/`·`data/`에 있는 컨셉·아이템·영구 강화·적·전투 계산·플레이 기록을 브라우저에서 탭으로 보여 주는 읽기 전용 뷰어다. 문서를 따로 생성하지 않으므로 동기화할 것이 없고, 원본을 고치면 화면이 자동으로 갱신된다. Python 없이 `skills/studio-data/assets/viewer.html`을 직접 열어 '불러오기'로 볼 수도 있지만, 그때는 검사·계산 없이 원본 값만 보인다.
+`view`는 프로젝트의 `design/`·`data/`에 있는 컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·플레이 기록을 브라우저에서 탭으로 보여 주는 읽기 전용 뷰어다. 문서를 따로 생성하지 않으므로 동기화할 것이 없고, 원본을 고치면 화면이 자동으로 갱신된다. Python 없이 `skills/studio-data/assets/viewer.html`을 직접 열어 '불러오기'로 볼 수도 있지만, 그때는 검사·계산 없이 원본 값만 보인다.
 
 확정 판정 직전에는 `check`와 `provenance`에 `--fail-on-assumed`를 붙인다. 가정인 수치가 하나라도 남으면 실패한다.
 시뮬레이터는 추상 모델이다. 결과는 경제·성장 곡선의 구조를 보는 용도이며 실제 난이도나 재미 판정이 아니다.
@@ -148,7 +172,7 @@ python3 skills/studio-data/scripts/studio.py provenance design/
 ## 개발
 
 ```bash
-python -m unittest discover -s tests
+python3 -m unittest discover -s tests
 ```
 
 저장소 규칙은 [AGENTS.md](AGENTS.md)를 따른다.

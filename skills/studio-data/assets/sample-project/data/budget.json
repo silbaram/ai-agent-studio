@@ -1,0 +1,29 @@
+{
+  "_note": "예시 데이터다. 실제 게임 수치가 아니다. 형식: stat-budget/references/budget-format.md",
+  "budget": {
+    "items": {
+      "costs": { "attack": 1.0, "attack_speed": 20.0, "crit_chance": 40.0, "max_hp": 0.2, "armor": 1.5 },
+      "curve": { "by": "tier", "growth": "linear", "base": 8, "rate": 7 },
+      "multiplier": { "field": "slot", "values": { "weapon": 1, "armor": 1, "relic": 0.4 } }
+    },
+    "enemies": {
+      "costs": { "hp": 0.1, "damage": 1.0, "speed": 2.0 },
+      "curve": { "by": "zone", "growth": "linear", "base": 10, "rate": 7 },
+      "multiplier": { "field": "rank", "values": { "normal": 1, "elite": 2.7, "boss": 8.5 } }
+    },
+    "tolerance": 0.2,
+    "provenance": { "kind": "assumed", "note": "원가는 아이템 stat_weights에서 시작, 곡선은 기획 판단" }
+  },
+  "archetypes": [
+    { "id": "blade", "for": "items", "split": { "attack": 1.0 }, "fields": { "slot": "weapon", "rarity": "common" },
+      "intent": "공격만 올리는 단순한 무기", "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "quick_blade", "for": "items", "split": { "attack": 0.6, "attack_speed": 0.3, "crit_chance": 0.1 }, "fields": { "slot": "weapon", "rarity": "uncommon" },
+      "intent": "공격 속도와 치명으로 예산을 나눈 무기", "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "plate", "for": "items", "split": { "max_hp": 0.5, "armor": 0.5 }, "fields": { "slot": "armor", "rarity": "common" },
+      "intent": "체력과 방어를 반씩", "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "brute", "for": "enemies", "split": { "hp": 0.4, "damage": 0.5, "speed": 0.1 }, "fields": { "rank": "normal" },
+      "intent": "세게 치는 일반 적", "status": "approved", "provenance": { "kind": "assumed" } },
+    { "id": "tank", "for": "enemies", "split": { "hp": 0.7, "damage": 0.25, "speed": 0.05 }, "fields": { "rank": "elite" },
+      "intent": "오래 버티는 정예", "status": "proposed", "provenance": { "kind": "assumed" } }
+  ]
+}

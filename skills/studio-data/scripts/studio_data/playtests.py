@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from .common import STATUSES, check_identity, is_number
+from .common import STATUSES, check_identity, is_int, is_number
 from .common import add_issue as _err
 
 RESULTS = ("holds", "refuted", "unknown")
@@ -40,7 +40,7 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
         _err(errors, "schema", where, "players는 플레이한 사람 이름(문자열)이 1개 이상인 배열이어야 합니다.")
         ok = False
     runs = s.get("runs")
-    if not (isinstance(runs, int) and not isinstance(runs, bool) and runs >= 1):
+    if not is_int(runs, 1):
         _err(errors, "schema", where, f"runs(판 수)는 1 이상의 정수여야 합니다: {runs!r}")
         ok = False
     obs = s.get("observations", [])
@@ -51,7 +51,7 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
         if not (isinstance(o, dict) and _text(o.get("hypothesis")) and (_text(o.get("value")) or is_number(o.get("value")))):
             _err(errors, "schema", where, f"observations[{n}]에 hypothesis(가설 id)와 value(관찰값)가 필요합니다.")
             ok = False
-        elif "n" in o and not (isinstance(o["n"], int) and not isinstance(o["n"], bool) and o["n"] >= 0):
+        elif "n" in o and not is_int(o["n"], 0):
             _err(errors, "schema", where, f"observations[{n}].n(표본 수)은 0 이상의 정수여야 합니다.")
             ok = False
     notes = s.get("notes", [])

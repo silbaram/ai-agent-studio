@@ -72,6 +72,14 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table
 
 한 번에 하나만 바꾼다(적 스탯, 아이템 스탯, 기준 장비, 공식 상수 중 하나). 여러 개를 함께 바꾸면 어느 변경이 효과를 냈는지 알 수 없다. 계산 결과를 문서에 인용할 때는 `check . --json --out reports/combat.json`으로 저장하고 `[계산: reports/combat.json]`으로 적는다.
 
+## 판 안 성장
+
+[run-growth](../run-growth/SKILL.md)가 레벨업으로 얻는 스탯을 빌드마다 이 계산의 기준 장비에 더해 다시 계산한다. 이 스킬의 목표 범위는 성장 없음 기준이다.
+
+## 스탯 원가 제안
+
+이 공식으로 단계마다 "스탯 1이 공격 1에 비해 얼마나 강해지게 하는가"를 잰다. [stat-budget](../stat-budget/SKILL.md)이 예산 원가를 정할 때 이 값을 제안으로 보여 준다.
+
 ## 보고
 
 - 고른 공식 형태와 상수, 그 이유 (가정임을 함께)

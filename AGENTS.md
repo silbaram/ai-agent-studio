@@ -21,8 +21,10 @@
 변경을 마치기 전에 실행한다.
 
 ```bash
-python -m unittest discover -s tests
+python3 -m unittest discover -s tests
 ```
+
+Windows PowerShell은 `py -m unittest discover -s tests`.
 
 - 검사기나 게이트를 추가하면 그것이 실제로 실패하는 경우를 테스트로 먼저 보인다.
 - 실행하지 못한 검증은 실행하지 못했다고 보고한다.

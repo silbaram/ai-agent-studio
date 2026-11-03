@@ -1,0 +1,4 @@
+interface:
+  display_name: "재화 흐름"
+  short_description: "단계별 수입(처치 보상·드랍 판매)과 구매 계획을 이어 구매 시점·판 수·남는 재화를 계산하고 목표 이탈과 재화 쌓임을 찾음"
+  default_prompt: "Use $economy-flow to model this game's income per stage and its purchase plan, then report when each purchase is affordable, how much currency is left over, and anything off target."
