@@ -109,7 +109,8 @@ def normalize(cfg: dict, base_dir: Path | None = None) -> dict:
         raise ConfigError("설정 최상위는 객체여야 합니다.")
     model = cfg.get("model", "abstract")
     if model not in MODELS:
-        raise ConfigError(f"model은 {' 또는 '.join(MODELS)}입니다: {model!r}")
+        raise ConfigError(f"model은 {' 또는 '.join(MODELS)}입니다: {model!r}{c.did_you_mean(str(model), MODELS)}")
+    _check_keys(cfg, model)
     out = {"model": model, "seed": _req(cfg, "seed", int), "trials": _req(cfg, "trials", int), "max_runs": _req(cfg, "max_runs", int)}
     for k in ("trials", "max_runs"):
         if out[k] < 1:
@@ -133,10 +134,7 @@ def normalize(cfg: dict, base_dir: Path | None = None) -> dict:
         raise ConfigError("survival은 0 <= floor <= ceiling <= 1 이어야 합니다.")
     out["survival"] = {"slope": _req(s, "slope", float, "survival."), "floor": floor_, "ceiling": ceil_}
     if model == "combat":
-        even = _opt_num(s, "even_margin", 1.0, "survival.")
-        if even <= 0:
-            raise ConfigError("survival.even_margin은 0보다 커야 합니다(평균 실력이 절반의 확률로 넘기는 여유).")
-        out["survival"]["even_margin"] = even
+        out["survival"]["even_margin"] = _even_margin(s.get("even_margin", 1.0))
     elif "even_margin" in s:
         raise ConfigError("survival.even_margin은 전투 계산 모델(model: combat)에서만 씁니다.")
 
@@ -176,6 +174,12 @@ def normalize(cfg: dict, base_dir: Path | None = None) -> dict:
                 raise ConfigError(f"강화 '{uid}'의 선행 조건 '{r}'가 없습니다.")
     _check_cycles(seen)
     out["upgrades"] = list(seen.values())
+    if out.get("stat_effects"):
+        stats = {k for u in seen.values() for k in u["stats"]}
+        for name in out["stat_effects"]:
+            if name not in stats:  # 오타면 가정한 효과가 조용히 사라진다
+                raise ConfigError(f"stat_effects의 스탯 {name}을 가진 영구 강화가 없습니다.{c.did_you_mean(name, stats)} "
+                                  f"강화 스탯: {', '.join(sorted(stats)) or '없음'}")
 
     policy = cfg.get("purchase_policy", "listed_order")
     if policy not in ALL_POLICIES:
@@ -199,6 +203,78 @@ def normalize(cfg: dict, base_dir: Path | None = None) -> dict:
             out["milestones"].append({"id": mid, "clear_room": room})
         else:
             out["milestones"].append({"id": mid, "clear_stage": _req(m, "clear_stage", str, f"milestones[{n}].")})
+    return out
+
+
+_KEYS = {
+    "abstract": {"model", "seed", "trials", "max_runs", "rooms", "difficulty", "player", "survival", "currency", "economy",
+                 "upgrades_file", "upgrades", "purchase_policy", "milestones"},
+    "combat": {"model", "seed", "trials", "max_runs", "combat_file", "stages", "growth_file", "build", "survival", "player", "currency",
+               "economy", "stat_effects", "upgrades_file", "upgrades", "purchase_policy", "milestones"},
+}
+_SUB_KEYS = {
+    ("abstract", "player"): {"base_power", "power_per_room", "skill", "skill_spread"}, ("combat", "player"): {"skill", "skill_spread"},
+    ("abstract", "survival"): {"slope", "floor", "ceiling"}, ("combat", "survival"): {"slope", "even_margin", "floor", "ceiling"},
+    ("abstract", "currency"): {"per_room", "bonus_rooms", "keep_on_death"}, ("combat", "currency"): {"per_stage", "keep_on_death"},
+    ("abstract", "difficulty"): {"growth", "base", "rate"}, ("abstract", "economy"): {"file", "currency"}, ("combat", "economy"): {"file", "currency"},
+    ("abstract", "milestones"): {"id", "clear_room"}, ("combat", "milestones"): {"id", "clear_stage"},
+}
+EFFECTS = ("income_pct", "levels")  # 전투 밖 스탯의 효과: 판 사이 재화 수입 +비율, 판 안 레벨업 +횟수(스탯 1당)
+
+
+def _known_keys(d: dict, allowed: set, where: str) -> None:
+    """모르는 키는 오타일 가능성이 크다(조용히 기본값으로 돌면 결과가 통째로 달라진다). _로 시작하는 키(_note 등)는 메모로 둔다."""
+    for k in d:
+        if isinstance(k, str) and k.startswith("_"):
+            continue
+        if k not in allowed:
+            raise ConfigError(f"{where}알 수 없는 키 '{k}'.{c.did_you_mean(str(k), allowed)} 쓸 수 있는 키: {', '.join(sorted(allowed))}")
+
+
+def _check_keys(cfg: dict, model: str) -> None:
+    _known_keys(cfg, _KEYS[model], "")
+    for (m, key), allowed in _SUB_KEYS.items():
+        if m != model or key not in cfg:
+            continue
+        items = cfg[key] if key == "milestones" and isinstance(cfg[key], list) else [cfg[key]]
+        for n, d in enumerate(items):
+            if isinstance(d, dict):
+                _known_keys(d, allowed, f"{key}[{n}]." if key == "milestones" else f"{key}.")
+
+
+def _stat_effects(v, has_growth: bool) -> dict:
+    """{스탯 이름: {income_pct: 수, levels: 수}}. 전투 역할에 연결되지 않은 강화 스탯(수집·숙성 등)을 시뮬레이터에 잇는 가정."""
+    if v is None:
+        return {}
+    if not isinstance(v, dict):
+        raise ConfigError("stat_effects는 {스탯 이름: {income_pct, levels}}입니다.")
+    out = {}
+    for stat, eff in v.items():
+        where = f"stat_effects.{stat}."
+        if not (isinstance(eff, dict) and eff):
+            raise ConfigError(f"{where[:-1]}는 {{{', '.join(EFFECTS)}: 스탯 1당 값}}입니다.")
+        _known_keys(eff, set(EFFECTS), where)
+        out[stat] = {k: _opt_num(eff, k, 0.0, where) for k in eff}
+        if "levels" in out[stat] and not has_growth:
+            raise ConfigError(f"{where}levels(판 안 레벨업)는 growth_file과 build가 있어야 씁니다.")
+    return out
+
+
+def _even_margin(v):
+    """수 하나(모든 등급) 또는 {등급: 수}(없는 등급은 1). 모두 0보다 커야 한다."""
+    where = "survival.even_margin"
+    if isinstance(v, dict):
+        out = {}
+        for rank, x in v.items():
+            if rank not in cb.RANKS:
+                raise ConfigError(f"{where}의 등급은 {', '.join(cb.RANKS)} 중 하나입니다: {rank!r}{c.did_you_mean(str(rank), cb.RANKS)}")
+            out[rank] = _opt_num(v, rank, 1.0, where + ".")
+        values = list(out.values())
+    else:
+        out = _opt_num({"even_margin": v}, "even_margin", 1.0, "survival.")
+        values = [out]
+    if any(x <= 0 for x in values):
+        raise ConfigError(f"{where}은 0보다 커야 합니다(평균 실력이 절반의 확률로 넘기는 여유).")
     return out
 
 
@@ -236,10 +312,13 @@ def _combat_part(cfg: dict, out: dict, base_dir: Path | None) -> None:
         raise ConfigError("stages는 판에서 지나는 전투 단계 id 배열입니다(없으면 전투 계산의 활성 단계 전부).")
     out["stages"] = stages
     if "growth_file" in cfg or "build" in cfg:
+        if "growth_file" not in cfg:
+            raise ConfigError("build(판 안 성장의 빌드 id)를 쓰면 growth_file이 필요합니다(판 안 성장 파일 경로).")
         out["growth_file"] = _path(cfg, "growth_file", base_dir)
         if not isinstance(cfg.get("build"), str):
             raise ConfigError("growth_file을 쓰면 build(판 안 성장의 빌드 id)가 필요합니다.")
         out["build"] = cfg["build"]
+    out["stat_effects"] = _stat_effects(cfg.get("stat_effects"), "growth_file" in out)
     c = cfg.get("currency", {})
     if not isinstance(c, dict):
         raise ConfigError("currency는 객체여야 합니다.")
@@ -382,34 +461,48 @@ def simulate_trial(cfg: dict, trial: int, cache: dict | None = None) -> dict:
 
 
 # ---------- 전투 계산 모델 ----------
-def stage_margin(rows: list[dict]) -> float:
-    """단계의 여유 = 버티는 시간 ÷ 처치 시간(공격 속도가 없으면 타수로). 단계에서 가장 어려운 적의 값.
-    피해를 줄 수 없는 적이 있으면 0, 어떤 적도 피해를 주지 못하면 무한대."""
-    worst = math.inf
+def row_margin(r: dict) -> float:
+    """적 하나와의 여유 = 버티는 시간 ÷ 처치 시간. 어느 쪽이든 공격 속도가 없으면 버티는 타수 ÷ 처치 타수(양쪽 공격 빈도가 같다고 보는 셈).
+    피해를 줄 수 없으면 0, 피해를 받지 않으면 무한대."""
+    if r["hits_to_kill"] is None:
+        return 0.0
+    if r["hits_to_die"] is None:
+        return math.inf
+    if r["time_to_kill"] is not None and r["time_to_die"] is not None:
+        return r["time_to_die"] / r["time_to_kill"]
+    return r["hits_to_die"] / r["hits_to_kill"]
+
+
+def _reference(even, rank) -> float:
+    return even.get(rank, 1.0) if isinstance(even, dict) else even
+
+
+def stage_limit(rows: list[dict], even=1.0) -> tuple[float, dict | None]:
+    """(기준 대비 여유, 그 단계를 정한 적의 행). 적마다 여유 ÷ 그 등급의 기준(even_margin)을 내고 가장 작은 적이 단계를 정한다."""
+    worst, who = math.inf, None
     for r in rows:
-        if r["hits_to_kill"] is None:
-            m = 0.0
-        elif r["hits_to_die"] is None:
-            m = math.inf
-        elif r["time_to_kill"] is not None and r["time_to_die"] is not None:
-            m = r["time_to_die"] / r["time_to_kill"]
-        else:
-            m = r["hits_to_die"] / r["hits_to_kill"]
-        worst = min(worst, m)
-    return worst
+        m = row_margin(r) / _reference(even, r.get("rank"))
+        if who is None or m < worst:
+            worst, who = m, r
+    return worst, who
 
 
-def combat_survival(cfg: dict, margin: float, skill: float) -> float:
-    """단계를 넘길 확률 = clamp(sigmoid(slope × ln(여유 ÷ even_margin) + skill), floor, ceiling).
-    even_margin(기본 1)은 평균 실력(skill 0)의 플레이어가 절반의 확률로 넘기는 여유다. 피하며 싸우는 액션 게임은 기대값 여유가
-    1보다 훨씬 작아도 넘기므로 1보다 작게 둔다. slope·skill과 함께 가정이며 플레이 기록으로 보정한다."""
+def stage_margin(rows: list[dict], even=1.0) -> float:
+    """단계의 기준 대비 여유(stage_limit의 값). even이 1이면 가장 어려운 적의 여유 그대로."""
+    return stage_limit(rows, even)[0]
+
+
+def combat_survival(cfg: dict, relative: float, skill: float) -> float:
+    """단계를 넘길 확률 = clamp(sigmoid(slope × ln(기준 대비 여유) + skill), floor, ceiling). 기준 대비 여유 = 여유 ÷ even_margin(stage_limit).
+    even_margin(기본 1, 등급별로 줄 수 있음)은 평균 실력(skill 0)의 플레이어가 절반의 확률로 넘기는 여유다. 피하며 싸우는 액션 게임은
+    기대값 여유가 1보다 훨씬 작아도 넘기므로(보스는 특히) 1보다 작게 둔다. slope·skill과 함께 가정이며 플레이 기록으로 보정한다."""
     s = cfg["survival"]
-    if margin <= 0:
+    if relative <= 0:
         p = 0.0
-    elif margin == math.inf:
+    elif relative == math.inf:
         p = 1.0
     else:
-        x = max(-60.0, min(60.0, s["slope"] * math.log(margin / s.get("even_margin", 1.0)) + skill))
+        x = max(-60.0, min(60.0, s["slope"] * math.log(relative) + skill))
         p = 1.0 / (1.0 + math.exp(-x))
     return min(s["ceiling"], max(s["floor"], p))
 
@@ -431,8 +524,9 @@ def _entry(entries: list, path: Path, kind: str, label: str, currency: str | Non
                               f"({', '.join(r.get('unchecked_kinds', []))}). `studio.py check`로 먼저 고치세요.")
         return found
     if r["errors"] or r.get("unchecked"):
-        raise ConfigError(f"{label}({path})에 오류 {len(r['errors'])}건·미확인 {r.get('unchecked', 0)}건이 있습니다. "
-                          "`studio.py check`로 먼저 고치세요(틀린 데이터로 시뮬레이션하지 않습니다).")
+        first = "; ".join(f"{e['where']}: {e['message']}" for e in r["errors"][:2])
+        raise ConfigError(f"{label}({path})에 오류 {len(r['errors'])}건·미확인 {r.get('unchecked', 0)}건이 있습니다"
+                          + (f"({first})" if first else "") + ". `studio.py check`로 먼저 고치세요(틀린 데이터로 시뮬레이션하지 않습니다).")
     return found
 
 
@@ -447,6 +541,10 @@ def attach(cfg: dict, base_dir: Path | None = None) -> dict:
     entries = datasets.collect([Path(x) for x in folders])
     ups = {u["id"]: u for u in cfg["upgrades"]}
     out = dict(cfg)
+    used = ("combat", "growth", "economy", "items", "upgrades", "enemies", "crafting") if cfg["model"] == "combat" else ("economy",)
+    # 결과를 인용할 때 어느 데이터에서 나왔는지 확인할 수 있게, 함께 읽어 계산에 쓴 파일의 경로와 해시를 남긴다
+    out["inputs"] = [{"path": d["path"], "sha256": hashlib.sha256(Path(d["path"]).read_bytes()).hexdigest()}
+                     for d in entries if d["ok"] and d["kind"] in used]
     out["milestones"] = [dict(m) for m in cfg["milestones"]]  # 단계 위치를 적어 넣으므로 넘겨받은 설정을 바꾸지 않게 복사한다
     if "economy" in cfg:
         need_income = cfg["model"] == "combat" and "per_stage" not in cfg["currency"]  # 추상 모델은 구매 순서만 쓴다
@@ -508,6 +606,9 @@ def _attach_combat(cfg: dict, entries: list, ups: dict) -> None:
             raise ConfigError(f"전투 단계 {sid}를 계산할 수 없습니다(계산할 적이 없음 등). 전투 계산 결과를 확인하세요.")
     index = {sid: n for n, sid in enumerate(stages, start=1)}
     for m in cfg["milestones"]:
+        if m["clear_stage"] in active and m["clear_stage"] not in index:
+            raise ConfigError(f"마일스톤 {m['id']}의 clear_stage {m['clear_stage']}는 전투 계산에 있지만 이 설정의 stages에서 뺀 단계입니다. "
+                              f"stages에 넣거나 마일스톤을 판의 단계({', '.join(stages)})로 바꿉니다.")
         if m["clear_stage"] not in index:
             raise ConfigError(f"마일스톤 {m['id']}의 clear_stage가 판의 단계에 없습니다: {m['clear_stage']}{c.did_you_mean(m['clear_stage'], stages)}")
         m["clear_room"] = index[m["clear_stage"]]
@@ -534,12 +635,28 @@ def _attach_combat(cfg: dict, entries: list, ups: dict) -> None:
             levels.append(last)
         growth = {"choices": usable, "build": build, "levels": levels, "offers": settings["offers"],
                   "stats": {ch["id"]: ch["stats"] for ch in usable}}
-    known = set(prep["settings"]["roles"]["player"].values())
+    roles = set(prep["settings"]["roles"]["player"].values())
+    doubled = sorted(set(cfg["stat_effects"]) & roles)
+    if doubled:
+        raise ConfigError(f"stat_effects의 {', '.join(doubled)}는 전투 계산의 역할에 연결된 스탯이라 이미 생존에 들어갑니다. "
+                          "전투 밖 효과를 더하면 두 번 계산됩니다. 전투 역할에 연결되지 않은 스탯만 적습니다.")
+    known = roles | set(cfg["stat_effects"])
     cfg["rooms"] = len(stages)
     cfg["_combat"] = {"prep": prep, "stages": stages, "income": {sid: float(income.get(sid, 0.0)) for sid in stages},
                       "upgrade_stats": {uid: u["stats"] for uid, u in ups.items()},
                       "growth": growth, "no_effect": [u for u, x in ups.items() if not set(x["stats"]) & known]}
     _check_reachable_stats(cfg)
+
+
+def _effects(cfg: dict, owned) -> tuple[float, int]:
+    """산 강화의 전투 밖 효과: (판 사이 재화 수입 배율, 판 안 레벨업 추가 횟수). stat_effects가 없으면 (1, 0)."""
+    eff = cfg.get("stat_effects") or {}
+    if not eff:
+        return 1.0, 0
+    total = gr.stat_bonus(cfg["_combat"]["upgrade_stats"], ((u, 1) for u in owned))
+    income = 1.0 + sum(total.get(k, 0) * e.get("income_pct", 0.0) for k, e in eff.items())
+    levels = int(math.floor(sum(total.get(k, 0) * e.get("levels", 0.0) for k, e in eff.items()) + 1e-9))
+    return max(0.0, income), max(0, levels)
 
 
 def _stage_margin_for(cfg: dict, sid: str, owned, growth_counts, cache: dict) -> float:
@@ -555,15 +672,16 @@ def _stage_margin_for(cfg: dict, sid: str, owned, growth_counts, cache: dict) ->
             raise ConfigError(f"단계 {sid}에서 스탯을 전투 계산에 쓸 수 없는 판이 나왔습니다: {problem}. "
                               f"영구 강화: {', '.join(sorted(owned)) or '없음'} · 판 안 성장 선택: {picks}. "
                               "강화·선택지 수치나 max_picks를 고치세요(판 안 성장 검사는 영구 강화 없이 본다).")
-        cache[key] = stage_margin(rows)
-    return cache[key]
+        cache[key] = stage_limit(rows, cfg["survival"]["even_margin"])
+    return cache[key][0]
 
 
-def _growth_counts(cfg: dict, seed: int, trials: int = 1) -> list:
+def _growth_counts(cfg: dict, seed: int, trials: int = 1, extra_levels: int = 0) -> list:
+    """판 안 성장의 단계별 선택 횟수(시행마다). extra_levels: 전투 밖 강화(stat_effects levels)로 더해지는 레벨업 횟수."""
     g = cfg["_combat"]["growth"]
     if not g:
-        return [[()] * len(cfg["_combat"]["stages"])]
-    return gr.simulate_trials(g["choices"], g["build"], g["levels"], g["offers"], trials, seed)
+        return [[()] * len(cfg["_combat"]["stages"])] * trials
+    return gr.simulate_trials(g["choices"], g["build"], [lv + extra_levels for lv in g["levels"]], g["offers"], trials, seed)
 
 
 def _check_reachable_stats(cfg: dict) -> None:
@@ -578,39 +696,58 @@ def _check_reachable_stats(cfg: dict) -> None:
 def play_combat_run(cfg: dict, rng: random.Random, owned: set, skill: float, cache: dict) -> tuple[int, float]:
     """한 판: 단계를 순서대로 지나며 단계마다 전투 계산의 여유로 넘길지 정한다. (넘긴 단계 수, 얻은 재화)."""
     ctx = cfg["_combat"]
-    counts = _growth_counts(cfg, rng.randrange(2 ** 31))[0]  # 판마다 레벨업 선택이 다르다
+    income, extra = _effects(cfg, owned)
+    counts = _growth_counts(cfg, rng.randrange(2 ** 31), 1, extra)[0]  # 판마다 레벨업 선택이 다르다
     earned, cleared = 0.0, 0
     for n, sid in enumerate(ctx["stages"]):
         margin = _stage_margin_for(cfg, sid, owned, counts[n], cache)
         if rng.random() >= combat_survival(cfg, margin, skill):
             return cleared, earned * cfg["currency"]["keep_on_death"]
         cleared = n + 1
-        earned += ctx["income"][sid]
+        earned += ctx["income"][sid] * income
     return cleared, earned
 
 
 def combat_overview(cfg: dict) -> dict:
-    """단계마다 영구 강화·판 안 성장 없이와 계획한 강화를 모두 사고 판 안 성장(평균)을 더했을 때의 여유와 넘길 확률(평균 실력)."""
+    """단계마다 영구 강화·판 안 성장 없이와 계획한 강화를 모두 사고 판 안 성장(평균)을 더했을 때의 여유와 넘길 확률(평균 실력).
+    여유는 그 단계를 정한 적(기준 대비 여유가 가장 작은 적)의 값이고, 그 적과 등급을 함께 낸다."""
     ctx, skill = cfg["_combat"], cfg["player"]["skill"]
     g = ctx["growth"]
-    avg: list = [{} for _ in ctx["stages"]]
-    if g:
-        runs = _growth_counts(cfg, cfg["seed"], 200)
-        for per_stage in runs:
-            for n, counts in enumerate(per_stage):
-                for ch, times in counts:
-                    avg[n][ch] = avg[n].get(ch, 0) + times / len(runs)
     goal = targets(cfg)
+
+    def average(extra_levels: int) -> list:
+        out: list = [{} for _ in ctx["stages"]]
+        if g:
+            runs = _growth_counts(cfg, cfg["seed"], 200, extra_levels)
+            for per_stage in runs:
+                for n, counts in enumerate(per_stage):
+                    for ch, times in counts:
+                        out[n][ch] = out[n].get(ch, 0) + times / len(runs)
+        return out
+
+    avg, avg_new = average(_effects(cfg, goal)[1]), average(0)
+    even = cfg["survival"]["even_margin"]
+
+    def limit(bonus: dict) -> tuple:
+        got, _ = cb.evaluate(ctx["prep"], sid, bonus)
+        return stage_limit(got, even) if got else (0.0, None)
+
     rows = []
     for n, sid in enumerate(ctx["stages"]):
-        none = _stage_margin_for(cfg, sid, [], (), {})
+        rel_none, who_none = limit({})
+        # 첫 판의 새 플레이어: 영구 강화는 없지만 판 안 성장은 있다(성장 설정이 없으면 위와 같다)
+        rel_new, who_new = limit(gr.stat_bonus(g["stats"], avg_new[n].items()) if g else {})
         bonus = gr.stat_bonus(ctx["upgrade_stats"], ((u, 1) for u in goal))
         if g:
             bonus = gr.stat_bonus(g["stats"], avg[n].items(), bonus)
-        got, problem = cb.evaluate(ctx["prep"], sid, bonus)
-        full = stage_margin(got) if got else 0.0
-        rows.append({"stage": sid, "margin_none": _round(none), "p_none": round(combat_survival(cfg, none, skill), 4),
-                     "margin_all": _round(full), "p_all": round(combat_survival(cfg, full, skill), 4)})
+        rel_all, who_all = limit(bonus)
+        margin = lambda who: _round(row_margin(who)) if who else 0  # noqa: E731
+        rows.append({"stage": sid, "decided_by": who_none["enemy"], "rank": who_none.get("rank"),
+                     "margin_none": margin(who_none), "p_none": round(combat_survival(cfg, rel_none, skill), 4),
+                     "decided_by_growth": who_new["enemy"] if who_new else None,
+                     "margin_growth": margin(who_new), "p_growth": round(combat_survival(cfg, rel_new, skill), 4),
+                     "decided_by_all": who_all["enemy"] if who_all else None,
+                     "margin_all": margin(who_all), "p_all": round(combat_survival(cfg, rel_all, skill), 4)})
     return {"survival_by_stage": rows, "stage_income": {k: _round(v) for k, v in ctx["income"].items()},
             "upgrades_without_combat_effect": ctx["no_effect"],
             "growth_build": cfg.get("build")}
@@ -734,4 +871,6 @@ def run_config(config_path, policy: str | None = None) -> tuple[dict, dict]:
     result["config_sha256"] = hashlib.sha256(raw).hexdigest()
     if "upgrades_file" in cfg:
         result["upgrades_file"] = cfg["upgrades_file"]
+    if "inputs" in cfg:
+        result["inputs"] = cfg["inputs"]
     return cfg, result

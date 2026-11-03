@@ -59,7 +59,8 @@
 | `player.base` | 예 | `{스탯: 수}`. 아이템·강화 전 기본값 |
 | `player.items`, `player.upgrades` | 아니오 | 아이템·영구 강화 id 배열. 원본의 `stats`를 더한다. 삭제(`cut`) 항목은 경고하고 뺀다. 아이템 칸은 강화한 아이템 `{"item": id, "enhance": 강화 id, "level": 단계}`도 된다: 그 아이템 스탯 × (1 + 1~level 단계 `bonus_pct`의 합). 강화는 강화·합성 데이터(`crafting.json`)의 것이고 그 아이템이 대상이어야 한다 |
 | `enemies` | 아니오 | 계산할 적 id 배열. 없으면 `zone` |
-| `zone` | 아니오 | 그 구역의 적(삭제 제외)을 모두 계산 |
+| `zone` | 아니오 | 적 데이터의 `zone`(처음 나오는 구역)이 이 값인 적(삭제 제외)을 모두 계산 |
+| `zone_rule` | 아니오 | `first_seen`(기본): 위와 같다 / `up_to`: `zone`이 이 값 이하인 적, 곧 이 구역까지 나온 적을 모두 계산(앞 구역의 적이 계속 나오는 게임). `up_to`는 `zone`이 수여야 한다 |
 | `status`, `provenance`, `acknowledged` | 아니오 | 공통 필드 ([data-format](../../progression-economy/references/data-format.md#공통-필드)) |
 
 `acknowledged`는 단계에 적는다. `{코드: "이유"}`는 그 단계와 그 단계의 모든 행(`단계.적`)에서 난 그 코드 경고에 적용된다(나중에 생기는 다른 적의 경고도 덮는다). `{코드: {적 id: "이유"}}`는 그 적의 행 경고만 덮는다. 의도한 이탈은 적 단위로 확인한다. 공식·목표·역할 쪽 경고(`target_unchecked`, `stat_not_found`)는 단계 확인으로 끌 수 없다.
@@ -84,7 +85,7 @@
 | `schema`, `duplicate_id` | 오류 | 형식 위반(역할·공식·목표·단계), 단계 id 중복 |
 | `unknown_item`, `unknown_upgrade`, `unknown_enemy`, `unknown_enhance` | 오류 | 원본 데이터에 없는 id(강화는 강화·합성 데이터) |
 | `missing_stat` | 오류 | 플레이어(합계)나 적에 체력·공격 스탯이 없음 |
-| `bad_stat` | 오류 | 계산에 쓸 수 없는 값: 체력 0 이하, 공격 속도 0 이하, 치명 확률 0~1 밖(2 이상이면 퍼센트로 적은 것으로 보고 안내), 치명 배율 1 미만 |
+| `bad_stat` | 오류 | 계산에 쓸 수 없는 값: 체력 0 이하, 공격 속도 0 이하, 치명 확률 0~1 밖(2 이상이면 퍼센트로 적은 것으로 보고 안내), 치명 배율 1 미만. 기준 장비에 넣지 않은 영구 강화도 하나씩 단계 기준 장비에 더해 보고, 그 강화가 스탯을 깨면 `upgrades:<강화 id>`의 오류다(메타 성장 시뮬레이터가 사면 더하므로) |
 | `negative_defense` | 오류 | 비율 공식에서 방어가 음수 |
 | `target_out_of_range` | 경고 | 지표가 등급별 목표 범위를 벗어남 |
 | `target_unchecked` | 경고 | 시간 목표(`time_to_kill`, `time_to_die`)를 정했는데 그쪽에 공격 속도 값이 없어 검사하지 못함. 등급·지표마다 한 번. 피해 0으로 타수가 없는 경우는 `zero_damage`가 알린다 |
