@@ -18,7 +18,7 @@ description: "Sets stat budget curves per tier, zone, or level with per-stat cos
 | 명령 | 하는 일 |
 |---|---|
 | `python3 .claude/skills/studio-data/scripts/studio.py check .` | 곡선·원가·원형 형식 검사, 모든 아이템·적의 예산 비교(넘침·모자람), 원가 제안 |
-| `… check . --table` | 항목별 예산 비교표(마크다운) |
+| `… check . --table budget` | 항목별 예산 비교표(마크다운) |
 | `… draft . --archetype <원형> --at <기준 값> [--set 필드=값] [--id 새_id]` | 곡선과 원형으로 초안 하나를 JSON으로 출력. **파일에 쓰지 않는다** |
 | `… view .` | 스탯 예산 탭: 원가와 제안, 곡선의 기대 예산, 비교표(넘침·모자람 강조), 원형 |
 
@@ -33,6 +33,8 @@ description: "Sets stat budget curves per tier, zone, or level with per-stat cos
 - [combat-balance](../combat-balance/SKILL.md)의 `data/combat.json`이 있으면 `check`가 **원가 제안**을 보여 준다. 전투 공식으로 단계마다 "그 스탯 1이 공격 1에 비해 얼마나 강해지게 하는가"를 잰 값이다. 단계마다 다르다(방어는 적이 셀수록 값어치가 오르는 식).
 - 제안은 자동으로 적용하지 않는다. 기획자가 정한 원가와 크게 다르면 사용자에게 보여 주고 어느 쪽을 쓸지 묻는다.
 - 전투 공식에 없는 스탯(이동 속도, 획득 반경 등)은 제안이 없다. 사용자와 정한다.
+- 전투 계산에 오류가 있거나 기준 장비를 계산하지 못한 단계는 제안이 빠진다. 빠진 단계와 이유는 "원가 제안 미확인" 줄로 나온다.
+- 이 원가가 아이템·적 데이터의 "예산"의 원본이다. `budget.json`이 있으면 아이템 검사(티어 역전·열위)와 적 검사(위협도)도 `stat_weights`·`threat_weights` 대신 이 원가를 쓴다. 두 값을 따로 적어 두면 판정이 엇갈리므로, 비율이 다르면 `weights_ignored`로 알린다. 옛 가중치는 지우거나 같은 비율로 맞춘다.
 
 ### 2. 곡선을 정한다
 

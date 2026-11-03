@@ -10,13 +10,13 @@
     "provenance": { "kind": "assumed", "note": "처치 수·드랍 횟수는 한 판을 평범하게 깬 경우의 추정" }
   },
   "stages": [
-    { "id": "zone_1", "name": "구역 1", "duration": 300,
+    { "id": "zone_1", "combat_stage": "zone_1", "name": "구역 1", "duration": 300,
       "kills": { "slime": 40, "skeleton_archer": 25, "grave_knight": 3, "bone_lord": 1 }, "drops": { "chest_normal": 2 },
       "income": { "soul": 8 }, "status": "approved", "provenance": { "kind": "assumed" } },
-    { "id": "zone_2", "name": "구역 2", "duration": 360,
+    { "id": "zone_2", "combat_stage": "zone_2", "name": "구역 2", "duration": 360,
       "kills": { "frost_wolf": 35, "ice_mage": 20, "frost_giant": 3, "ice_queen": 1 }, "drops": { "chest_normal": 3, "boss_reward": 1 },
       "income": { "soul": 12 }, "status": "approved", "provenance": { "kind": "assumed" } },
-    { "id": "zone_3", "name": "구역 3", "duration": 420,
+    { "id": "zone_3", "combat_stage": "zone_3", "name": "구역 3", "duration": 420,
       "kills": { "void_spawn": 45, "void_herald": 1 }, "drops": { "chest_normal": 3 },
       "income": { "soul": 20 }, "status": "approved", "provenance": { "kind": "assumed" } }
   ],
