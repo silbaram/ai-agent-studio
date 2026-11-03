@@ -1,7 +1,7 @@
 {
   "_note": "예시 데이터다. 실제 게임 수치가 아니다. 형식: run-growth/references/growth-format.md",
   "growth": {
-    "level_at": { "zone_1": 4, "zone_2": 9, "zone_3": 14 },
+    "level_at": { "zone_1": 1, "zone_2": 4, "zone_3": 9 },
     "offers": 3,
     "trials": 1000,
     "seed": 7,

@@ -16,6 +16,7 @@ GROWTHS = ("linear", "exponential", "table")
 FLAG_LABEL = {"ok": "곡선 안", "over": "넘침", "under": "모자람", "excluded": "판정 제외", "unchecked": "미확인"}
 DEFAULT_TOLERANCE = 0.2
 SPLIT_EPSILON = 1e-6
+INT_FIELDS = {"items": ("tier",), "enemies": ("zone",)}  # 초안이 들어갈 원본 파일이 1 이상의 정수로 요구하는 필드
 
 
 # ---------- 곡선 ----------
@@ -180,6 +181,7 @@ def validate(data: dict, items: dict | None = None, enemies: dict | None = None,
                 missing_kinds.append(side)
                 continue
             by, uncosted, missing_points, missing_mult, no_at, not_positive = spec["curve"]["by"], {}, set(), set(), [], set()
+            no_field: list = []
             for e in entries.values():
                 if not c.is_active(e):
                     continue
@@ -212,10 +214,12 @@ def validate(data: dict, items: dict | None = None, enemies: dict | None = None,
                 mult, key = _multiplier(spec["multiplier"], e)
                 row["group"] = key
                 if mult is None:
-                    if key not in missing_mult:
+                    if key is None:
+                        no_field.append(e["id"])
+                    elif key not in missing_mult:
                         missing_mult.add(key)
                         _err(warnings, "multiplier_missing", f"budget.{side}.multiplier",
-                             f"배수 표({spec['multiplier']['field']})에 {key!r}가 없어 그 {SIDE_LABEL[side]}를 비교하지 못했습니다.")
+                             f"배수 표({spec['multiplier']['field']})에 값 {key!r}가 없어 그 {c.josa(SIDE_LABEL[side], '을를')} 비교하지 못했습니다.")
                     unchecked += 1
                     continue
                 actual = entry_budget(spec, e)
@@ -240,6 +244,12 @@ def validate(data: dict, items: dict | None = None, enemies: dict | None = None,
                         acknowledged.append({**issue, "reason": reason})
                     else:
                         warnings.append(issue)
+            if no_field:
+                field = spec["multiplier"]["field"]
+                fields = {k for e in entries.values() if isinstance(e, dict) for k in e}
+                _err(warnings, "multiplier_missing", f"budget.{side}.multiplier",
+                     f"{SIDE_LABEL[side]} {len(no_field)}개에 배수 필드 {field}가 없어 비교하지 못했습니다"
+                     f"({', '.join(no_field[:5])}{' …' if len(no_field) > 5 else ''}).{did_you_mean(field, fields)}")
             if no_at:
                 _err(warnings, "curve_field_missing", f"budget.{side}.curve",
                      f"곡선 기준 필드 {by}가 없거나 수가 아니라 {len(no_at)}개 항목을 비교하지 못했습니다({', '.join(no_at[:5])}{' …' if len(no_at) > 5 else ''}).")
@@ -267,6 +277,7 @@ def validate(data: dict, items: dict | None = None, enemies: dict | None = None,
         "curve_points": _curve_points(settings, rows),
         "suggested_costs": _scale_suggestions(settings, suggestions, used),
         "suggestions_skipped": (suggestions or {}).get("skipped", {}),
+        "suggestions_missing": (suggestions or {}).get("unavailable", {}),
         "unchecked": unchecked,
         "unchecked_kinds": missing_kinds,
         "acknowledged": acknowledged,
@@ -304,8 +315,10 @@ def _scale_suggestions(settings: dict | None, suggestions: dict | None, used: di
 
 
 # ---------- 초안 ----------
-def draft(data: dict, archetype_id: str, at: float, entry_id: str | None = None, fields: dict | None = None) -> tuple[dict, dict]:
-    """원형과 곡선에서 항목 초안 하나를 만든다. (항목, 계산 정보). 형식이 틀리면 ValueError."""
+def draft(data: dict, archetype_id: str, at: float, entry_id: str | None = None, fields: dict | None = None,
+          existing: set | None = None) -> tuple[dict, dict]:
+    """원형과 곡선에서 항목 초안 하나를 만든다. (항목, 계산 정보). 형식이 틀리면 ValueError.
+    existing: 초안이 들어갈 원본(아이템·적)에 이미 있는 id. 원본 검사에서 바로 실패할 초안(id 형식, 정수 필드, 중복 id)은 만들지 않는다."""
     errors: list = []
     settings = read_settings(data, errors)
     archetypes = {a["id"]: a for a in check_archetypes(data.get("archetypes"), settings, errors)}
@@ -325,13 +338,23 @@ def draft(data: dict, archetype_id: str, at: float, entry_id: str | None = None,
     if reserved:
         raise ValueError(f"--set으로 {', '.join(sorted(reserved))}를 정하지 않습니다. 기준 값은 --at, id는 --id로 정합니다.")
     at = int(at) if isinstance(at, float) and at.is_integer() else at  # 티어·구역은 보통 정수 필드다
-    entry = {"id": entry_id or f"{archetype_id}_{at:g}".replace(".", "_"), spec["curve"]["by"]: at, **a.get("fields", {}), **(fields or {})}
+    by = spec["curve"]["by"]
+    if by in INT_FIELDS[side] and not c.is_int(at, 1):
+        raise ValueError(f"{SIDE_LABEL[side]}의 {by}는 1 이상의 정수입니다: --at {at:g}")
+    eid = entry_id or f"{archetype_id}_{at:g}".replace(".", "_")
+    if not c.ID_PATTERN.match(eid):
+        raise ValueError(f"id는 소문자·숫자·밑줄만 씁니다: {eid!r}")
+    if existing and eid in existing:
+        raise ValueError(f"{SIDE_LABEL[side]} 데이터에 이미 있는 id입니다: {eid}. --id로 다른 id를 정하세요.")
+    entry = {"id": eid, by: at, **a.get("fields", {}), **(fields or {})}
     base = curve_value(spec["curve"], at)
     if base is None:
         raise ValueError(f"table 곡선에 {spec['curve']['by']} {at:g}의 값이 없습니다.")
     mult, key = _multiplier(spec["multiplier"], entry)
     if mult is None:
-        raise ValueError(f"배수 표({spec['multiplier']['field']})에 {key!r}가 없습니다. --set {spec['multiplier']['field']}=값으로 정하세요.")
+        field = spec["multiplier"]["field"]
+        what = f"초안에 배수 필드 {field}가 없습니다" if key is None else f"배수 표({field})에 값 {key!r}가 없습니다"
+        raise ValueError(f"{what}. --set {field}=값으로 정하세요(배수 표의 값: {', '.join(spec['multiplier']['values'])}).")
     expected = base * mult
     if expected <= 0:
         raise ValueError(f"{spec['curve']['by']} {at:g}에서 기대 예산이 {expected:g}입니다. 곡선을 고치세요.")
@@ -361,6 +384,10 @@ def print_extra(result: dict) -> None:
         for stage, costs in result["suggested_costs"].get(side, {}).items():
             note = f" (피해를 주고받지 못하는 적 {skipped[stage]}개는 빼고 잼)" if side == "items" and skipped.get(stage) else ""
             print(f"원가 제안 ({SIDE_LABEL[side]}, 전투 단계 {stage}): " + " · ".join(f"{k} {v:g}" for k, v in costs.items()) + note)
+    missing = result.get("suggestions_missing") or {}
+    if missing:
+        print("원가 제안 미확인: " + " · ".join(("전투 계산 전체" if k == "combat" else f"전투 단계 {k}") + f"({why})" for k, why in missing.items())
+              + ". 전투 계산 검사 결과를 먼저 확인하세요.")
     if result["unchecked_kinds"]:
         print("예산 미확인: " + ", ".join(SIDE_LABEL[k] for k in result["unchecked_kinds"]) + " 데이터를 함께 검사하지 않았거나 읽지 못함")
 

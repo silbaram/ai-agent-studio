@@ -76,17 +76,19 @@ def check_progression(active: list[dict], threat: dict, warnings: list) -> dict:
     return {str(z): {r: round(m, 4) for r, m in means[z].items()} for z in zones}
 
 
-def validate(data: dict, drop_tables: dict | None = None, items_unreadable: bool = False) -> dict:
+def validate(data: dict, drop_tables: dict | None = None, items_unreadable: bool = False, weights: dict | None = None) -> dict:
     """drop_tables를 주면(아이템 데이터의 drop_tables) 적의 drop_table 참조를 확인한다.
-    items_unreadable이면 읽지 못한 아이템 파일에 있을 수 있으므로, 찾지 못한 참조를 오류 대신 미확인으로 둔다."""
+    items_unreadable이면 읽지 못한 아이템 파일에 있을 수 있으므로, 찾지 못한 참조를 오류 대신 미확인으로 둔다.
+    weights: 함께 읽은 스탯 예산의 적 원가(budget.enemies.costs). 있으면 threat_weights 대신 쓴다."""
     errors: list = []
     warnings: list = []
     raw = data.get("enemies")
     if not isinstance(raw, list):
         errors.append({"code": "schema", "where": "enemies", "message": "enemies 배열이 필요합니다."})
         raw = []
-    weights = data.get("threat_weights", {}) or {}
     enemies = check_schema(raw, errors)
+    weights, source = c.pick_weights(data.get("threat_weights"), weights, [e for e in enemies if c.is_active(e)],
+                                     "threat_weights", "budget.enemies.costs", warnings)
     threat = {e["id"]: round(c.weighted(e, weights), 4) for e in enemies}
     active = [e for e in enemies if c.is_active(e)]
     zone_means = check_progression(active, threat, warnings)
@@ -107,6 +109,7 @@ def validate(data: dict, drop_tables: dict | None = None, items_unreadable: bool
         "count": len(enemies),
         **c.summary_counts(enemies),
         "scores": threat,
+        "weights_source": source,
         "zone_rank_mean_threat": zone_means,
         "drop_table_not_checked": sorted(unchecked),
         "drop_table_unchecked_reason": reason,
@@ -117,6 +120,8 @@ def validate(data: dict, drop_tables: dict | None = None, items_unreadable: bool
 
 
 def print_extra(result: dict) -> None:
+    if result.get("weights_source") == "budget":
+        print("위협도: 스탯 예산의 원가(budget.enemies.costs)")
     for z, ranks in result["zone_rank_mean_threat"].items():
         print(f"구역 {z}: " + " · ".join(f"{RANK_LABEL[r]} {m:g}" for r, m in ranks.items()))
     if result["drop_table_not_checked"]:

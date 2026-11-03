@@ -18,7 +18,7 @@ description: "Models in-run growth: level-up choices with stat gains and pick li
 | 명령 | 하는 일 |
 |---|---|
 | `python3 .claude/skills/studio-data/scripts/studio.py check .` | 형식·참조 검사, 빌드별 단계마다 얻는 스탯, 전투 계산에 더한 처치·버팀, 밀리는 빌드 경고 |
-| `… check . --table` | 빌드 비교표(마크다운): 성장 없음과 빌드별 처치·버팀 |
+| `… check . --table growth` | 빌드 비교표(마크다운): 성장 없음과 빌드별 처치·버팀 |
 | `… view .` | 판 안 성장 탭: 빌드별 성장, 빌드 비교표 |
 
 데이터는 `data/growth.json` 한 파일이다. 형식은 [references/growth-format.md](references/growth-format.md). 전투 계산(`data/combat.json`)과 그 참조 데이터를 그대로 쓴다. 프로젝트 폴더(`check .`)로 검사해야 계산한다. 전투 계산이 없거나 그 검사에 오류·미확인이 있으면 `INCOMPLETE`다.
@@ -27,11 +27,11 @@ description: "Models in-run growth: level-up choices with stat gains and pick li
 
 ### 1. 단계별 레벨을 정한다
 
-`growth.level_at`에 전투 계산의 단계마다 "그 단계에서 보통 몇 레벨인가"를 적는다. 레벨 1에서 시작해 그 레벨까지 레벨업한다. 이 값은 경험치 곡선과 적 수에서 나오는 추정이라 처음에는 가정이다. 플레이 기록이 있으면 그 값으로 바꾼다.
+`growth.level_at`에 전투 계산의 단계마다 "그 단계에 들어설 때 보통 몇 레벨인가"를 적는다. 전투 계산의 단계가 "그 단계에 들어선 평범한 플레이어"이므로 같은 시점으로 맞춘다(첫 단계는 보통 1). 레벨 1에서 시작해 그 레벨까지 레벨업한다. 이 값은 경험치 곡선과 적 수에서 나오는 추정이라 처음에는 가정이다. 플레이 기록이 있으면 그 값으로 바꾼다. 전투 계산의 단계를 빼먹으면 `level_missing`이고, 일부러 뺄 단계는 `null`로 적는다.
 
 ### 2. 선택지를 적는다
 
-`choices`마다 오르는 스탯(`stats`, 플레이어 스탯 이름 그대로)과 최대 선택 횟수(`max_picks`, 없으면 무제한)를 적는다. 레벨업마다 제시하는 개수는 `offers`다.
+`choices`마다 오르는 스탯(`stats`, 플레이어 스탯 이름 그대로)과 최대 선택 횟수(`max_picks`, 없으면 무제한)를 적는다. 레벨업마다 제시하는 개수는 `offers`다. 고르면 아이템을 얻는 선택지는 `item`(아이템 id)으로 적으면 그 아이템의 스탯을 원본에서 가져온다(스탯을 옮겨 적지 않는다).
 
 ### 3. 빌드를 적는다
 
@@ -40,14 +40,15 @@ description: "Models in-run growth: level-up choices with stat gains and pick li
 - `priority`: 원하는 선택지를 순서대로. 제시된 것 중 가장 앞의 것을 고른다(최대 횟수에 닿은 것은 건너뜀).
 - `pick: "spread"`: 목록 중 지금까지 가장 적게 고른 것을 고른다(고르게 키우는 빌드).
 - 원하는 것이 하나도 제시되지 않으면 제시된 것 중 첫째를 고른다.
+- 경험치·수집 선택지로 레벨을 빨리 올리는 빌드는 그 빌드의 `level_at`에 가정한 레벨을 적는다. 적지 않으면 모든 빌드가 같은 레벨로 계산된다.
 
 ### 4. 계산하고 읽는다
 
 ```bash
-python3 .claude/skills/studio-data/scripts/studio.py check . --table
+python3 .claude/skills/studio-data/scripts/studio.py check . --table growth
 ```
 
-- `build_dominated`: 한 빌드가 다른 빌드보다 모든 단계·적·지표에서 같거나 낫다. 진 빌드를 고를 이유가 없다. 선택지 수치를 바꾸거나 빌드 정의를 확인한다. 의도라면 그 빌드의 `acknowledged`에 적는다.
+- `build_dominated`: 한 빌드가 다른 빌드보다 전투 계산상 모든 단계·적·지표에서 같거나 낫다. 선택지 수치를 바꾸거나 빌드 정의를 확인한다. 진 빌드가 전투 밖 선택지(줍기·이동·경험치)를 골랐다면 그 가치는 계산에 없다. 그 선택지의 `stat_not_in_combat`을 확인하면 경고 대신 "전투 계산상 밀림"으로 보이고, 전투 밖 가치는 사용자와 따로 판단한다. 의도라면 그 빌드의 `acknowledged`에 적는다.
 - 어느 빌드도 고르지 않은 선택지가 출력되면 그 선택지가 약하거나 빌드 정의에 빠져 있다.
 - `stat_not_in_combat`: 선택지 스탯을 전투 계산이 쓰지 않는다. 오타면 고치고, 이동 속도처럼 전투 밖 효과면 그 선택지의 `acknowledged`에 적는다.
 - `build_invalid`: 성장이 쌓이면 스탯이 계산에 쓸 수 없는 값이 된다(치명 확률이 1을 넘는 등). `max_picks`나 수치를 고친다.
@@ -63,9 +64,9 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table
 
 ## 한계
 
-- 스탯은 더하기만 한다. 곱셈 보너스, 선택지끼리의 시너지, 무기·스킬을 새로 얻는 선택지는 아직 없다.
+- 스탯은 더하기만 한다. 곱셈 보너스와 선택지끼리의 시너지는 없다. 아이템을 주는 선택지는 그 아이템 스탯을 더할 뿐이라, 무기를 하나 더 얻는 선택지는 전투 계산의 한계(무기마다 따로인 공격이 없다)를 그대로 따른다.
 - 빌드는 정해진 규칙으로 고른다. 상황을 보고 바꾸는 플레이어는 모델에 없다.
-- 단계별 레벨은 입력이다. 경험치 곡선에서 레벨을 계산하지 않는다.
+- 단계별 레벨은 입력이다. 경험치 곡선에서 레벨을 계산하지 않는다. 경험치·수집 선택지의 가치는 모른다(빌드의 `level_at`에 가정으로 적는 것까지만).
 - 메타 성장 시뮬레이터(`simulate`)의 추상 "힘"과는 아직 이어지지 않았다(로드맵 B5b).
 
 예시: `studio-data/assets/sample-project/data/growth.json` (실제 게임 수치가 아니다).

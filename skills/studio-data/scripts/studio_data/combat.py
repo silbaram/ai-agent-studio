@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 
 from . import common as c
+from . import crafting as cr
 from .common import add_issue as _err, did_you_mean
 
 FORMS = {
@@ -31,6 +32,8 @@ UNCHECKED_REASON = {
     "items": "아이템 데이터를 함께 검사하지 않았거나 읽지 못함",
     "upgrades": "영구 강화 데이터를 함께 검사하지 않았거나 읽지 못함",
     "enemies": "적 데이터를 함께 검사하지 않았거나 읽지 못함",
+    "crafting": "강화·합성 데이터를 함께 검사하지 않았거나 읽지 못함(강화한 기준 장비)",
+    "nothing": "계산한 단계·적이 없음(빈 stages, 모두 삭제, 적 없는 단계)",
 }
 
 
@@ -131,8 +134,40 @@ def _stats_of(entry) -> dict | None:
 
 
 # ---------- 계산 ----------
+def _item_ref(x) -> bool:
+    """기준 장비의 아이템 칸: id, 또는 강화한 아이템 {item, enhance, level}."""
+    return isinstance(x, str) or (isinstance(x, dict) and isinstance(x.get("item"), str) and isinstance(x.get("enhance"), str)
+                                  and c.is_int(x.get("level"), 0) and set(x) <= {"item", "enhance", "level"})
+
+
+def _enhance_bonus(x: dict, item: dict, refs: dict, where: str, errors: list, warnings: list) -> tuple[float | None, int]:
+    """강화한 아이템의 누적 보너스 비율(bonus_pct 합). (보너스 또는 None, 미확인 수). 강화·합성 데이터에서 그 강화를 찾는다."""
+    if refs.get("crafting") is None:
+        return None, 1
+    tracks = refs["crafting"].get("enhance")
+    track = next((t for t in tracks if isinstance(t, dict) and t.get("id") == x["enhance"]), None) if isinstance(tracks, list) else None
+    if track is None:
+        _err(errors, "unknown_enhance", where, f"강화·합성 데이터에 없는 강화입니다: {x['enhance']}{did_you_mean(x['enhance'], [t.get('id') for t in tracks or [] if isinstance(t, dict)])}")
+        return None, 0
+    if not cr.check_track(track, []):
+        return None, 1  # 강화의 형식 오류는 강화·합성 검사가 보고한다
+    if not c.is_active(track):
+        _err(warnings, "cut_referenced", where, f"삭제(cut)된 강화 {x['enhance']}를 기준 장비에 썼습니다. 강화 없이 계산합니다.", owner=where)
+        return 0.0, 0
+    targets = track.get("items")
+    fits = x["item"] in targets if targets is not None else all(item.get(k) == v for k, v in track["applies_to"].items())
+    if not fits:
+        _err(errors, "schema", where, f"아이템 {x['item']}는 강화 {x['enhance']}의 대상이 아닙니다.")
+        return None, 0
+    if x["level"] > len(track["levels"]):
+        _err(errors, "schema", where, f"강화 {x['enhance']}는 +{len(track['levels'])}까지입니다: level {x['level']}")
+        return None, 0
+    return sum(lv.get("bonus_pct", 0.0) for lv in track["levels"][:x["level"]]), 0
+
+
 def _player(stage: dict, settings: dict, refs: dict, errors: list, warnings: list) -> tuple[dict | None, int]:
-    """(합친 플레이어 스탯 또는 None, 미확인 수). 없는 참조나 형식 오류가 있으면 계산하지 않는다."""
+    """(합친 플레이어 스탯 또는 None, 미확인 수). 없는 참조나 형식 오류가 있으면 계산하지 않는다.
+    아이템 칸이 {item, enhance, level}이면 그 아이템 스탯에 강화 보너스(1 + 누적 bonus_pct)를 곱한다."""
     where = stage["id"]
     player = stage.get("player")
     if not isinstance(player, dict):
@@ -146,15 +181,17 @@ def _player(stage: dict, settings: dict, refs: dict, errors: list, warnings: lis
     ok, unchecked = True, 0
     for kind, label in (("items", "아이템"), ("upgrades", "영구 강화")):
         ids = player.get(kind, [])
-        if not (isinstance(ids, list) and all(isinstance(x, str) for x in ids)):
-            _err(errors, "schema", where, f"player.{kind}는 {label} id 배열이어야 합니다.")
+        if not (isinstance(ids, list) and all((_item_ref if kind == "items" else lambda x: isinstance(x, str))(x) for x in ids)):
+            _err(errors, "schema", where, f"player.{kind}는 {label} id 배열이어야 합니다"
+                 + (". 강화한 아이템은 {\"item\": id, \"enhance\": 강화 id, \"level\": 단계}로 적습니다." if kind == "items" else "."))
             ok = False
             continue
         if ids and refs[kind] is None:
             unchecked += 1
             ok = False
             continue
-        for rid in ids:
+        for x in ids:
+            rid = x if isinstance(x, str) else x["item"]
             e = refs[kind].get(rid)
             if e is None:
                 _err(errors, "unknown_item" if kind == "items" else "unknown_upgrade", where, f"{label} 데이터에 없는 id입니다: {rid}")
@@ -167,8 +204,16 @@ def _player(stage: dict, settings: dict, refs: dict, errors: list, warnings: lis
                     unchecked += 1  # 그 항목의 형식 오류는 그 파일에서 보고한다
                     ok = False
                     continue
+                scale = 1.0
+                if isinstance(x, dict):
+                    bonus, n = _enhance_bonus(x, e, refs, where, errors, warnings)
+                    unchecked += n
+                    if bonus is None:
+                        ok = False
+                        continue
+                    scale += bonus
                 for k, v in stats.items():
-                    total[k] = total.get(k, 0) + v
+                    total[k] = total.get(k, 0) + v * scale
     if ok and refs["upgrades"] is not None:
         owned = set(player.get("upgrades", []))
         for uid in player.get("upgrades", []):
@@ -190,14 +235,17 @@ def _side(stats: dict, roles: dict) -> dict:
 def _bad_stats(side: dict, roles: dict) -> list[str]:
     """계산에 쓸 수 없는 값: 체력 0 이하, 공격 속도 0 이하, 치명 확률 0~1 밖, 치명 배율 1 미만."""
     bad = []
+    n = c.num_text
     if c.is_number(side["hp"]) and side["hp"] <= 0:
-        bad.append(f"{roles['hp']} {side['hp']}(0보다 커야 함)")
+        bad.append(f"{roles['hp']} {n(side['hp'])}(0보다 커야 함)")
     if c.is_number(side["attack_rate"]) and side["attack_rate"] <= 0:
-        bad.append(f"{roles['attack_rate']} {side['attack_rate']}(초당 공격 횟수, 0보다 커야 함)")
+        bad.append(f"{roles['attack_rate']} {n(side['attack_rate'])}(초당 공격 횟수, 0보다 커야 함)")
     if not 0 <= side["crit_chance"] <= 1:
-        bad.append(f"{roles['crit_chance']} {side['crit_chance']}(0~1 비율. 퍼센트로 적었다면 100으로 나눔)")
+        # 2 이상이면 퍼센트로 적었을 가능성이 크다. 1을 조금 넘는 값은 누적(성장·강화)으로 넘친 것이다
+        hint = "0~1 비율. 퍼센트로 적었다면 100으로 나눔" if side["crit_chance"] >= 2 else "0~1 비율. 1을 넘음"
+        bad.append(f"{roles['crit_chance']} {n(side['crit_chance'])}({hint})")
     if side["crit_multiplier"] < 1:
-        bad.append(f"{roles['crit_multiplier']} {side['crit_multiplier']}(1 이상)")
+        bad.append(f"{roles['crit_multiplier']} {n(side['crit_multiplier'])}(1 이상)")
     return bad
 
 
@@ -231,7 +279,8 @@ def _side_problem(side: dict, roles: dict, formula: dict) -> str | None:
     return None
 
 
-def prepare(data: dict, items: dict | None = None, upgrades: dict | None = None, enemies: dict | None = None) -> dict | None:
+def prepare(data: dict, items: dict | None = None, upgrades: dict | None = None, enemies: dict | None = None,
+            crafting: dict | None = None) -> dict | None:
     """추가 스탯만 바꿔 같은 전투 계산을 여러 번(판 안 성장 시뮬레이션 등) 빠르게 하기 위한 준비. 설정이 틀렸거나 적이 없으면 None.
     단계마다 기준 장비 합계와 적 스탯을 한 번만 모은다. 참조가 틀려 계산할 수 없는 단계는 빠진다(그 오류는 validate가 보고한다)."""
     settings = read_settings(data, [])
@@ -239,7 +288,7 @@ def prepare(data: dict, items: dict | None = None, upgrades: dict | None = None,
     if settings is None or not isinstance(raw, list) or enemies is None:
         return None
     roles, formula = settings["roles"], settings["formula"]
-    refs = {"items": items, "upgrades": upgrades, "enemies": enemies}
+    refs = {"items": items, "upgrades": upgrades, "enemies": enemies, "crafting": crafting}
     stages = {}
     for s in raw:
         if not (isinstance(s, dict) and isinstance(s.get("id"), str) and c.is_active(s)):
@@ -247,7 +296,7 @@ def prepare(data: dict, items: dict | None = None, upgrades: dict | None = None,
         if formula["form"] == "level_ratio" and not c.is_number(s.get("level")):
             continue
         stats, n = _player(s, settings, refs, [], [])
-        foes = _stage_enemies(s, enemies, [], []) if stats is not None and not n else None
+        foes = stage_enemies(s, enemies, [], []) if stats is not None and not n else None
         sides = []
         for e in foes or []:
             st = _stats_of(e)
@@ -273,7 +322,9 @@ def evaluate(prep: dict, stage_id: str, bonus: dict) -> tuple[list[dict] | None,
     return [{"enemy": eid, "rank": rank, **_row_metrics(me, foe, formula, st["level"])} for eid, rank, foe in st["foes"]], None
 
 
-def _stage_enemies(stage: dict, enemies: dict, errors: list, warnings: list) -> list[dict] | None:
+def stage_enemies(stage: dict, enemies: dict, errors: list, warnings: list) -> list[dict] | None:
+    """단계에서 계산할 적 항목: enemies 목록(없는 id는 오류, 삭제된 적은 경고하고 뺌) 또는 zone의 활성 적. 목록 형식이 틀리면 None.
+    재화 흐름의 combat_stage 연결도 이 규칙을 쓴다."""
     where = stage["id"]
     if "enemies" in stage:
         ids = stage["enemies"]
@@ -295,10 +346,44 @@ def _stage_enemies(stage: dict, enemies: dict, errors: list, warnings: list) -> 
     return [e for e in enemies.values() if e.get("zone") == zone and c.is_active(e)]
 
 
+def _role_names(settings: dict, stages: list[dict], refs: dict, warnings: list) -> dict:
+    """역할이 가리키는 스탯 이름이 그 쪽 데이터 어디에도 없는 역할. 어느 역할도 쓰지 않는 비슷한 이름이 있으면 오타로 보고 경고한다.
+    비슷한 이름도 없으면 '값이 없는 역할'로만 돌려준다(아직 그 스탯을 주는 데이터가 없는 게임). 데이터를 함께 읽지 않은 쪽은 보지 않는다."""
+    names: dict = {}
+    if refs["items"] is not None and refs["upgrades"] is not None:
+        found = set()
+        for s in stages:
+            base = (s.get("player") or {}).get("base") if isinstance(s.get("player"), dict) else None
+            found |= set(base) if isinstance(base, dict) else set()
+        for kind in ("items", "upgrades"):
+            for e in refs[kind].values():
+                if isinstance(e, dict) and c.is_active(e) and isinstance(e.get("stats"), dict):
+                    found |= set(e["stats"])
+        names["player"] = found
+    if refs["enemies"] is not None:
+        names["enemy"] = {k for e in refs["enemies"].values() if isinstance(e, dict) and c.is_active(e) and isinstance(e.get("stats"), dict)
+                          for k in e["stats"]}
+    empty = {}
+    for side, found in names.items():
+        mapped = set(settings["roles"][side].values())
+        for role, name in settings["roles"][side].items():
+            if name in found:
+                continue
+            hint = did_you_mean(name, found - mapped)  # 다른 역할이 이미 쓰는 이름은 오타 후보가 아니다(attack_speed ≠ attack)
+            if hint:
+                label = "플레이어(base·아이템·영구 강화)" if side == "player" else "적"
+                _err(warnings, "stat_not_found", f"combat.stats.{side}.{role}",
+                     f"역할 {role}의 스탯 이름 '{name}'이 {label} 데이터 어디에도 없습니다.{hint} 이대로면 이 역할은 값이 없는 것으로 계산됩니다.")
+            else:
+                empty.setdefault(side, []).append(role)
+    return empty
+
+
 def validate(data: dict, items: dict | None = None, upgrades: dict | None = None, enemies: dict | None = None,
-             bonus: dict | None = None) -> dict:
+             bonus: dict | None = None, crafting: dict | None = None) -> dict:
     """items·upgrades·enemies: 함께 읽은 데이터의 {id: 항목}. None이면 그 참조는 미확인으로 센다.
-    bonus: {단계 id: {스탯: 값}}. 판 안 성장(run-growth)처럼 기준 장비 위에 더할 스탯."""
+    bonus: {단계 id: {스탯: 값}}. 판 안 성장(run-growth)처럼 기준 장비 위에 더할 스탯.
+    crafting: 강화·합성 파일 내용. 기준 장비에 강화한 아이템이 있을 때 쓴다."""
     errors: list = []
     warnings: list = []
     settings = read_settings(data, errors)
@@ -313,14 +398,17 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
                 _err(errors, "schema", s["id"], f"level은 수여야 합니다: {s['level']!r}")
                 continue
             stages.append(s)
-    refs = {"items": items, "upgrades": upgrades, "enemies": enemies}
+    refs = {"items": items, "upgrades": upgrades, "enemies": enemies, "crafting": crafting}
     rows: list = []
     stage_info: dict = {}
     unchecked = 0
     missing_kinds: set = set()
     skipped_targets: set = set()
+    empty_roles: dict = {}
+    unmapped = {"player": set(), "enemy": set()}
     if settings is not None:
         roles, formula, targets = settings["roles"], settings["formula"], settings["targets"]
+        empty_roles = _role_names(settings, [x for x in stages if c.is_active(x)], refs, warnings)
         for s in (x for x in stages if c.is_active(x)):
             where = s["id"]
             if formula["form"] == "level_ratio":
@@ -338,13 +426,16 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
                     stats[k] = stats.get(k, 0) + v
             unchecked += n
             if n:
-                missing_kinds |= {k for k in ("items", "upgrades") if refs[k] is None and (s.get("player") or {}).get(k)}
+                loadout = s.get("player") or {}
+                missing_kinds |= {k for k in ("items", "upgrades") if refs[k] is None and loadout.get(k)}
+                if crafting is None and any(isinstance(x, dict) for x in loadout.get("items") or []):
+                    missing_kinds.add("crafting")
             if enemies is None:
                 unchecked += 1
                 missing_kinds.add("enemies")
                 foes = None
             else:
-                foes = _stage_enemies(s, enemies, errors, warnings)
+                foes = stage_enemies(s, enemies, errors, warnings)
             if stats is None or foes is None or len(errors) > before:
                 continue
             me = _side(stats, roles["player"])
@@ -362,6 +453,7 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
             if not foes:
                 _err(warnings, "stage_without_enemies", where, "이 단계에 계산할 적이 없습니다. enemies 목록이나 zone을 적으세요.", owner=where)
             stage_info[where] = {"player": {k: v for k, v in stats.items()}, "level": s.get("level")}
+            unmapped["player"] |= set(stats) - set(roles["player"].values())
             for e in foes:
                 ewhere = f"{where}.{e['id']}"
                 estats = _stats_of(e)
@@ -369,6 +461,7 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
                     unchecked += 1
                     continue
                 foe = _side(estats, roles["enemy"])
+                unmapped["enemy"] |= set(estats) - set(roles["enemy"].values())
                 lacking = [roles["enemy"][r] for r in REQUIRED_ROLES if not c.is_number(foe[r])]
                 if lacking:
                     _err(errors, "missing_stat", ewhere, f"적 {e['id']}에 {', '.join(lacking)}가 없습니다.")
@@ -381,16 +474,22 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
                     _err(errors, "negative_defense", ewhere, "비율 공식은 음수 방어를 지원하지 않습니다(v1).")
                     continue
                 r = {"stage": where, "enemy": e["id"], "rank": e.get("rank"), **_row_metrics(me, foe, formula, s.get("level")), "out_of_range": []}
+                row_issue = {"owner": where, "part": e["id"]}  # 단계의 확인이 적 하나만 덮을 수 있게 대상을 남긴다
                 if r["player_hit"] <= 0:
-                    _err(warnings, "zero_damage", ewhere, f"이 단계 기준 장비로 {e['id']}에게 피해를 줄 수 없습니다.", owner=where)
+                    _err(warnings, "zero_damage", ewhere, f"이 단계 기준 장비로 {e['id']}에게 피해를 줄 수 없습니다(처치 타수·시간 없음).", **row_issue)
+                if r["enemy_hit"] <= 0:
+                    _err(warnings, "zero_damage", ewhere,
+                         f"{c.josa(e['id'], '이가')} 이 단계 기준 장비에 피해를 줄 수 없습니다(버티는 타수·시간 없음).", **row_issue)
                 for m, rng in (targets.get(e.get("rank")) or {}).items():
                     v = r[m]
                     if v is None:
-                        # 시간 지표는 공격 속도가 없으면 계산하지 못한다. 목표를 건너뛰었다고 알린다(조용히 통과시키지 않는다).
+                        hits = r["hits_to_kill"] if m in ("hits_to_kill", "time_to_kill") else r["hits_to_die"]
+                        if hits is None:
+                            continue  # 피해 0이라 타수가 없다. zero_damage로 알렸다
+                        # 여기는 시간 지표이고 공격 속도가 없다. 목표를 건너뛰었다고 알린다(조용히 통과시키지 않는다).
                         side = "플레이어" if m == "time_to_kill" else "적"
-                        hits = r["hits_to_kill"] if m == "time_to_kill" else r["hits_to_die"]
                         key = (e.get("rank"), m)
-                        if hits is not None and key not in skipped_targets:
+                        if key not in skipped_targets:
                             skipped_targets.add(key)
                             _err(warnings, "target_unchecked", f"combat.targets.{e.get('rank')}.{m}",
                                  f"{METRIC_LABEL[m]} 목표를 검사하지 못했습니다: {side}에 공격 속도(attack_rate 역할) 값이 없습니다.")
@@ -398,8 +497,11 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
                     if c.out_of_range(v, rng):
                         r["out_of_range"].append(m)
                         _err(warnings, "target_out_of_range", ewhere,
-                             f"{METRIC_LABEL[m]} {v}가 {RANK_LABEL.get(e.get('rank'), e.get('rank'))} 목표 {c.range_text(rng)}를 벗어납니다.", owner=where)
+                             f"{METRIC_LABEL[m]} {c.josa(c.num_text(v), '이가')} {RANK_LABEL.get(e.get('rank'), e.get('rank'))} 목표 {c.josa(c.range_text(rng), '을를')} 벗어납니다.",
+                             **row_issue)
                 rows.append(r)
+    if settings is not None and not rows and not errors and not unchecked:
+        unchecked, missing_kinds = 1, {"nothing"}  # 계산한 것이 없으면 통과가 아니다
     summary = c.summary_counts(stages)
     prov = (data.get("combat") or {}).get("provenance") if isinstance(data.get("combat"), dict) else None
     if prov is not None:
@@ -415,6 +517,8 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
         "rows": rows,
         "unchecked": unchecked,
         "unchecked_kinds": sorted(missing_kinds),
+        "empty_roles": empty_roles,
+        "unmapped_stats": {k: sorted(v) for k, v in unmapped.items() if v},
         "errors": errors,
         "warnings": warnings,
     }
@@ -469,29 +573,38 @@ def _gradient(me_stats: dict, me_roles: dict, foes: list[dict], foe_roles: dict,
     return {name: round(g / attack, 4) for name, g in grads.items()}
 
 
-def marginal_costs(data: dict, items: dict | None = None, upgrades: dict | None = None, enemies: dict | None = None) -> dict | None:
-    """단계마다 플레이어·적 스탯 1의 값어치(공격 1 = 1). 전투 설정이 틀렸거나 적 데이터가 없으면 None.
+def marginal_costs(data: dict, items: dict | None = None, upgrades: dict | None = None, enemies: dict | None = None,
+                   crafting: dict | None = None) -> dict:
+    """단계마다 플레이어·적 스탯 1의 값어치(공격 1 = 1). 재지 못한 단계와 이유는 unavailable({단계 id 또는 combat: 이유})에 남긴다.
     값어치는 그 단계의 기준 장비와 적에서 잰 것이라 단계마다 다르다. 공식 바깥의 효과(이동 속도 등)는 잴 수 없다."""
+    out: dict = {"player": {}, "enemy": {}, "skipped": {}, "unavailable": {}, "attack_stat": {}}
     settings = read_settings(data, [])
     stages = data.get("stages")
     if settings is None or not isinstance(stages, list) or enemies is None:
-        return None
+        out["unavailable"]["combat"] = ("전투 계산 설정(combat의 stats·defense·targets)에 오류가 있음" if settings is None
+                                        else "stages 배열이 없음" if not isinstance(stages, list) else "적 데이터를 함께 읽지 못함")
+        return out
     roles, formula = settings["roles"], settings["formula"]
-    refs = {"items": items, "upgrades": upgrades, "enemies": enemies}
-    out = {"player": {}, "enemy": {}, "skipped": {}, "attack_stat": {"player": roles["player"]["attack"], "enemy": roles["enemy"]["attack"]}}
+    refs = {"items": items, "upgrades": upgrades, "enemies": enemies, "crafting": crafting}
+    out["attack_stat"] = {"player": roles["player"]["attack"], "enemy": roles["enemy"]["attack"]}
     for st in stages:
         if not (isinstance(st, dict) and isinstance(st.get("id"), str) and c.is_active(st)):
             continue
         level = st.get("level")
         if formula["form"] == "level_ratio" and not c.is_number(level):
+            out["unavailable"][st["id"]] = "level_ratio 공식인데 level이 없음"
             continue
         stats, _ = _player(st, settings, refs, [], [])
-        foes = _stage_enemies(st, enemies, [], []) if stats is not None else None
+        if stats is None:
+            out["unavailable"][st["id"]] = "기준 장비를 계산하지 못함(없는 id, 형식 오류, 함께 읽지 않은 데이터)"
+            continue
+        foes = stage_enemies(st, enemies, [], [])
         foe_stats = [x for x in (_stats_of(e) for e in foes or []) if x]
         usable = _measurable(stats, roles["player"], foe_stats, roles["enemy"], formula, level) if foe_stats else []
         if len(usable) < len(foe_stats):
             out["skipped"][st["id"]] = len(foe_stats) - len(usable)
         if not usable:
+            out["unavailable"][st["id"]] = "적 목록 형식 오류" if foes is None else "서로 피해를 주고받을 수 있는 적이 없음"
             continue
         foe_stats = usable
         mine = _gradient(stats, roles["player"], foe_stats, roles["enemy"], formula, level)
@@ -522,9 +635,19 @@ def print_extra(result: dict) -> None:
             mark = " ⚠" if r["out_of_range"] else ""
             print(f"  {r['enemy']} ({RANK_LABEL.get(r['rank'], r['rank'])}): 처치 {_fmt(r['hits_to_kill'])}타 {_fmt(r['time_to_kill'])}초"
                   f" · 버팀 {_fmt(r['hits_to_die'])}타 {_fmt(r['time_to_die'])}초{mark}")
+    empty = result.get("empty_roles") or {}
+    if empty:
+        print("값이 있는 데이터가 없는 역할(없는 것으로 계산): "
+              + " · ".join(f"{'플레이어' if side == 'player' else '적'} {', '.join(roles)}" for side, roles in empty.items()))
+    unmapped = result.get("unmapped_stats") or {}
+    if unmapped:
+        print("역할에 연결하지 않아 전투 계산에 쓰지 않는 스탯: "
+              + " · ".join(f"{'플레이어' if side == 'player' else '적'} {', '.join(names)}" for side, names in unmapped.items()))
     if result["unchecked"]:
-        kinds = ", ".join(UNCHECKED_REASON[k] for k in result.get("unchecked_kinds", []) if k in UNCHECKED_REASON)
-        print(f"전투 계산 미확인 {result['unchecked']}건" + (f" ({kinds})" if kinds else "") + ": 프로젝트 폴더로 함께 검사하세요.")
+        kinds = result.get("unchecked_kinds", [])
+        text = ", ".join(UNCHECKED_REASON[k] for k in kinds if k in UNCHECKED_REASON)
+        tail = "" if kinds == ["nothing"] else ": 프로젝트 폴더로 함께 검사하세요."
+        print(f"전투 계산 미확인 {result['unchecked']}건" + (f" ({text})" if text else "") + tail)
 
 
 def table(data: dict, result: dict, ids: list[str] | None = None) -> str:

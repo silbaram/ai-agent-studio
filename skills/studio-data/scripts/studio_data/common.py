@@ -35,10 +35,41 @@ def add_issue(target: list, code: str, where: str, message: str, **extra) -> Non
     target.append({"code": code, "where": where, "message": message, **extra})
 
 
+def closest(name: str, known) -> str | None:
+    """가장 비슷한 이름(오타 추정). 없으면 None."""
+    close = difflib.get_close_matches(str(name), [str(k) for k in known], n=1, cutoff=0.6)
+    return close[0] if close else None
+
+
 def did_you_mean(name: str, known) -> str:
     """오타 안내 문장. 비슷한 이름이 없으면 빈 문자열."""
-    close = difflib.get_close_matches(name, list(known), n=1, cutoff=0.6)
-    return f" '{close[0]}'의 오타인가요?" if close else ""
+    close = closest(name, known)
+    return f" '{close}'의 오타인가요?" if close else ""
+
+
+_DIGIT_FINAL = "0136780"  # 영·일·삼·육·칠·팔·십(0)은 받침이 있다
+
+
+def josa(word: str, pair: str) -> str:
+    """word에 받침에 맞는 조사를 붙인다. pair: "을를", "이가", "은는", "과와". 영문으로 끝나면 받침 없는 쪽."""
+    last = str(word)[-1:] if word else ""
+    if "가" <= last <= "힣":
+        final = (ord(last) - 0xAC00) % 28 != 0
+    else:
+        final = last.isdigit() and last in _DIGIT_FINAL
+    return f"{word}{pair[0] if final else pair[1]}"
+
+
+def num_text(v) -> str:
+    """수를 사람이 읽는 형태로(부동소수 오차를 지운다). 1.2000000000000002 → 1.2"""
+    return f"{round(v, 6):g}" if isinstance(v, float) else str(v)
+
+
+def match_text(filt) -> str:
+    """조건 {필드: 값}을 [필드=값, … 아무거나]로 쓴다. 파이썬 dict 표기를 그대로 보이지 않는다."""
+    if not isinstance(filt, dict):
+        return str(filt)
+    return "[" + ", ".join(f"{k}={v}" for k, v in filt.items()) + " 아무거나]"
 
 
 def valid_range(rng) -> bool:
@@ -203,6 +234,28 @@ def weighted(entry: dict, weights: dict) -> float:
     return sum(v * weights.get(k, 1.0) for k, v in entry.get("stats", {}).items())
 
 
+def pick_weights(own, costs: dict | None, entries: list[dict], own_key: str, costs_key: str, warnings: list) -> tuple[dict, str]:
+    """아이템·적 검사의 예산 가중치. 스탯 예산(budget.json)의 원가가 있으면 그것을 쓴다(같은 '예산'을 두 곳에서 따로 정하지 않는다).
+    파일 안의 가중치(own)가 원가와 비율이 다르면 무시한다고 경고한다(전체 배율만 다른 것은 판정에 영향이 없어 괜찮다).
+    (쓸 가중치, 출처 "budget" | own_key)."""
+    own = own if isinstance(own, dict) else {}
+    if costs is None:
+        return own, own_key
+    stats = {k for e in entries for k in e.get("stats", {})}
+    used = sorted(k for k in stats if k in costs)
+    ratios = {k: own.get(k, 1.0) / costs[k] for k in used}
+    if own and ratios and max(ratios.values()) > min(ratios.values()) * (1 + 1e-6):
+        diff = ", ".join(f"{k} {num_text(own.get(k, 1.0))}/{num_text(costs[k])}" for k in used[:4])
+        add_issue(warnings, "weights_ignored", own_key,
+                  f"{own_key}가 스탯 예산({costs_key})과 비율이 달라 무시하고 budget.json의 원가를 씁니다({own_key}/원가: {diff}). "
+                  f"{own_key}를 지우거나 같은 비율로 맞춥니다.")
+    # 원가가 없는 스탯(예산 비교에서는 stat_without_cost로 빠진다)은 옛 가중치를 원가 단위로 바꿔 쓴다. 1로 두면 판정이 조용히 바뀐다
+    ordered = sorted(ratios.values())
+    scale = 1 / ordered[len(ordered) // 2] if ordered else 1.0
+    extra = {k: own.get(k, 1.0) * scale for k in stats if k not in costs}
+    return {**costs, **extra}, "budget"
+
+
 def provenance_kind(entry: dict) -> str:
     prov = entry.get("provenance")
     return prov["kind"] if isinstance(prov, dict) and "kind" in prov else "unspecified"
@@ -212,22 +265,36 @@ def is_active(entry: dict) -> bool:
     return entry.get("status") != "cut"
 
 
+def _reason(v) -> bool:
+    return isinstance(v, str) and bool(v.strip())
+
+
 def valid_acknowledged(ack) -> bool:
-    """acknowledged 형식: {경고 코드: 비어 있지 않은 이유}. 한 칸이라도 틀리면 전체를 쓰지 않는다."""
-    return isinstance(ack, dict) and all(isinstance(k, str) and isinstance(v, str) and v.strip() for k, v in ack.items())
+    """acknowledged 형식: {경고 코드: 비어 있지 않은 이유} 또는 {경고 코드: {대상: 이유}}(예: 전투 단계의 적 하나만).
+    한 칸이라도 틀리면 전체를 쓰지 않는다."""
+    return isinstance(ack, dict) and all(
+        isinstance(k, str) and (_reason(v) or (isinstance(v, dict) and v and all(isinstance(t, str) and _reason(r) for t, r in v.items())))
+        for k, v in ack.items())
 
 
-def ack_reason(entry: dict, code: str) -> str | None:
+def ack_reason(entry: dict, code: str, part: str | None = None) -> str | None:
     """항목이 그 경고 코드를 확인한 이유. 다른 파일의 검사기(예: 스탯 예산)가 항목의 확인을 읽을 때 같은 규칙을 쓴다.
+    이유가 {대상: 이유}이면 경고의 대상(part)이 맞을 때만 확인으로 본다. 문자열 이유는 그 항목의 그 코드 경고 전부를 덮는다.
     형식이 틀린 확인은 무시한다. 그 오류는 항목이 있는 파일의 검사(apply_acknowledged)가 보고한다."""
     ack = entry.get("acknowledged") if isinstance(entry, dict) else None
-    return ack[code].strip() if valid_acknowledged(ack) and code in ack else None
+    if not (valid_acknowledged(ack) and code in ack):
+        return None
+    reason = ack[code]
+    if isinstance(reason, dict):
+        reason = reason.get(part) if part is not None else None
+    return reason.strip() if reason else None
 
 
 def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
     """항목의 acknowledged({경고 코드: 확인한 이유})에 적힌 경고를 report["acknowledged"]로 옮긴다.
     확인한 경고는 경고 수와 --strict에서 빠지지만 지워지지 않고 이유와 함께 남는다. 오류는 옮기지 않는다.
-    경고에 owner가 있으면 그 항목의 확인으로 본다(예: 전투 계산의 '단계.적' 경고는 단계가 주인)."""
+    경고에 owner가 있으면 그 항목의 확인으로 본다(예: 전투 계산의 '단계.적' 경고는 단계가 주인).
+    경고에 part(대상)가 있으면 {코드: {대상: 이유}} 확인은 그 대상의 경고만 덮는다."""
     report.setdefault("acknowledged", [])
     lists = [data.get(k) for k in LIST_KEYS.get(kind, (kind,))]
     entries = [e for lst in lists if isinstance(lst, list) for e in lst]
@@ -242,12 +309,13 @@ def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
             report["errors"].append({"code": "schema", "where": e["id"],
                                      "message": "acknowledged는 {경고 코드: 확인한 이유} 객체여야 합니다. 이유를 비워 두지 않습니다."})
             continue
-        acks.setdefault(e["id"], ack)  # 검사기와 같이 첫 항목을 쓴다
+        acks.setdefault(e["id"], e)  # 검사기와 같이 첫 항목을 쓴다
     kept = []
     for w in report["warnings"]:
-        reason = acks.get(w.get("owner", w["where"]), {}).get(w["code"])
+        owner = acks.get(w.get("owner", w["where"]))
+        reason = ack_reason(owner, w["code"], w.get("part")) if owner else None
         if reason:
-            report["acknowledged"].append({**w, "reason": reason.strip()})
+            report["acknowledged"].append({**w, "reason": reason})
         else:
             kept.append(w)
     report["warnings"] = kept

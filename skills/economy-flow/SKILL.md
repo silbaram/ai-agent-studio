@@ -16,7 +16,7 @@ description: "Models currency income per stage (kills times enemy rewards, expec
 | 명령 | 하는 일 |
 |---|---|
 | `python3 .claude/skills/studio-data/scripts/studio.py check .` | 형식·참조 검사, 단계별·누적 수입, 구매 시점(판 안) 또는 판 수(판 사이 재화), 판 끝에 남는 재화 |
-| `… check . --table` | 단계 수입 표와 구매 계획 표(마크다운) |
+| `… check . --table economy` | 단계 수입 표와 구매 계획 표(마크다운) |
 | `… view .` | 재화 흐름 탭: 단계별 수입(출처별), 구매 계획(목표 이탈·살 수 없음 강조), 남는 재화 |
 
 데이터는 `data/economy.json` 한 파일이다. 형식은 [references/economy-format.md](references/economy-format.md). 적 보상·드랍 테이블·아이템 가격은 [progression-economy](../progression-economy/SKILL.md)의 원본에서, 강화·합성 비용은 [crafting-balance](../crafting-balance/SKILL.md)에서 그대로 가져온다. 프로젝트 폴더(`check .`)로 검사해야 참조를 확인한다. 쓰는 데이터를 함께 넘기지 않으면 `INCOMPLETE`다.
@@ -25,11 +25,13 @@ description: "Models currency income per stage (kills times enemy rewards, expec
 
 ### 1. 재화를 정한다
 
-`economy.currencies`에 재화를 적는다. 판이 끝나면 사라지는 재화(골드 등)와 판 사이에 남는 재화(`carry: true`, 메타 재화)를 구분한다. 처치 보상(`kill_reward`), 드랍을 팔 때의 재화와 비율(`sell`), 가격 출처별 재화(`prices`: 아이템·강화·합성·영구 강화)를 정한다.
+`economy.currencies`에 재화를 적는다. 판이 끝나면 사라지는 재화(골드 등)와 판 사이에 남는 재화(`carry: true`, 메타 재화)를 구분한다. 처치 보상(`kill_reward`, 적 데이터 `reward`의 재화는 여기서 정한다), 드랍을 팔 때의 재화와 비율(`sell`), 가격 출처별 재화(`prices`: 아이템·강화·합성·영구 강화)를 정한다.
+
+메타 성장 시뮬레이터(`simulate`)의 설정 파일이 있으면 그 판 사이 재화에 `meta_config`로 이어 둔다. 한 판 수입과 영구 강화 구매 순서가 두 파일에서 다르면 경고한다.
 
 ### 2. 단계를 적는다
 
-단계는 구역·레벨·웨이브·시간 구간 중 그 게임이 한 판을 나누는 단위다. 단계마다:
+단계는 구역·레벨·웨이브·시간 구간 중 그 게임이 한 판을 나누는 단위다. 전투 계산의 단계와 같은 구간이면 `combat_stage`에 그 단계 id를 적어 잇는다(처치를 센 적이 그 전투 단계에 나오는지 확인한다). 단계마다:
 
 - `duration`: 길이(`time_unit`, 기본 초). 방 단위 게임이면 방 수로 써도 된다.
 - `kills`: 적 id별 기대 처치 수. 적 데이터의 `reward`를 곱한다.
@@ -54,12 +56,14 @@ description: "Models currency income per stage (kills times enemy rewards, expec
 ### 4. 계산하고 읽는다
 
 ```bash
-python3 .claude/skills/studio-data/scripts/studio.py check . --table
+python3 .claude/skills/studio-data/scripts/studio.py check . --table economy
 ```
 
 - **구매 시점**: 판 안 재화는 누적 수입이 (앞선 구매 + 이 구매)에 닿는 시점, `after` 단계가 열리는 시점, 앞 구매 시점 중 가장 늦은 때. 단계 안에서는 고르게 들어온다고 본다.
 - `requirement_missing`: 영구 강화를 선행 조건보다 먼저 사는 계획이다. 순서를 고친다.
-- **판 수**: 판 사이 재화는 (앞선 구매 + 이 구매) ÷ 한 판 수입을 올림한 값. 한 판을 끝까지 깬다고 가정한 최소값이다. 중간에 지는 판을 반영한 판 수는 메타 성장 시뮬레이터(`simulate`)로 본다.
+- `duplicate_purchase`·`enhance_gap`: 같은 영구 강화를 두 번 사거나, 같은 강화의 단계를 건너뛰거나 겹쳐 사는 계획이다.
+- 시점이 "앞 구매를 계산하지 못해 미확인"이면 앞의 오류·미확인 구매부터 고친다. 그 재화는 남는 양도 내지 않는다.
+- **판 수**: 판 사이 재화는 (앞선 구매 + 이 구매) ÷ 한 판 수입을 올림한 값. 한 판을 끝까지 깬다고 가정한 최소값이다. 중간에 지는 판을 반영한 판 수는 메타 성장 시뮬레이터(`simulate`)로 본다. 두 결과를 비교하기 전에 `meta_income_differs`·`meta_order_differs`가 없는지 본다. 있으면 차이의 원인은 지는 판이 아니라 수입·순서 정의다.
 - `unaffordable`: 한 판 수입으로 살 수 없다. 구매 순서·가격·수입을 사용자와 정한다.
 - `target_out_of_range`: 의도한 시점을 벗어났다.
 - `currency_piles_up`: 판 끝에 남는 재화가 `leftover_max`(수입 대비 비율)를 넘는다. 쓸 곳이 모자라거나 수입이 많다.

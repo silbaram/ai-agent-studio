@@ -192,7 +192,8 @@ const LABEL = {
   growth: { linear: "선형", exponential: "지수", table: "표" },
   onFail: { keep: "그대로", down: "한 단계 하락", destroy: "파괴" },
   valueSkipped: { no_items: "아이템 데이터를 함께 검사하지 않았거나 읽지 못함", no_budget: "스탯 예산(budget.json)이 없거나 형식이 틀림",
-                  no_items_side: "스탯 예산에 아이템 쪽(budget.items)이 없거나 그 설정이 틀림" },
+                  no_items_side: "스탯 예산에 아이템 쪽(budget.items)이 없거나 그 설정이 틀림",
+                  disabled: "crafting.value_check가 false(가치 비교를 쓰지 않음)" },
   cost: { small: "작음", medium: "중간", large: "큼" },
   constraint: { note: "메모", platform: "플랫폼·입력", session: "한 판 길이", feeling: "원하는 감정", team: "제작 규모",
                 engines: "엔진 후보", avoid: "피할 것", references: "참고 게임", assumed: "가정으로 둔 값",
@@ -222,7 +223,10 @@ const LABEL = {
           reward_missing: "보상 없음", unknown_recipe: "없는 합성", unknown_enhance: "없는 강화", price_missing: "가격 없음",
           unaffordable: "살 수 없음", currency_piles_up: "재화 남음", rarity_empty: "희귀도 비어 있음", price_source_invalid: "가격 출처 오류",
           unknown_stage: "없는 단계", unknown_choice: "없는 선택지", build_dominated: "빌드가 밀림", level_decreases: "레벨 감소",
-          build_invalid: "빌드 스탯 오류", stat_not_in_combat: "전투에 안 쓰는 스탯", nothing_to_compare: "비교할 것 없음" },
+          build_invalid: "빌드 스탯 오류", stat_not_in_combat: "전투에 안 쓰는 스탯", stat_not_found: "역할 스탯 이름 오타",
+          level_missing: "레벨 없는 단계", duplicate_purchase: "중복 구매", enhance_gap: "강화 단계 어긋남", weights_ignored: "가중치 무시",
+          meta_income_differs: "메타 설정과 수입 다름", meta_order_differs: "메타 설정과 순서 다름", kill_not_in_stage: "전투 단계 밖 처치" },
+  unchecked: { nothing: "계산한 것 없음", value: "가치 비교(스탯 예산 없음)", meta: "메타 성장 설정 없음", drop_tables: "드랍 테이블 없음" },
 };
 const KIND_LABEL = { concepts: "컨셉", items: "아이템", upgrades: "영구 강화", enemies: "적", combat: "전투 계산", growth: "판 안 성장",
                      budget: "스탯 예산", crafting: "강화·합성", economy: "재화 흐름", playtests: "플레이 기록" };
@@ -461,7 +465,7 @@ function renderSummary(ds, idx) {
   if (r.totals) chips.push(el("span", { class: "chip" }, `활성 강화 ${r.totals.active}개 · 총비용 ${fmt(r.totals.cost)} · 총 power ${fmt(r.totals.power)}`));
   if (r.formula) chips.push(el("span", { class: "chip" }, "방어 공식 ", el("b", { text: LABEL.form[r.formula.form] || r.formula.form })));
   if (r.unchecked_kinds && r.unchecked_kinds.length) chips.push(el("span", { class: "chip none",
-    text: (KIND_LABEL[ds.kind] || "") + " 미확인 (" + r.unchecked_kinds.map((k) => KIND_LABEL[k] || k).join("·") + " 데이터 없음)" }));
+    text: (KIND_LABEL[ds.kind] || "") + " 미확인 (" + r.unchecked_kinds.map((k) => LABEL.unchecked[k] || (KIND_LABEL[k] || k) + " 데이터 없음").join(" · ") + ")" }));
   if (r.result_counts) chips.push(el("span", { class: "chip" }, `판정 버팀 ${r.result_counts.holds} · 틀림 ${r.result_counts.refuted} · 모름 ${r.result_counts.unknown}`));
   if (r.unchecked && r.unchecked_reason) chips.push(el("span", { class: "chip none",
     text: "컨셉·가설 참조 미확인 (" + (r.unchecked_reason === "concepts_unreadable" ? "컨셉 파일 읽기 실패" : "컨셉 데이터 없음") + ")" }));
@@ -722,7 +726,11 @@ function renderCombat(ds, idx) {
     el("div", { class: "doc" },
       el("p", {}, el("span", { class: "strong", text: (LABEL.form[f.form] || f.form || "공식 없음") + " " }), el("span", { class: "mono", text: LABEL.formText[f.form] || "" }), params ? ` (${params})` : ""),
       el("div", { class: "doc-grid" },
-        el("div", {}, el("h3", { text: "스탯 역할" }), small(["역할", "플레이어 스탯", "적 스탯"], roleRows, "역할 연결 없음")),
+        el("div", {}, el("h3", { text: "스탯 역할" }), small(["역할", "플레이어 스탯", "적 스탯"], roleRows, "역할 연결 없음"),
+          ...[["empty_roles", "값이 있는 데이터가 없는 역할(없는 것으로 계산)", (k) => LABEL.role[k] || k],
+              ["unmapped_stats", "역할에 연결하지 않아 쓰지 않는 스탯", (k) => k]].flatMap(([key, title, name]) =>
+            Object.entries((ds.report || {})[key] || {}).map(([sideKey, list]) => el("div", { class: "muted", style: "font-size:12px",
+              text: `${title} · ${sideKey === "player" ? "플레이어" : "적"}: ${list.map(name).join(", ")}` })))),
         el("div", {}, el("h3", { text: "등급별 목표 범위" }), small(["등급", "지표", "범위"], targetRows, "목표 범위 없음")))))];
   for (const st of stages.filter((e) => matches(ds, e, idx.byEntry[e.id]))) {
     const info = ds.report && ds.report.stages ? ds.report.stages[st.id] : null;
@@ -793,7 +801,9 @@ function renderBudget(ds, idx) {
         el("div", {}, el("h3", { text: "스탯 원가" + (stages.length ? " (오른쪽: 전투 계산에서 잰 제안, 단계별)" : "") }),
           side === "items" && Object.keys(r.suggestions_skipped || {}).length ? el("div", { class: "muted", style: "font-size:12px",
             text: "피해를 주고받지 못하는 적은 빼고 쟀습니다: " + Object.entries(r.suggestions_skipped).map(([st, n]) => `${st} ${n}개`).join(", ") }) : null,
-          small(["스탯", "원가", ...stages], costRows, "원가 없음")),
+          small(["스탯", "원가", ...stages], costRows, "원가 없음"),
+          Object.keys(r.suggestions_missing || {}).length ? el("div", { class: "muted", style: "font-size:12px",
+            text: "원가 제안 미확인: " + Object.entries(r.suggestions_missing).map(([st, why]) => `${st === "combat" ? "전투 계산 전체" : st}(${why})`).join(" · ") }) : null),
         el("div", {}, el("h3", { text: "곡선의 기대 예산" + (mult ? ` (배수: ${mult.field})` : "") }),
           small([curve.by || "기준", "곡선", ...multCols.map(([k]) => "× " + k)], pointRows, "데이터에 나온 기준 값이 없습니다")))),
       small(["id", curve.by || "기준", mult ? mult.field : "배수 기준", "예산", "기대 예산", "비율", "판정"], body, ds.report ? "비교할 항목이 없습니다." : "비교는 서버 모드에서 보입니다.")));
@@ -824,7 +834,9 @@ function renderCrafting(ds, idx) {
   const num = (v) => (v === null || v === undefined ? dash() : fmt(v));
   const pct = (v) => (v === null || v === undefined ? dash() : Math.round(v * 100) + "%");
   const badges = (issues) => (issues && issues.length ? el("div", { class: "badges" }, issues.map((x) => el("span", { class: "tag " + x.level, title: x.message, text: LABEL.code[x.code] || x.code }))) : null);
-  const side = (x) => (x && typeof x === "object" ? `${x.count ?? 1}× ` + (x.item || JSON.stringify(x.match || {})) : "?");
+  const matchText = (m) => "[" + Object.entries(m || {}).map(([k, v]) => `${k}=${v}`).join(", ") + " 아무거나]";
+  const side = (x) => (x && typeof x === "object" ? `${x.count ?? 1}× ` + (x.item || matchText(x.match)) : "?");
+  const noItems = (r.unchecked_kinds || []).includes("items");
   const tracks = (Array.isArray(ds.data.enhance) ? ds.data.enhance : []).filter((t) => t && typeof t === "object" && matches(ds, t, idx.byEntry[t.id]));
   const recipes = (Array.isArray(ds.data.recipes) ? ds.data.recipes : []).filter((x) => x && typeof x === "object" && matches(ds, x, idx.byEntry[x.id]));
   // 검색·상태 필터로 숨긴 항목의 경고도 '전체'로 옮기지 않는다: 모든 강화·합성 id를 기준으로 가른다
@@ -834,14 +846,15 @@ function renderCrafting(ds, idx) {
   const general = idx.all.filter((x) => !known.has(x.where)).map((x) => el("div", { class: "group-note", text: "⚠ " + x.message }));
   if (general.length || (ds.report && r.value_skipped)) out.push(el("section", { class: "panel" },
     el("div", { class: "ph" }, el("h2", {}, "전체")), ...general,
-    ds.report && r.value_skipped ? el("div", { class: "group-note", style: "color: var(--muted)", text: "가치 비교는 하지 않았습니다: " + (LABEL.valueSkipped[r.value_skipped] || r.value_skipped) }) : null));
+    ds.report && r.value_skipped ? el("div", { class: "group-note", style: "color: var(--muted)", text: "가치 비교는 하지 않았습니다: " + (LABEL.valueSkipped[r.value_skipped] || r.value_skipped)
+      + ((r.unchecked_kinds || []).includes("value") ? ". 미확인으로 셉니다. 가치 비교를 쓰지 않는 게임이면 crafting.value_check를 false로 적습니다." : "") }) : null));
   for (const t of tracks) {
     const info = (r.tracks || {})[t.id];
     const levels = info ? info.levels : (Array.isArray(t.levels) ? t.levels.map((lv, i) => ({ level: i + 1, cost: lv.cost, success: lv.success ?? 1, on_fail: lv.on_fail || "keep", bonus_pct: null, expected_cost: null, expected_attempts: null })) : []);
     const issues = idx.byEntry[t.id] || [];
     out.push(el("section", { class: "panel", id: "group-" + t.id },
       el("div", { class: "ph" }, el("h2", {}, "강화 · " + (t.name || t.id) + " ", el("span", { class: "mono muted", text: t.id })),
-        el("span", { class: "group-meta", text: (info ? `대상 ${info.items.length}개` : "대상 계산은 서버 모드") + (t.replace_cost !== undefined ? ` · 파괴 시 대체 비용 ${fmt(t.replace_cost)}` : "") })),
+        el("span", { class: "group-meta", text: (info ? (noItems ? "대상 – (아이템 데이터 없음)" : `대상 ${info.items.length}개`) : "대상 계산은 서버 모드") + (t.replace_cost !== undefined ? ` · 파괴 시 대체 비용 ${fmt(t.replace_cost)}` : "") })),
       ...issues.map((x) => el("div", { class: "group-note", text: "⚠ " + x.message })),
       t.intent ? el("div", { class: "group-note", style: "color: var(--muted)", text: "의도: " + t.intent }) : null,
       small(["단계", "성공률", "실패 시", "비용", "누적 보너스", "0에서 기대 비용", "기대 시도"], levels.map((lv) => el("tr", {},
@@ -870,7 +883,7 @@ function renderCrafting(ds, idx) {
   if (r.unobtainable && r.unobtainable.length) out.push(el("section", { class: "panel" },
     el("div", { class: "ph" }, el("h2", {}, "얻을 수 없는 아이템", el("span", { class: "muted", text: `${r.unobtainable.length}` }))),
     el("div", { class: "doc" }, el("p", { class: "mono", text: r.unobtainable.join(", ") }),
-      el("p", { class: "muted", text: "드랍 테이블·합성 결과·crafting.other_sources 어디에도 없습니다. 시작 장비나 상점이면 other_sources에 적습니다." }))));
+      el("p", { class: "muted", text: "드랍 테이블·합성 결과·crafting.other_sources·레벨업 선택지 어디에도 없습니다. 시작 장비나 상점이면 other_sources에 적습니다." }))));
   return out;
 }
 
@@ -899,7 +912,10 @@ function renderGrowth(ds, idx) {
         el("td", { class: "text" }, Object.entries(st.picks).map(([c, n]) => `${names[c] || c} ${fmt(n)}`).join(" · ") || dash()),
         el("td", { class: "text" }, Object.entries(st.bonus).map(([k, v]) => `${k} +${fmt(v)}`).join(" · ") || dash()));
     })), ds.report ? "비교한 빌드가 없습니다." : "계산은 서버 모드에서 보입니다."),
-    r.unused_choices && r.unused_choices.length ? el("div", { class: "group-note", style: "color: var(--muted)", text: "어느 빌드도 고르지 않은 선택지: " + r.unused_choices.map((c) => names[c] || c).join(", ") }) : null));
+    r.unused_choices && r.unused_choices.length ? el("div", { class: "group-note", style: "color: var(--muted)", text: "어느 빌드도 고르지 않은 선택지: " + r.unused_choices.map((c) => names[c] || c).join(", ") }) : null,
+    ...(r.combat_only_dominated || []).map((x) => el("div", { class: "group-note", style: "color: var(--muted)",
+      text: `전투 계산상 밀림: ${names[x.build] || x.build} < ${names[x.winner] || x.winner} (전투 밖 선택지 ` +
+        Object.entries(x.off_combat_picks).map(([c, n]) => `${names[c] || c} 평균 ${fmt(n)}회`).join(", ") + "의 가치는 계산하지 않음)" }))));
   // 단계 × 적마다 성장 없음과 빌드별 처치·버팀 타수를 나란히
   const key = (x) => `${x.stage}|${x.enemy}`;
   const per = Object.fromEntries(builds.map((b) => [b, Object.fromEntries(r.builds[b].rows.map((x) => [key(x), x]))]));
@@ -935,13 +951,15 @@ function renderEconomy(ds, idx) {
     return el("tr", { "data-id": st.id, class: issues.length ? "has-warn" : "" },
       el("td", { class: "name" }, el("div", {}, el("span", { class: "nm", text: st.name || st.id })), st.name ? el("div", { class: "mono muted", text: st.id }) : null, badges(issues)),
       el("td", { class: "num" }, num(st.duration)), el("td", {}, ds.report ? amounts(st.income) : dash("서버 모드")),
-      el("td", {}, ds.report ? amounts(st.rate) : dash()), el("td", {}, ds.report ? amounts(st.cumulative) : dash()),
+      el("td", {}, ds.report ? amounts(st.rate) : dash()),
+      el("td", {}, ds.report ? (st.cumulative === null ? dash("– (앞 단계 미확인)") : amounts(st.cumulative)) : dash()),
       el("td", { class: "text muted" }, parts || dash()));
   });
   const buyRows = (ds.report ? r.purchases : []).filter((p) => matches(ds, raw.purchases.find((x) => x && x.id === p.id) || p, idx.byEntry[p.id])).map((p) => {
     const issues = idx.byEntry[p.id] || [];
     const bad = !p.affordable || p.out_of_range;
-    const when = carry(p.currency) ? (p.runs === null ? dash() : `${p.runs}번째 판`) : (p.at === null ? (p.affordable ? dash() : "살 수 없음") : `${fmt(p.at)}${unit}`);
+    const when = p.blocked ? dash(`– (앞 구매 ${p.blocked} 미확인)`) : carry(p.currency) ? (p.runs === null ? dash() : `${p.runs}번째 판`)
+      : (p.at === null ? (p.affordable ? dash() : "살 수 없음") : `${fmt(p.at)}${unit}`);
     return el("tr", { "data-id": p.id, class: issues.length ? "has-warn" : "" },
       el("td", { class: "name" }, el("div", {}, el("span", { class: "nm", text: p.name || p.id })), p.name ? el("div", { class: "mono muted", text: p.id }) : null, badges(issues)),
       el("td", { text: p.currency + (carry(p.currency) ? " (판 사이 유지)" : "") }), el("td", { class: "num" }, num(p.price)),

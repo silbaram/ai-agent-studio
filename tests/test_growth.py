@@ -124,7 +124,7 @@ class ReviewFindings(unittest.TestCase):
     def test_nothing_active_is_reported(self):
         builds = [{"id": "blade", "priority": ["sharpen"], "status": "cut"}]
         r = validate(data(builds=builds))
-        self.assertEqual(codes(r["warnings"]), ["nothing_to_compare"])
+        self.assertEqual((r["warnings"], r["unchecked_kinds"]), ([], ["nothing"]))   # 경고가 아니라 미확인(통과가 아님)
 
     def test_trials_have_an_upper_bound(self):
         self.assertIn("schema", codes(validate(data(trials=10 ** 7))["errors"]))

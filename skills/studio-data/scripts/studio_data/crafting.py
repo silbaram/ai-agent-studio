@@ -12,7 +12,7 @@ import math
 
 from . import budget as bg
 from . import common as c
-from .common import add_issue as _err
+from .common import add_issue as _err, did_you_mean
 
 ON_FAIL = ("keep", "down", "destroy")
 ON_FAIL_LABEL = {"keep": "그대로", "down": "한 단계 하락", "destroy": "파괴"}
@@ -21,6 +21,7 @@ VALUE_SKIPPED = {
     "no_items": "아이템 데이터를 함께 검사하지 않았거나 읽지 못함",
     "no_budget": "스탯 예산(budget.json)이 없거나 형식이 틀림",
     "no_items_side": "스탯 예산에 아이템 쪽(budget.items)이 없거나 그 설정이 틀림",
+    "disabled": "crafting.value_check가 false(가치 비교를 쓰지 않음)",
 }
 
 
@@ -126,6 +127,19 @@ def check_recipe(r: dict, errors: list) -> dict | None:
     return {"id": r["id"], "inputs": inputs, "output": output, "cost": cost, "success": p}
 
 
+def _match_hint(items: dict, filt: dict) -> str:
+    """맞는 아이템이 없는 조건의 오타 안내: 어느 아이템에도 없는 필드 이름, 또는 그 필드에 없는 값."""
+    active = [e for e in items.values() if c.is_active(e)]
+    fields = {k for e in active for k in e}
+    for k, v in filt.items():
+        if k not in fields:
+            return did_you_mean(k, fields)
+        values = {str(e.get(k)) for e in active if e.get(k) is not None}
+        if str(v) not in values:
+            return did_you_mean(str(v), values)
+    return ""
+
+
 def _candidates(side: dict, items: dict, where: str, errors: list, warnings: list) -> list[str] | None:
     """재료·결과 한 칸이 가리키는 활성 아이템. 없는 id·빈 조건은 오류, 삭제 아이템은 경고하고 None."""
     if side["item"]:
@@ -139,7 +153,7 @@ def _candidates(side: dict, items: dict, where: str, errors: list, warnings: lis
         return [side["item"]]
     found = match_items(items, side["match"])
     if not found:
-        _err(errors, "match_empty", where, f"조건 {side['match']}에 맞는 아이템이 없습니다.")
+        _err(errors, "match_empty", where, f"조건 {c.match_text(side['match'])}에 맞는 아이템이 없습니다.{_match_hint(items, side['match'])}")
         return None
     return found
 
@@ -154,13 +168,22 @@ def _slot_value(ids: list[str], value, cheapest: bool) -> float | None:
 
 
 def _class_node(filt: dict) -> str:
-    return "[" + ", ".join(f"{k}={v}" for k, v in filt.items()) + " 아무거나]"
+    return c.match_text(filt)
 
 
-def _best_gains(edges: dict) -> dict:
-    """노드 쌍마다 가장 좋은 수율(곱). 늘어나는 고리가 없을 때만 부른다(그래야 값이 유한하다)."""
+def _path_text(nodes: list[str], labels: dict) -> str:
+    """a →(합성) b → c. labels: {(앞, 뒤): 합성 id}. 조건 칸으로 들어가는 이음(조건에 맞음)은 이름 없이 잇는다."""
+    out = nodes[0]
+    for a, b in zip(nodes, nodes[1:]):
+        out += f" →({labels[(a, b)]}) {b}" if labels.get((a, b)) else f" → {b}"
+    return out
+
+
+def _best_gains(edges: dict) -> tuple[dict, dict]:
+    """노드 쌍마다 가장 좋은 수율(곱)과 그 경로의 다음 노드. 늘어나는 고리가 없을 때만 부른다(그래야 값이 유한하다)."""
     nodes = sorted({u for u, _ in edges} | {v for _, v in edges})
     best = {(u, v): w for (u, v), w in edges.items()}
+    nxt = {(u, v): v for (u, v) in edges}
     for k in nodes:
         for i in nodes:
             ik = best.get((i, k))
@@ -170,18 +193,28 @@ def _best_gains(edges: dict) -> dict:
                 kj = best.get((k, j))
                 if kj and ik * kj > best.get((i, j), 0.0):
                     best[(i, j)] = ik * kj
-    return best
+                    nxt[(i, j)] = nxt[(i, k)]
+    return best, nxt
 
 
-def _random_loops(groups: list, edges: dict, members: dict) -> tuple[str, str, float] | None:
+def _random_loops(groups: list, edges: dict, members: dict) -> tuple[str, str, float, list] | None:
     """무작위 결과를 거치는 고리. 결과마다 처음(재료) 노드로 돌아오는 최선 수율을 구해 평균하고, 합성 수율을 곱한다.
-    groups: [(합성 id, 재료 노드, 결과 아이템들, 수율)]. 결과가 재료 칸의 조건에 맞으면 바로 돌아온 것(수율 1)으로 본다."""
-    best = _best_gains(edges)
+    groups: [(합성 id, 재료 노드, 결과 아이템들, 수율)]. 결과가 재료 칸의 조건에 맞으면 바로 돌아온 것(수율 1)으로 본다.
+    (합성 id, 재료 노드, 기대 수율, 되돌아오는 결과마다의 경로 [노드, …])."""
+    best, nxt = _best_gains(edges)
     for rid, src, outs, w in groups:
         back = [1.0 if v == src or v in members.get(src, ()) else best.get((v, src), 0.0) for v in outs]
         gain = w * sum(back) / len(back)
         if gain > 1 + LOOP_EPSILON:
-            return rid, src, gain
+            paths = []
+            for v, b in zip(outs, back):
+                if not b:
+                    continue
+                path = [v] if v == src else [v, src] if v in members.get(src, ()) else [v]
+                while path[-1] != src and len(path) <= len(best):  # 개선될 때만 nxt를 바꾸므로 경로는 고리 없이 끝난다
+                    path.append(nxt[(path[-1], src)])
+                paths.append(path)
+            return rid, src, gain, paths
     return None
 
 
@@ -214,9 +247,12 @@ def _find_loop(edges: dict) -> tuple[list[str], float] | None:
 
 
 # ---------- 검사 ----------
-def validate(data: dict, items: dict | None = None, drop_tables: dict | None = None, budget: dict | None = None) -> dict:
+def validate(data: dict, items: dict | None = None, drop_tables: dict | None = None, budget: dict | None = None,
+             extra_sources: dict | None = None) -> dict:
     """items: 함께 읽은 아이템 {id: 항목}, drop_tables: 아이템 데이터의 드랍 테이블, budget: budget.read_settings() 결과.
-    items가 None이면 참조·가치·획득 경로를 확인하지 못한 것으로 센다. budget이 없으면 가치 비교만 하지 않는다."""
+    extra_sources: 다른 데이터가 알려 준 획득 경로 {아이템 id: 설명}(예: 판 안 성장의 아이템을 주는 레벨업 선택지).
+    items가 None이면 참조·가치·획득 경로를 확인하지 못한 것으로 센다. budget이 없으면 가치 비교를 하지 못해 미확인으로 센다
+    (crafting.value_check가 false면 가치 비교를 쓰지 않는 게임으로 보고 세지 않는다)."""
     errors: list = []
     warnings: list = []
     acknowledged: list = []
@@ -234,7 +270,13 @@ def validate(data: dict, items: dict | None = None, drop_tables: dict | None = N
     item_spec = (budget or {}).get("sides", {}).get("items")
     tol = (budget or {}).get("tolerance", bg.DEFAULT_TOLERANCE)
     unchecked = 0 if items is not None else 1
-    value_skipped = "no_items" if items is None else ("no_budget" if budget is None else (None if item_spec else "no_items_side"))
+    unchecked_kinds = [] if items is not None else ["items"]
+    check_value = cfg.get("value_check", True)
+    if not isinstance(check_value, bool):
+        _err(errors, "schema", "crafting.value_check", f"value_check는 true/false입니다: {check_value!r}")
+        check_value = True
+    value_skipped = ("no_items" if items is None else "disabled" if not check_value else "no_budget" if budget is None
+                     else None if item_spec else "no_items_side")
     if value_skipped is None:
         def value(i: str) -> float | None:
             # 고유 효과의 값어치는 스탯에 없다(스탯 예산도 비교에서 뺀다)
@@ -256,7 +298,7 @@ def validate(data: dict, items: dict | None = None, drop_tables: dict | None = N
         else:
             info["items"] = match_items(items, t["applies_to"])
             if not info["items"]:
-                _err(errors, "match_empty", t["id"], f"조건 {t['applies_to']}에 맞는 아이템이 없습니다.")
+                _err(errors, "match_empty", t["id"], f"조건 {c.match_text(t['applies_to'])}에 맞는 아이템이 없습니다.{_match_hint(items, t['applies_to'])}")
         if value is None:
             continue
         top = info["levels"][-1]["bonus_pct"]
@@ -278,6 +320,7 @@ def validate(data: dict, items: dict | None = None, drop_tables: dict | None = N
 
     recipe_info: dict = {}
     edges: dict = {}
+    labels: dict = {}  # 이음 (앞, 뒤) → 그 이음을 만드는 합성 id(경고에 경로를 쓸 때)
     groups: list = []
     members: dict = {}
     usable: list = []
@@ -309,7 +352,9 @@ def validate(data: dict, items: dict | None = None, drop_tables: dict | None = N
                     edges[(m, src)] = 1.0
             w = r["output"]["count"] * r["success"] / spec["count"]
             if n_out == 1:
-                edges[(src, outs[0])] = max(edges.get((src, outs[0]), 0.0), w)
+                if w > edges.get((src, outs[0]), 0.0):
+                    edges[(src, outs[0])] = w
+                    labels[(src, outs[0])] = r["id"]
             else:
                 groups.append((r["id"], src, outs, w))
         if value is not None:
@@ -332,13 +377,15 @@ def validate(data: dict, items: dict | None = None, drop_tables: dict | None = N
     if loop:
         cycle, gain = loop
         _err(errors, "value_loop", "recipes",
-             f"합성을 돌면 아이템이 늘어납니다: {' → '.join(cycle + cycle[:1])} (한 바퀴에 {gain:.2f}배). 수량이나 성공률을 고치세요.")
+             f"합성을 돌면 아이템이 늘어납니다: {_path_text(cycle + cycle[:1], labels)} (한 바퀴에 {gain:.2f}배). 수량이나 성공률을 고치세요.")
     elif groups:
         found = _random_loops(groups, edges, members)
         if found:
-            rid, src, gain = found
+            rid, src, gain, paths = found
+            back = "; ".join(_path_text(x, labels) for x in paths[:3]) + (" …" if len(paths) > 3 else "")
             _err(errors, "value_loop", "recipes",
-                 f"합성을 돌면 아이템이 늘어납니다: {src} → {rid}(무작위 결과) → … → {src} (기대 {gain:.2f}배). 결과마다 되돌리는 합성의 수량이나 성공률을 고치세요.")
+                 f"합성을 돌면 아이템이 늘어납니다: {src} →({rid}) 무작위 결과, 결과에서 되돌아오는 길: {back} (기대 {gain:.2f}배). "
+                 "되돌리는 합성의 수량이나 성공률을 고치세요.")
 
     obtainable: list = []
     unobtainable: list = []
@@ -352,7 +399,7 @@ def validate(data: dict, items: dict | None = None, drop_tables: dict | None = N
         for i in sources:
             if i not in items:
                 _err(errors, "unknown_item", "crafting.other_sources", f"아이템 데이터에 없는 id입니다: {i}")
-        have = {i for i in sources if i in items}
+        have = {i for i in sources if i in items} | {i for i in (extra_sources or {}) if i in items}
         rarities = set()
         for table in drop_tables.values():
             for e in (table.get("entries") or []) if isinstance(table, dict) else []:
@@ -376,14 +423,19 @@ def validate(data: dict, items: dict | None = None, drop_tables: dict | None = N
             reason = c.ack_reason(items[i], "unobtainable")  # 일부러 얻는 곳이 없는 아이템은 그 아이템에서 확인한다
             if reason:
                 acknowledged.append({"code": "unobtainable", "where": i, "owner": f"items:{i}", "reason": reason,
-                                     "message": f"{i}는 드랍·합성·other_sources 어디서도 얻을 수 없습니다."})
+                                     "message": f"{i}는 드랍·합성·other_sources·레벨업 선택지 어디서도 얻을 수 없습니다."})
             else:
                 open_.append(i)
         if open_:
             _err(warnings, "unobtainable", "crafting",
-                 f"드랍·합성·other_sources 어디서도 얻을 수 없는 아이템 {len(open_)}개: " + ", ".join(open_[:8])
+                 f"드랍·합성·other_sources·레벨업 선택지 어디서도 얻을 수 없는 아이템 {len(open_)}개: " + ", ".join(open_[:8])
                  + (" …" if len(open_) > 8 else "") + ". 시작 장비·상점이면 crafting.other_sources에, 일부러 없으면 그 아이템의 acknowledged에 적습니다.")
 
+    if items is not None and drop_tables is None:
+        unchecked_kinds.append("drop_tables")
+    if value_skipped in ("no_budget", "no_items_side") and (track_info or recipe_info):
+        unchecked += 1  # 가치 비교(합성 손해·강화가 상위 티어를 넘음)를 하지 못했다. 통과가 아니다
+        unchecked_kinds.append("value")
     summary = c.summary_counts(tracks + recipe_entries)
     prov = cfg.get("provenance")
     if prov is not None:
@@ -401,7 +453,7 @@ def validate(data: dict, items: dict | None = None, drop_tables: dict | None = N
         "value_skipped": value_skipped,
         "acknowledged": acknowledged,
         "unchecked": unchecked,
-        "unchecked_kinds": ["items"] if items is None else ([] if drop_tables is not None else ["drop_tables"]),
+        "unchecked_kinds": unchecked_kinds,
         "errors": errors,
         "warnings": warnings,
     }
@@ -415,19 +467,22 @@ def _fmt(v) -> str:
 
 
 def print_extra(result: dict) -> None:
+    no_items = "items" in result["unchecked_kinds"]
     for tid, t in result["tracks"].items():
         last = t["levels"][-1]
-        print(f"강화 {tid}: 대상 {len(t['items'])}개 · +{last['level']}까지 기대 비용 {_fmt(last['expected_cost'])} · 기대 시도 {_fmt(last['expected_attempts'])}"
-              f" · 보너스 {last['bonus_pct']:.0%}")
+        print(f"강화 {tid}: 대상 {'–' if no_items else str(len(t['items'])) + '개'} · +{last['level']}까지 기대 비용 {_fmt(last['expected_cost'])}"
+              f" · 기대 시도 {_fmt(last['expected_attempts'])} · 보너스 {last['bonus_pct']:.0%}")
     for rid, r in result["recipes"].items():
         ratio = f"가치 {r['value_ratio']:.0%}" if r["value_ratio"] is not None else "가치 –" + (f"({r['value_note']})" if r["value_note"] else "")
         extra = f" · 특정 결과까지 {_fmt(r['crafts_for_specific'])}회" if r["outcomes"] and r["outcomes"] > 1 else ""
         print(f"합성 {rid}: {ratio} · 비용 {_fmt(r['cost'])} · 성공률 {r['success']:.0%}{extra}")
     if result["value_skipped"]:
         print("강화·합성의 가치 비교는 하지 않았습니다: " + VALUE_SKIPPED[result["value_skipped"]])
-    if result["unchecked"]:
-        print("강화·합성 미확인: " + ", ".join({"items": "아이템 데이터", "drop_tables": "드랍 테이블"}[k] for k in result["unchecked_kinds"])
-              + "를 함께 검사하지 않았거나 읽지 못함")
+    missing = [{"items": "아이템 데이터", "drop_tables": "드랍 테이블"}[k] for k in result["unchecked_kinds"] if k != "value"]
+    if missing:
+        print("강화·합성 미확인: " + ", ".join(missing) + "를 함께 검사하지 않았거나 읽지 못함")
+    if "value" in result["unchecked_kinds"]:
+        print("강화·합성 미확인: 가치 비교를 하지 못함. 스탯 예산(budget.items)을 두거나, 가치 비교를 쓰지 않는 게임이면 crafting.value_check를 false로 적습니다.")
 
 
 def table(data: dict, result: dict, ids: list[str] | None = None) -> str:
@@ -439,7 +494,7 @@ def table(data: dict, result: dict, ids: list[str] | None = None) -> str:
                                             f"{lv['bonus_pct']:.0%}", _fmt(lv["expected_cost"]), _fmt(lv["expected_attempts"]))) + " |")
     rows += ["", "| 합성 | 재료 | 결과 | 가치 비율 | 비용 | 결과 가짓수 | 특정 결과까지 합성 | 특정 결과까지 재료 |", "|---|---|---|---|---|---|---|---|"]
     raw = {r.get("id"): r for r in data.get("recipes", []) if isinstance(r, dict)} if isinstance(data.get("recipes"), list) else {}
-    side = lambda s: f"{s.get('count', 1)}× " + (s["item"] if s.get("item") else str(s.get("match")))  # noqa: E731
+    side = lambda s: f"{s.get('count', 1)}× " + (s["item"] if s.get("item") else c.match_text(s.get("match")))  # noqa: E731
     for rid, r in result["recipes"].items():
         src = raw.get(rid, {})
         rows.append("| " + " | ".join((rid, ", ".join(side(x) for x in src.get("inputs", [])), side(src.get("output") or {}),
@@ -453,4 +508,6 @@ def print_counts(result: dict) -> None:
     tail = f"오류 {len(result['errors'])} · 경고 {len(result['warnings'])}"
     if result.get("acknowledged"):
         tail += f" · 확인한 경고 {len(result['acknowledged'])}"
-    print(f"강화 {len(result['tracks'])}개 · 합성 {len(result['recipes'])}개 · 얻을 수 없는 아이템 {len(result['unobtainable'])}개 · {tail}")
+    unknown = "items" in result["unchecked_kinds"] or "drop_tables" in result["unchecked_kinds"]
+    print(f"강화 {len(result['tracks'])}개 · 합성 {len(result['recipes'])}개 · 얻을 수 없는 아이템 "
+          + ("–" if unknown else f"{len(result['unobtainable'])}개") + f" · {tail}")

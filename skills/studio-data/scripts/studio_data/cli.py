@@ -18,6 +18,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from . import budget, claude, combat, concepts, crafting, datasets, economy, enemies, growth, items, meta_sim, playtests, provenance, upgrades, viewer
+from . import common as c
 
 EXTRA_PRINTERS = {"items": items.print_extra, "upgrades": upgrades.print_extra, "enemies": enemies.print_extra,
                   "combat": combat.print_extra, "budget": budget.print_extra, "crafting": crafting.print_extra,
@@ -49,7 +50,7 @@ def cmd_view(args) -> int:
         return 2
     if args.host not in ("127.0.0.1", "localhost"):
         print(f"주의: {args.host}에 열었습니다. 같은 네트워크의 다른 기기에서 접속할 수 있습니다.")
-    print(f"데이터 뷰어: {viewer.url_of(server)}")
+    print(f"데이터 뷰어: {viewer.url_of(server)}", flush=True)  # 백그라운드로 띄운 쪽이 주소를 바로 읽게 한다(--port 0이면 출력이 유일한 단서)
     if found:
         for f in found:
             print(f"  - {f}")
@@ -59,6 +60,7 @@ def cmd_view(args) -> int:
         for w in viewer.watched_folders(targets):
             print(f"  - {w}")
         print("design/concepts.json, data/items.json 같은 파일이 생기면 화면에 자동으로 나타납니다. 종료: Ctrl+C")
+    sys.stdout.flush()
     viewer.serve(server, open_browser=not args.no_browser)
     return 0
 
@@ -77,7 +79,33 @@ def _print_data_counts(entry: dict) -> None:
     print(f"{entry['label']} {r['count']}개 · {tail}")
 
 
+def _table_kinds(args) -> set | None:
+    """--table의 종류 목록. 값 없이 쓰면 모든 표(None). 모르는 종류면 ValueError.
+    `check --table .`처럼 플래그를 경로 앞에 쓰면 argparse가 경로를 종류로 읽는다. 종류가 아니고 있는 경로면 경로로 돌려놓는다."""
+    raw = args.table
+    if raw is None or raw == "all":
+        return None
+    kinds = {k.strip() for k in raw.split(",") if k.strip()}
+    unknown = sorted(kinds - set(TABLE_PRINTERS))
+    if unknown and Path(raw).exists():
+        args.paths.insert(0, raw)
+        return None
+    if unknown:
+        hint = "".join(c.did_you_mean(k, TABLE_PRINTERS) for k in unknown)
+        raise ValueError(f"--table에 모르는 종류: {', '.join(unknown)}.{hint} 표가 있는 종류: {', '.join(TABLE_PRINTERS)}. "
+                         "검사할 경로는 --table 앞에 적습니다.")
+    return kinds
+
+
 def cmd_check(args) -> int:
+    try:
+        table_kinds = _table_kinds(args)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if not args.paths:
+        print("검사할 프로젝트·데이터 폴더나 파일을 적으세요 (예: check . --table).", file=sys.stderr)
+        return 2
     missing = _missing(args.paths)
     if missing:
         print("경로를 찾을 수 없습니다: " + ", ".join(missing), file=sys.stderr)
@@ -126,7 +154,7 @@ def cmd_check(args) -> int:
                 print(f"확인한 경고 [{a['code']}] {a['where']}: {a['reason']}")
             if d["kind"] in EXTRA_PRINTERS:
                 EXTRA_PRINTERS[d["kind"]](r)
-            if args.table and d["kind"] in TABLE_PRINTERS:
+            if args.table and d["kind"] in TABLE_PRINTERS and (table_kinds is None or d["kind"] in table_kinds):
                 print(TABLE_PRINTERS[d["kind"]](d["data"], r, ids))
             if d["path"] in gated:
                 print("gate: " + GATE_LABELS.get(d["kind"], "출처가 가정이거나 비어 있는 항목: ") + ", ".join(gated[d["path"]]))
@@ -268,6 +296,9 @@ def cmd_provenance(args) -> int:
 
 # ---------- draft ----------
 def _value(raw: str):
+    """--set 값: 정수·실수, true/false/null은 JSON 값, 나머지는 문자열."""
+    if raw in ("true", "false", "null"):
+        return json.loads(raw)
     for cast in (int, float):
         try:
             return cast(raw)
@@ -292,8 +323,12 @@ def cmd_draft(args) -> int:
             print(f"--set은 필드=값 형식입니다: {pair}", file=sys.stderr)
             return 2
         fields[key.strip()] = _value(raw.strip())
+    # 초안이 들어갈 원본의 id와 겹치지 않게 한다. 폴더를 넘기면 그 안의 아이템·적 데이터를 본다
+    side = next((a.get("for") for a in found[0]["data"].get("archetypes") or [] if isinstance(a, dict) and a.get("id") == args.archetype), None)
+    existing = {e["id"] for d in datasets.scan([path]) if d["ok"] and d["kind"] == side and isinstance(d["data"].get(side), list)
+                for e in d["data"][side] if isinstance(e, dict) and isinstance(e.get("id"), str)}
     try:
-        entry, info = budget.draft(found[0]["data"], args.archetype, args.at, args.id, fields)
+        entry, info = budget.draft(found[0]["data"], args.archetype, args.at, args.id, fields, existing=existing)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -345,10 +380,12 @@ def build_parser() -> argparse.ArgumentParser:
     v.set_defaults(func=cmd_view)
 
     k = sub.add_parser("check", help="컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·플레이 기록 데이터를 검사합니다.")
-    k.add_argument("paths", nargs="+", help="프로젝트·데이터 폴더 또는 파일")
+    k.add_argument("paths", nargs="*", help="프로젝트·데이터 폴더 또는 파일 (하나 이상)")
     k.add_argument("--strict", action="store_true", help="경고도 실패로 처리합니다.")
     k.add_argument("--fail-on-assumed", action="store_true", help="삭제되지 않은 항목 중 출처가 가정이거나 비어 있는 것, 판정이 확정되지 않은 가설이 있으면 실패합니다 (확정 판정 전 게이트).")
-    k.add_argument("--table", action="store_true", help="컨셉 비교표, 전투 계산표, 빌드 비교표, 예산 비교표, 강화·합성 표, 재화 흐름 표(마크다운)를 출력합니다. 파일로 저장하지 않습니다.")
+    k.add_argument("--table", nargs="?", const="all", metavar="종류,...",
+                   help="컨셉 비교표, 전투 계산표, 빌드 비교표, 예산 비교표, 강화·합성 표, 재화 흐름 표(마크다운)를 출력합니다. "
+                        "종류를 쉼표로 고를 수 있습니다(예: --table combat,growth). 파일로 저장하지 않습니다.")
     k.add_argument("--ids", help="--table에 보일 컨셉 id만 쉼표로 고릅니다 (예: a,b,c). 적은 순서대로 보입니다.")
     k.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
     k.add_argument("--out", help="JSON 보고서를 이 경로에 저장합니다. 문서에서 [계산: 이 경로]로 인용합니다.")

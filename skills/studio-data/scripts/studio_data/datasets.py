@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from . import common as c
-from . import budget, combat, concepts, crafting, economy, enemies, growth, items, playtests, upgrades
+from . import budget, combat, concepts, crafting, economy, enemies, growth, items, meta_sim, playtests, upgrades
 
 VALIDATORS = {"concepts": concepts, "items": items, "upgrades": upgrades, "enemies": enemies, "combat": combat,
               "growth": growth, "budget": budget, "crafting": crafting, "economy": economy, "playtests": playtests}
@@ -95,12 +95,70 @@ def _index(entries: list[dict], kind: str) -> dict | None:
     return out
 
 
+_META_CACHE: dict = {}  # meta_config 경로 → (파일 서명, 읽은 결과). 뷰어가 갱신마다 다시 검사해도 바뀌지 않은 설정은 다시 읽지 않는다
+
+
+def _signature(path: Path) -> tuple | None:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size)
+
+
+def _read_meta(path: Path) -> dict:
+    """메타 성장 설정 하나를 읽어 정규화한다. 설정과 그 upgrades_file이 바뀌지 않았으면 앞서 읽은 결과를 쓴다.
+    읽지 못하거나 형식이 틀리면 {"error": 이유}. 설정 파일의 문제는 그 설정을 가리킨 곳(재화)의 오류로 보고한다."""
+    key = str(path.resolve())
+    try:
+        raw_bytes = path.read_bytes()
+        raw = json.loads(raw_bytes.decode("utf-8"))
+    except (OSError, ValueError) as exc:
+        _META_CACHE.pop(key, None)
+        return {"error": f"{path}: {exc}"}
+    ups = raw.get("upgrades_file") if isinstance(raw, dict) else None
+    sig = (hashlib.sha256(raw_bytes).hexdigest(), _signature(path.parent / ups) if isinstance(ups, str) else None)
+    cached = _META_CACHE.get(key)
+    if cached and cached[0] == sig:
+        return cached[1]
+    try:
+        cfg = meta_sim.normalize(raw, base_dir=path.parent)
+    except Exception as exc:  # noqa: BLE001 - 남의 파일 형식 문제로 재화 흐름 검사 전체를 멈추지 않는다
+        cfg = {"error": f"{path}: {type(exc).__name__ + ': ' if not isinstance(exc, ValueError) else ''}{exc}"}
+    _META_CACHE[key] = (sig, cfg)
+    return cfg
+
+
+def _meta_configs(entry: dict) -> dict | None:
+    """재화 흐름 파일의 판 사이 재화가 meta_config로 가리키는 메타 성장 설정을 읽는다. {재화: 설정 또는 {"error": 이유}}.
+    경로는 그 재화 흐름 파일이 있는 폴더 기준이다(설정 안의 upgrades_file은 설정 파일 폴더 기준)."""
+    cur = (entry["data"].get("economy") or {}).get("currencies") if isinstance(entry["data"].get("economy"), dict) else None
+    out = {}
+    for k, v in (cur.items() if isinstance(cur, dict) else []):
+        link = v.get("meta_config") if isinstance(v, dict) else None
+        if isinstance(link, str) and link.strip():
+            out[k] = _read_meta(Path(entry["path"]).parent / link)
+    return out or None
+
+
+def _choice_items(growth_data: dict | None) -> dict:
+    """판 안 성장의 아이템을 주는 레벨업 선택지 {아이템 id: 설명}. 강화·합성의 획득 경로로 센다."""
+    choices = (growth_data or {}).get("choices")
+    out = {}
+    for ch in choices if isinstance(choices, list) else []:
+        if isinstance(ch, dict) and isinstance(ch.get("item"), str) and c.is_active(ch):
+            out.setdefault(ch["item"], f"레벨업 선택지 {ch.get('id')}")
+    return out
+
+
 def validate_all(entries: list[dict]) -> list[dict]:
     """읽은 항목들에 검사 결과(report)를 붙인다. 적의 드랍 테이블은 함께 읽은 아이템 데이터로,
     플레이 기록의 컨셉·가설 참조는 함께 읽은 컨셉 데이터로, 전투 계산은 함께 읽은 아이템·영구 강화·적 데이터로 확인한다.
     스탯 예산은 아이템·적 데이터와 비교하고, 전투 계산이 있으면 그 공식으로 잰 스탯 원가 제안을 붙인다.
-    강화·합성은 아이템 데이터와 드랍 테이블로 참조·획득 경로를, 스탯 예산이 있으면 가치를 확인한다.
-    재화 흐름은 적 보상·드랍 테이블·아이템 가격·영구 강화 비용·강화·합성 비용을 함께 읽은 데이터에서 가져온다.
+    스탯 예산이 있으면 아이템·적 검사도 그 원가를 예산 가중치로 쓴다(같은 '예산'을 두 곳에서 따로 정하지 않는다).
+    강화·합성은 아이템 데이터와 드랍 테이블(과 판 안 성장의 아이템 선택지)로 참조·획득 경로를, 스탯 예산이 있으면 가치를 확인한다.
+    재화 흐름은 적 보상·드랍 테이블·아이템 가격·영구 강화 비용·강화·합성 비용을 함께 읽은 데이터에서 가져오고,
+    전투 단계 연결(combat_stage)과 메타 성장 설정(meta_config)을 맞춰 본다.
     판 안 성장은 전투 계산 파일과 그 참조 데이터로 빌드마다 전투 계산을 다시 한다.
     검사기가 예상하지 못한 예외를 내면 그 파일만 오류로 표시하고 나머지는 계속 검사한다."""
     loaded_items = [d for d in entries if d["ok"] and d["kind"] == "items"]
@@ -116,11 +174,13 @@ def validate_all(entries: list[dict]) -> list[dict]:
     budget_data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "budget"), None)
     crafting_data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "crafting"), None)
     budget_settings = budget.read_settings(budget_data, []) if budget_data is not None else None
+    costs = {side: spec["costs"] for side, spec in (budget_settings or {}).get("sides", {}).items()}  # 아이템·적 검사의 예산 가중치
+    growth_data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "growth"), None)
     suggestions = None
     combat_data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "combat"), None)
     if combat_data is not None and any(d["ok"] and d["kind"] == "budget" for d in entries):  # 쓰는 곳이 있을 때만 잰다
         try:
-            suggestions = combat.marginal_costs(combat_data, **by_id)
+            suggestions = combat.marginal_costs(combat_data, crafting=crafting_data, **by_id)
         except Exception as exc:  # noqa: BLE001 - 제안은 보조 정보다. 실패는 예산 검사의 경고로 알린다
             suggestions = {"failed": f"{type(exc).__name__}: {exc}"}
     loaded_concepts = [d for d in entries if d["ok"] and d["kind"] == "concepts"]
@@ -138,19 +198,23 @@ def validate_all(entries: list[dict]) -> list[dict]:
         if not d["ok"]:
             continue
         try:
-            if d["kind"] == "enemies":
-                d["report"] = enemies.validate(d["data"], drop_tables, items_unreadable=bool(broken_items))
+            if d["kind"] == "items":
+                d["report"] = items.validate(d["data"], weights=costs.get("items"))
+            elif d["kind"] == "enemies":
+                d["report"] = enemies.validate(d["data"], drop_tables, items_unreadable=bool(broken_items), weights=costs.get("enemies"))
             elif d["kind"] == "combat":
-                d["report"] = combat.validate(d["data"], **by_id)
+                d["report"] = combat.validate(d["data"], crafting=crafting_data, **by_id)
             elif d["kind"] == "budget":
                 d["report"] = budget.validate(d["data"], items=by_id["items"], enemies=by_id["enemies"], suggestions=suggestions)
             elif d["kind"] == "crafting":
-                d["report"] = crafting.validate(d["data"], items=by_id["items"], drop_tables=drop_tables, budget=budget_settings)
+                d["report"] = crafting.validate(d["data"], items=by_id["items"], drop_tables=drop_tables, budget=budget_settings,
+                                                extra_sources=_choice_items(growth_data))
             elif d["kind"] == "growth":
-                d["report"] = growth.validate(d["data"], combat=combat_data, **by_id)
+                d["report"] = growth.validate(d["data"], combat=combat_data, crafting=crafting_data, **by_id)
             elif d["kind"] == "economy":
                 d["report"] = economy.validate(d["data"], enemies=by_id["enemies"], items=by_id["items"], drop_tables=drop_tables,
-                                               upgrades=by_id["upgrades"], crafting=crafting_data)
+                                               upgrades=by_id["upgrades"], crafting=crafting_data, combat=combat_data,
+                                               meta=_meta_configs(d))
             elif d["kind"] == "playtests":
                 d["report"] = playtests.validate(d["data"], hypotheses, concepts_unreadable=bool(broken_concepts))
             else:

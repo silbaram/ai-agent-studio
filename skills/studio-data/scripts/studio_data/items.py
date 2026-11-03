@@ -32,6 +32,10 @@ def check_schema(items: list, errors: list) -> list[dict]:
         if price is not None and not (c.is_number(price) and price >= 0):
             errors.append({"code": "schema", "where": where, "message": f"price는 0 이상의 수여야 합니다: {price!r}"})
             ok = False
+        if "unique_effect" in item and not isinstance(item["unique_effect"], bool):
+            # 문자열 "false"도 참으로 읽혀 조용히 판정에서 빠진다
+            errors.append({"code": "schema", "where": where, "message": f"unique_effect는 true/false입니다: {item['unique_effect']!r}"})
+            ok = False
         ok = c.check_stats(item, where, errors) and ok
         ok = c.check_common(item, where, errors) and ok
         if ok:
@@ -168,15 +172,17 @@ def check_drop_tables(tables: dict, items_by_id: dict, errors: list, warnings: l
     return report
 
 
-def validate(data: dict) -> dict:
+def validate(data: dict, weights: dict | None = None) -> dict:
+    """weights: 함께 읽은 스탯 예산의 아이템 원가(budget.items.costs). 있으면 stat_weights 대신 쓴다."""
     errors: list = []
     warnings: list = []
     raw_items = data.get("items")
     if not isinstance(raw_items, list):
         errors.append({"code": "schema", "where": "items", "message": "items 배열이 필요합니다."})
         raw_items = []
-    weights = data.get("stat_weights", {}) or {}
     items = check_schema(raw_items, errors)
+    weights, source = c.pick_weights(data.get("stat_weights"), weights, [i for i in items if c.is_active(i)],
+                                     "stat_weights", "budget.items.costs", warnings)
     by_id = {i["id"]: i for i in items}
     active = [i for i in items if c.is_active(i)]
     # 고유 효과는 스탯 예산에 들어가지 않으므로 티어 비교와 열위 판정 모두에서 뺀다(판정 제외로 표시).
@@ -189,6 +195,7 @@ def validate(data: dict) -> dict:
         "count": len(items),
         **c.summary_counts(items),
         "scores": {i["id"]: round(budget(i, weights), 4) for i in items},
+        "weights_source": source,
         "tier_mean_budget": tier_summary,
         "dominance_not_assessed": not_assessed,
         "drop_tables": drops,
@@ -198,6 +205,8 @@ def validate(data: dict) -> dict:
 
 
 def print_extra(result: dict) -> None:
+    if result.get("weights_source") == "budget":
+        print("티어 비교·열위 판정의 예산: 스탯 예산의 원가(budget.items.costs)")
     for tid, t in result["drop_tables"].items():
         pity = t.get("pity")
         line = f"drop {tid}: " + ", ".join(f"{k} {v:.2%}" for k, v in t["rarity_probability"].items())

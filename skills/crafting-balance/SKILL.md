@@ -16,10 +16,10 @@ description: "Models item enhancement (cost, success rate, and keep/downgrade/de
 | 명령 | 하는 일 |
 |---|---|
 | `python3 .claude/skills/studio-data/scripts/studio.py check .` | 형식·참조 검사, 강화 단계별 기대 비용·시도, 합성 가치 비율, 증식 고리, 얻을 수 없는 아이템 |
-| `… check . --table` | 강화 표와 합성 표(마크다운) |
+| `… check . --table crafting` | 강화 표와 합성 표(마크다운) |
 | `… view .` | 강화·합성 탭: 강화 단계표, 합성 표(손해 보는 합성 강조), 얻을 수 없는 아이템 |
 
-데이터는 `data/crafting.json` 한 파일이다. 형식은 [references/crafting-format.md](references/crafting-format.md). 아이템과 드랍 테이블은 [progression-economy](../progression-economy/SKILL.md)의 원본을, 가치는 [stat-budget](../stat-budget/SKILL.md)의 원가를 그대로 쓴다. 프로젝트 폴더(`check .`)로 검사해야 참조와 획득 경로를 확인한다. 아이템 데이터가 없으면 `INCOMPLETE`, 스탯 예산이 없으면 가치 비교만 하지 않는다.
+데이터는 `data/crafting.json` 한 파일이다. 형식은 [references/crafting-format.md](references/crafting-format.md). 아이템과 드랍 테이블은 [progression-economy](../progression-economy/SKILL.md)의 원본을, 가치는 [stat-budget](../stat-budget/SKILL.md)의 원가를 그대로 쓴다. 프로젝트 폴더(`check .`)로 검사해야 참조와 획득 경로를 확인한다. 아이템 데이터가 없으면 `INCOMPLETE`다. 스탯 예산이 없으면 가치 비교를 하지 못해 역시 `INCOMPLETE`다. 가치 비교를 쓰지 않는 게임이면 `crafting.value_check: false`로 끈다.
 
 ## 절차
 
@@ -52,7 +52,7 @@ description: "Models item enhancement (cost, success rate, and keep/downgrade/de
 
 ### 3. 얻는 경로를 확인한다
 
-드랍 테이블(아이템 id나 희귀도), 합성 결과(재료를 모두 얻을 수 있을 때), `crafting.other_sources`(시작 장비, 상점, 퀘스트 등)로 얻을 수 있는 아이템을 모은다. 어디에도 없는 활성 아이템은 `unobtainable`로 알린다. 얻는 곳이 있는데 데이터 밖이면(상점 등) `other_sources`에 적는다. 일부러 얻는 곳이 없는 아이템(시즌 보상 등)은 그 아이템의 `acknowledged`에 이유를 적는다.
+드랍 테이블(아이템 id나 희귀도), 합성 결과(재료를 모두 얻을 수 있을 때), `crafting.other_sources`(시작 장비, 상점, 퀘스트 등), [run-growth](../run-growth/SKILL.md)의 아이템을 주는 레벨업 선택지로 얻을 수 있는 아이템을 모은다. 어디에도 없는 활성 아이템은 `unobtainable`로 알린다. 얻는 곳이 있는데 데이터 밖이면(상점 등) `other_sources`에 적는다. 일부러 얻는 곳이 없는 아이템(시즌 보상 등)은 그 아이템의 `acknowledged`에 이유를 적는다.
 
 ### 4. 바꾸고 다시 계산한다
 
