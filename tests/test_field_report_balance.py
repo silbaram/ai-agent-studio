@@ -22,6 +22,7 @@ import test_combat as tc
 import test_crafting as tcr
 import test_economy as te
 import test_growth as tg
+import test_meta_combat as tmc
 
 
 def codes(entries):
@@ -624,6 +625,160 @@ class ReviewFindings(unittest.TestCase):
         self.link_meta(root, lambda m: m["currency"].__setitem__("per_room", 3))
         datasets.collect([root])
         self.assertEqual(len(calls), 2)
+
+
+# ---------- B5b 시험 보고(48~56) ----------
+ZONED = {"crawler": {"id": "crawler", "rank": "normal", "zone": 1, "stats": {"hp": 30, "damage": 5}},
+         "swarmer": {"id": "swarmer", "rank": "normal", "zone": 2, "stats": {"hp": 40, "damage": 6}}}
+
+
+class ZoneRule(unittest.TestCase):
+    def foes(self, **over):
+        st = tc.stage("s2", zone=2, **over)
+        st.pop("enemies")
+        return [r["enemy"] for r in tc.validate(tc.data(stages=[st]), enemies=ZONED)["rows"]]
+
+    def test_zone_keeps_its_first_seen_meaning_by_default_48(self):
+        self.assertEqual(self.foes(), ["swarmer"])
+
+    def test_up_to_includes_enemies_that_keep_appearing_48(self):
+        self.assertEqual(self.foes(zone_rule="up_to"), ["crawler", "swarmer"])
+        st = tc.stage("s2", zone=2, zone_rule="all")
+        st.pop("enemies")
+        self.assertIn("schema", codes(tc.validate(tc.data(stages=[st]), enemies=ZONED)["errors"]))
+
+    def test_economy_hint_names_the_zone_rule_48(self):
+        d = te.base()
+        d["stages"][0].update({"combat_stage": "c2", "kills": {"crawler": 10}})
+        r = evalidate(d, enemies=dict(te.ENEMIES, **{k: dict(v, reward=1) for k, v in ZONED.items()}), combat={"stages": [{"id": "c2", "zone": 2}]})
+        w = next(x for x in r["warnings"] if x["code"] == "kill_not_in_stage")
+        self.assertIn("zone_rule", w["message"])
+
+
+class RankMargins(unittest.TestCase):
+    ROWS = [dict(tmc.row(4, 4.0, 4, 4.0), rank="normal", enemy="a"), dict(tmc.row(100, 100.0, 5, 5.0), rank="boss", enemy="boss")]
+
+    def test_each_rank_is_measured_against_its_own_reference_49(self):
+        self.assertEqual(meta_sim.stage_margin(self.ROWS), 0.05)                                   # 기준 1: 보스가 정한다
+        self.assertAlmostEqual(meta_sim.stage_margin(self.ROWS, {"normal": 1.0, "boss": 0.1}), 0.5)  # 보스 0.05 ÷ 0.1
+        self.assertAlmostEqual(meta_sim.stage_margin(self.ROWS, {"normal": 2.0, "boss": 0.01}), 0.5)  # 이제 일반 적이 정한다
+
+    def test_rank_references_are_checked_49(self):
+        raw = json.loads((SAMPLE / tmc.CONFIG).read_text(encoding="utf-8"))
+        raw["survival"]["even_margin"] = {"normal": 1, "bos": 0.1}
+        with self.assertRaisesRegex(meta_sim.ConfigError, "'boss'의 오타"):
+            meta_sim.normalize(raw, (SAMPLE / tmc.CONFIG).parent)
+
+
+class SimulatorFieldTest(tmc.Workspace):
+    def test_overview_names_the_enemy_that_decides_the_stage_49(self):
+        cfg, r = self.run_cfg(survival={"slope": 3.0, "even_margin": {"normal": 1.0, "elite": 0.3, "boss": 0.1}})
+        first = r["survival_by_stage"][0]
+        self.assertIn(first["decided_by"], ("slime", "skeleton_archer", "grave_knight", "bone_lord"))
+        self.assertIn("rank", first)
+
+    def test_unknown_keys_are_refused_with_a_hint_50(self):
+        for change, hint in ((lambda d: d["survival"].__setitem__("even_margn", 0.3), "even_margin"),
+                             (lambda d: d.__setitem__("milestone", d.pop("milestones")), "milestones"),
+                             (lambda d: d["milestones"][0].__setitem__("clear_room", 1), "clear_room"),
+                             (lambda d: d.__setitem__("growth_flie", d.pop("growth_file")), "growth_file")):
+            raw = json.loads(self.config.read_text(encoding="utf-8"))
+            change(raw)
+            with self.subTest(hint), self.assertRaisesRegex(meta_sim.ConfigError, hint):
+                meta_sim.normalize(raw, self.config.parent)
+        raw = json.loads((self.root / "data/meta.json").read_text(encoding="utf-8"))
+        raw["survial"] = raw.pop("survival")
+        with self.assertRaisesRegex(meta_sim.ConfigError, "'survival'의 오타"):
+            meta_sim.normalize(raw, self.config.parent)
+
+    def test_build_without_growth_file_says_so_56(self):
+        raw = json.loads(self.config.read_text(encoding="utf-8"))
+        raw.pop("growth_file")
+        with self.assertRaisesRegex(meta_sim.ConfigError, "growth_file이 필요"):
+            meta_sim.normalize(raw, self.config.parent)
+
+    def test_stat_effects_give_off_combat_upgrades_a_value_52(self):
+        self.edit("data/upgrades.json", lambda d: d["upgrades"].insert(0, {"id": "greed", "cost": 5, "stats": {"soul_gain": 1}}))
+        self.edit("data/economy.json", lambda d: d["purchases"].insert(5, {"id": "meta_greed", "price": {"upgrade": "greed"}}))
+        cfg, plain = meta_sim.run_config(self.config)
+        self.assertIn("greed", plain["upgrades_without_combat_effect"])
+        cfg, rich = self.run_cfg(stat_effects={"soul_gain": {"income_pct": 1.0}})
+        self.assertNotIn("greed", rich["upgrades_without_combat_effect"])
+        self.assertLess(rich["upgrades"]["weapon_2"]["median"], plain["upgrades"]["weapon_2"]["median"])
+
+    def test_level_effect_adds_level_ups_52(self):
+        self.edit("data/upgrades.json", lambda d: d["upgrades"].insert(0, {"id": "wisdom", "cost": 5, "stats": {"wisdom": 1}}))
+        self.edit("data/economy.json", lambda d: d["purchases"].insert(5, {"id": "meta_wisdom", "price": {"upgrade": "wisdom"}}))
+        cfg, plain = meta_sim.run_config(self.config)
+        cfg, rich = self.run_cfg(stat_effects={"wisdom": {"levels": 3}})
+        self.assertGreater(rich["survival_by_stage"][0]["margin_all"], plain["survival_by_stage"][0]["margin_all"])
+
+    def test_stat_effects_are_checked_52(self):
+        for effects in ({"soul_gain": {"income": 1}}, {"soul_gain": {"income_pct": "x"}}):
+            raw = json.loads(self.config.read_text(encoding="utf-8"))
+            raw["stat_effects"] = effects
+            with self.subTest(effects), self.assertRaises(meta_sim.ConfigError):
+                meta_sim.normalize(raw, self.config.parent)
+        raw = json.loads(self.config.read_text(encoding="utf-8"))
+        raw.pop("growth_file"), raw.pop("build")
+        raw["stat_effects"] = {"wisdom": {"levels": 1}}
+        with self.assertRaisesRegex(meta_sim.ConfigError, "growth_file"):
+            meta_sim.normalize(raw, self.config.parent)
+
+    def test_result_records_every_input_file_53(self):
+        cfg, r = meta_sim.run_config(self.config)
+        names = {Path(x["path"]).name: x["sha256"] for x in r["inputs"]}
+        for f in ("combat.json", "growth.json", "economy.json", "items.json", "enemies.json", "upgrades.json"):
+            self.assertIn(f, names)
+            self.assertEqual(len(names[f]), 64)
+
+    def test_check_flags_an_upgrade_that_breaks_combat_stats_54(self):
+        self.edit("data/upgrades.json", lambda d: d["upgrades"].append({"id": "lucky", "cost": 1, "stats": {"crit_chance": 2}}))
+        code, out = run_cli("check", self.root, "--json")
+        r = next(d["report"] for d in json.loads(out)["datasets"] if d["kind"] == "combat")
+        self.assertEqual([(e["code"], e["where"]) for e in r["errors"]], [("bad_stat", "upgrades:lucky")])
+
+    def test_stage_left_out_on_purpose_is_not_called_a_typo_55(self):
+        with self.assertRaises(meta_sim.ConfigError) as ctx:
+            self.run_cfg(stages=["zone_1", "zone_3"])
+        self.assertIn("stages", str(ctx.exception))
+        self.assertNotIn("오타", str(ctx.exception))
+
+    def test_docs_explain_how_to_start_the_survival_curve_51(self):
+        text = (ROOT / "skills/progression-economy/references/meta-model.md").read_text(encoding="utf-8")
+        section = text[text.index("### 생존 곡선의 처음 값"):]
+        for word in ("margin_none", "decided_by", "even_margin", "slope", "B5c"):
+            self.assertIn(word, section)
+
+
+class SimulatorReview(tmc.Workspace):
+    """48~56번 수정의 코드 검토에서 나온 문제의 회귀 테스트."""
+
+    def test_overview_has_the_no_upgrade_margin_with_growth(self):
+        cfg, r = meta_sim.run_config(self.config)
+        for s in r["survival_by_stage"]:
+            self.assertIn("margin_growth", s)
+            self.assertGreaterEqual(s["p_growth"], s["p_none"])
+            self.assertLessEqual(s["p_growth"], s["p_all"])
+        self.assertGreater(r["survival_by_stage"][2]["margin_growth"], r["survival_by_stage"][2]["margin_none"])
+        text = (ROOT / "skills/progression-economy/references/meta-model.md").read_text(encoding="utf-8")
+        self.assertIn("margin_growth", text[text.index("### 생존 곡선의 처음 값"):])
+
+    def test_stat_effect_names_must_be_upgrade_stats(self):
+        raw = json.loads(self.config.read_text(encoding="utf-8"))
+        raw["stat_effects"] = {"relic_slotz": {"income_pct": 5.0}}
+        with self.assertRaisesRegex(meta_sim.ConfigError, "'relic_slots'의 오타"):
+            meta_sim.normalize(raw, self.config.parent)
+
+    def test_stat_effects_cannot_reuse_a_combat_stat(self):
+        with self.assertRaisesRegex(meta_sim.ConfigError, "attack"):
+            self.run_cfg(stat_effects={"attack": {"levels": 1}})
+
+    def test_up_to_needs_numeric_zones(self):
+        st = tc.stage("s2", zone="2", zone_rule="up_to")
+        st.pop("enemies")
+        r = tc.validate(tc.data(stages=[st]), enemies=ZONED)
+        self.assertIn("schema", codes(r["errors"]))
 
 
 if __name__ == "__main__":

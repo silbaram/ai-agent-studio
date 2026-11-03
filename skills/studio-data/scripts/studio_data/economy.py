@@ -535,8 +535,12 @@ def _check_link(s: dict, combat: dict | None, combat_stages: dict, enemies: dict
     kills = s.get("kills") if isinstance(s.get("kills"), dict) else {}
     outside = sorted(k for k in kills if foes is not None and k not in foes)
     if outside:
+        zone = cs.get("zone")
+        earlier = [k for k in outside if c.is_number(zone) and c.is_number((enemies or {}).get(k, {}).get("zone")) and enemies[k]["zone"] < zone]
+        hint = (f" {', '.join(earlier)}는 앞 구역에서 처음 나온 적입니다. 앞 구역의 적이 계속 나오는 게임이면 전투 단계 {link}에 "
+                "zone_rule: \"up_to\"를 적습니다.") if earlier and cs.get("zone_rule") != "up_to" else ""
         _err(warnings, "kill_not_in_stage", s["id"],
-             f"전투 단계 {link}에 나오지 않는 적의 처치를 셉니다: {', '.join(outside)}. 전투 계산과 재화 흐름이 다른 적을 보고 있습니다.", owner=s["id"])
+             f"전투 단계 {link}에 나오지 않는 적의 처치를 셉니다: {', '.join(outside)}. 전투 계산과 재화 흐름이 다른 적을 보고 있습니다.{hint}", owner=s["id"])
 
 
 def _check_meta(settings: dict, meta: dict | None, complete: bool, blocked: dict, per_run: dict, upgrade_order: dict,

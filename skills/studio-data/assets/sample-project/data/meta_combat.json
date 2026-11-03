@@ -7,7 +7,7 @@
   "combat_file": "combat.json",
   "growth_file": "growth.json",
   "build": "balanced",
-  "survival": { "slope": 3.0, "even_margin": 0.12, "floor": 0.0, "ceiling": 0.99 },
+  "survival": { "slope": 3.0, "even_margin": { "normal": 1.0, "elite": 0.4, "boss": 0.12 }, "floor": 0.0, "ceiling": 0.99 },
   "player": { "skill": 0.5, "skill_spread": 0.5 },
   "currency": { "keep_on_death": 1.0 },
   "economy": { "file": "economy.json", "currency": "soul" },

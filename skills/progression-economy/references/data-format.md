@@ -139,7 +139,7 @@
 | 필드 | 필수 | 뜻 |
 |---|---|---|
 | `rank` | 예 | `normal`(일반) / `elite`(정예) / `boss`(보스) |
-| `zone` | 예 | 처음 나오는 구역(1 이상의 정수). 뷰어에서 표를 나누는 기준 |
+| `zone` | 예 | 처음 나오는 구역(1 이상의 정수). 뷰어에서 표를 나누는 기준. 전투 계산의 단계가 `zone`으로 적을 고를 때 기본은 이 값이 같은 적만이다(앞 구역의 적이 계속 나오면 그 단계에 `zone_rule: "up_to"`) |
 | `reward` | 아니오 | 처치 보상(0 이상). 어느 재화인지는 [economy-flow](../../economy-flow/SKILL.md)의 `economy.kill_reward`가 정한다 |
 | `drop_table` | 아니오 | 아이템 데이터의 `drop_tables` id |
 

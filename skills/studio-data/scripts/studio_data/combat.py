@@ -26,6 +26,7 @@ ROLES = REQUIRED_ROLES + OPTIONAL_ROLES
 SIDES = ("player", "enemy")
 RANKS = ("normal", "elite", "boss")
 RANK_LABEL = {"normal": "일반", "elite": "정예", "boss": "보스"}
+ZONE_RULES = ("first_seen", "up_to")  # 단계의 zone: 그 구역에서 처음 나오는 적 / 그 구역까지 나온 적(앞 구역의 적이 계속 나오는 게임)
 METRICS = ("hits_to_kill", "time_to_kill", "hits_to_die", "time_to_die")
 METRIC_LABEL = {"hits_to_kill": "처치 타수", "time_to_kill": "처치 시간(초)", "hits_to_die": "버티는 타수", "time_to_die": "버티는 시간(초)"}
 UNCHECKED_REASON = {
@@ -324,6 +325,7 @@ def evaluate(prep: dict, stage_id: str, bonus: dict) -> tuple[list[dict] | None,
 
 def stage_enemies(stage: dict, enemies: dict, errors: list, warnings: list) -> list[dict] | None:
     """단계에서 계산할 적 항목: enemies 목록(없는 id는 오류, 삭제된 적은 경고하고 뺌) 또는 zone의 활성 적. 목록 형식이 틀리면 None.
+    적 데이터의 zone은 처음 나오는 구역이다. zone_rule이 up_to면 그 구역까지 나온 적(zone 이하)을 모두 쓴다.
     재화 흐름의 combat_stage 연결도 이 규칙을 쓴다."""
     where = stage["id"]
     if "enemies" in stage:
@@ -343,6 +345,8 @@ def stage_enemies(stage: dict, enemies: dict, errors: list, warnings: list) -> l
     zone = stage.get("zone")
     if zone is None:
         return []
+    if stage.get("zone_rule") == "up_to":
+        return [e for e in enemies.values() if c.is_number(e.get("zone")) and c.is_number(zone) and e["zone"] <= zone and c.is_active(e)]
     return [e for e in enemies.values() if e.get("zone") == zone and c.is_active(e)]
 
 
@@ -396,6 +400,13 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
         if c.check_common(s, s["id"], errors):
             if "level" in s and not c.is_number(s["level"]):
                 _err(errors, "schema", s["id"], f"level은 수여야 합니다: {s['level']!r}")
+                continue
+            if s.get("zone_rule", "first_seen") not in ZONE_RULES:
+                _err(errors, "schema", s["id"], f"zone_rule은 {', '.join(ZONE_RULES)} 중 하나입니다: {s.get('zone_rule')!r}"
+                     f"{did_you_mean(str(s.get('zone_rule')), ZONE_RULES)}")
+                continue
+            if s.get("zone_rule") == "up_to" and not c.is_number(s.get("zone")):
+                _err(errors, "schema", s["id"], f"zone_rule up_to는 zone이 수여야 합니다(그 구역 이하의 적을 고른다): {s.get('zone')!r}")
                 continue
             stages.append(s)
     refs = {"items": items, "upgrades": upgrades, "enemies": enemies, "crafting": crafting}
@@ -500,6 +511,8 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
                              f"{METRIC_LABEL[m]} {c.josa(c.num_text(v), '이가')} {RANK_LABEL.get(e.get('rank'), e.get('rank'))} 목표 {c.josa(c.range_text(rng), '을를')} 벗어납니다.",
                              **row_issue)
                 rows.append(r)
+    if settings is not None and upgrades is not None:
+        _check_upgrade_stats(settings, stages, stage_info, upgrades, errors)
     if settings is not None and not rows and not errors and not unchecked:
         unchecked, missing_kinds = 1, {"nothing"}  # 계산한 것이 없으면 통과가 아니다
     summary = c.summary_counts(stages)
@@ -522,6 +535,28 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
         "errors": errors,
         "warnings": warnings,
     }
+
+
+def _check_upgrade_stats(settings: dict, stages: list, stage_info: dict, upgrades: dict, errors: list) -> None:
+    """기준 장비에 넣지 않은 영구 강화도 사면 더해진다(메타 성장 시뮬레이터). 활성 강화마다 계산한 단계의 기준 장비에 하나씩 더해
+    스탯이 계산에 쓸 수 없는 값이 되면(치명 확률이 1을 넘는 등) 그 강화의 오류로 알린다. 강화 하나에 한 번만."""
+    roles, formula = settings["roles"]["player"], settings["formula"]
+    loadout = {s["id"]: set((s.get("player") or {}).get("upgrades") or []) for s in stages if isinstance(s.get("player"), dict)}
+    for uid, u in upgrades.items():
+        stats = _stats_of(u)
+        if not (isinstance(u, dict) and c.is_active(u) and stats and set(stats) & set(roles.values())):
+            continue
+        for sid, info in stage_info.items():
+            if uid in loadout.get(sid, ()):
+                continue  # 그 단계의 기준 장비에 이미 있다
+            total = dict(info["player"])
+            for k, v in stats.items():
+                total[k] = total.get(k, 0) + v
+            problem = _side_problem(_side(total, roles), roles, formula)
+            if problem:
+                _err(errors, "bad_stat", f"upgrades:{uid}",
+                     f"영구 강화 {uid}를 단계 {sid}의 기준 장비에 더하면 플레이어 스탯을 계산에 쓸 수 없습니다: {problem}. 강화 수치를 고치세요.")
+                break
 
 
 # ---------- 스탯 원가 제안 (B2 예산에 쓴다) ----------

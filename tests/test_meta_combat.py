@@ -50,6 +50,7 @@ class Workspace(unittest.TestCase):
         self.root = Path(self.tmp.name) / "game"
         shutil.copytree(SAMPLE, self.root)
         self.config = self.root / CONFIG
+        self.edit(CONFIG, lambda d: d.update(trials=80, max_runs=25))  # 같은 것을 확인하는 데 샘플의 200 × 40판은 필요 없다
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -98,11 +99,20 @@ class Config(Workspace):
 
     def test_upgrades_that_break_combat_stats_are_refused(self):
         self.edit("data/upgrades.json", lambda d: d["upgrades"].append({"id": "lucky", "cost": 1, "stats": {"crit_chance": 2}}))
-        with self.assertRaisesRegex(sm.ConfigError, "lucky|crit_chance"):
+        with self.assertRaisesRegex(sm.ConfigError, "lucky"):
             self.run_cfg(purchase_policy="cheapest_first")
 
-    def test_unplanned_upgrade_is_not_checked_but_a_planned_one_is(self):
+    def test_broken_upgrade_is_refused_even_if_unplanned_or_unaffordable(self):
+        # 전투 계산 검사가 모든 활성 강화를 기준 장비에 더해 보므로, 계획에 없거나 비싸서 닿지 않는 강화도 막는다
         self.edit("data/upgrades.json", lambda d: d["upgrades"].append({"id": "lucky", "cost": 10 ** 9, "stats": {"crit_chance": 2}}))
+        for policy in ("economy", "listed_order"):
+            with self.subTest(policy), self.assertRaisesRegex(sm.ConfigError, "upgrades:lucky"):
+                self.run_cfg(purchase_policy=policy)
+
+    def test_planned_upgrade_set_that_breaks_stats_together_is_refused(self):
+        # 하나씩은 괜찮지만 함께 사면 치명 확률이 1을 넘는다(0.6 + 0.6). 전투 계산 검사는 하나씩만 본다
+        self.edit("data/upgrades.json", lambda d: d["upgrades"].extend([{"id": "luck_a", "cost": 10 ** 9, "stats": {"crit_chance": 0.6}},
+                                                                        {"id": "luck_b", "cost": 10 ** 9, "stats": {"crit_chance": 0.6}}]))
         sm.run_config(self.config)                                   # 재화 흐름 계획에 없으면 사지 않으므로 막지 않는다
         with self.assertRaisesRegex(sm.ConfigError, "crit_chance"):  # 살 수 없을 만큼 비싸도 계획(전부)에 있으면 미리 막는다
             self.run_cfg(purchase_policy="listed_order")

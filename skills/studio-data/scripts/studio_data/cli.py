@@ -240,8 +240,11 @@ def _caution(cfg: dict) -> str:
 def _print_combat_overview(result: dict) -> None:
     for s in result["survival_by_stage"]:
         f = lambda m: "피해를 받지 않음" if m is None else f"{m:g}배"  # noqa: E731
-        print(f"단계 {s['stage']}: 여유 {f(s['margin_none'])} → 통과 {s['p_none']:.0%} (강화·성장 없음) · "
-              f"여유 {f(s['margin_all'])} → 통과 {s['p_all']:.0%} (계획한 강화 모두 + 판 안 성장 평균) · 재화 {result['stage_income'][s['stage']]:g}")
+        rank = combat.RANK_LABEL.get(s["rank"], s["rank"] or "등급 없음")
+        growth = (f"여유 {f(s['margin_growth'])} → 통과 {s['p_growth']:.0%} (강화 없이 판 안 성장 평균: 첫 판) · "
+                  if result.get("growth_build") else "")
+        print(f"단계 {s['stage']} (정하는 적 {s['decided_by']}, {rank}): 여유 {f(s['margin_none'])} → 통과 {s['p_none']:.0%} (강화·성장 없음) · "
+              f"{growth}여유 {f(s['margin_all'])} → 통과 {s['p_all']:.0%} (계획한 강화 모두 + 판 안 성장 평균) · 재화 {result['stage_income'][s['stage']]:g}")
     if result["upgrades_without_combat_effect"]:
         print("전투 계산에 효과가 없는 강화(전투 역할에 연결된 스탯이 없음): " + ", ".join(result["upgrades_without_combat_effect"]))
 
