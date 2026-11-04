@@ -1,4 +1,4 @@
-"""studio.py의 하위 명령: view / check / simulate / calibrate / provenance / draft / setup / hook.
+"""studio.py의 하위 명령: view / check / simulate / calibrate / runlog / provenance / draft / setup / hook.
 
 종료 코드
   0  통과. check는 미확인 참조가 있으면 최종 줄이 INCOMPLETE다(종료 코드는 0, --strict·--fail-on-assumed면 1).
@@ -17,17 +17,17 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from . import budget, calibrate, claude, combat, concepts, crafting, datasets, economy, enemies, growth, items, meta_sim, playtests, provenance, upgrades, viewer
+from . import budget, calibrate, claude, combat, concepts, crafting, datasets, economy, enemies, growth, items, levels, meta_sim, playtests, provenance, upgrades, viewer
 from . import common as c
 
 EXTRA_PRINTERS = {"items": items.print_extra, "upgrades": upgrades.print_extra, "enemies": enemies.print_extra,
                   "combat": combat.print_extra, "budget": budget.print_extra, "crafting": crafting.print_extra,
-                  "economy": economy.print_extra, "growth": growth.print_extra, "playtests": playtests.print_extra}
+                  "economy": economy.print_extra, "growth": growth.print_extra, "levels": levels.print_extra, "playtests": playtests.print_extra}
 TABLE_PRINTERS = {"concepts": concepts.table, "combat": combat.table, "budget": budget.table, "crafting": crafting.table,
-                  "economy": economy.table, "growth": growth.table}
+                  "economy": economy.table, "growth": growth.table, "levels": levels.table}
 COUNT_PRINTERS = {"concepts": concepts.print_counts, "combat": combat.print_counts, "budget": budget.print_counts,
                   "crafting": crafting.print_counts, "economy": economy.print_counts, "growth": growth.print_counts,
-                  "playtests": playtests.print_counts}
+                  "levels": levels.print_counts, "playtests": playtests.print_counts}
 GATE_LABELS = {"playtests": "판정이 확정되지 않은 가설(버팀·틀림 확정이 아님): "}
 
 
@@ -112,7 +112,7 @@ def cmd_check(args) -> int:
         return 2
     entries = datasets.collect([Path(p) for p in args.paths])
     if not entries:
-        print("컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·플레이 기록 데이터 파일을 찾지 못했습니다.", file=sys.stderr)
+        print("컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터 파일을 찾지 못했습니다.", file=sys.stderr)
         return 2
     unreadable = [d for d in entries if not d["ok"]]
     reports = [d["report"] for d in entries if d["ok"]]
@@ -122,7 +122,8 @@ def cmd_check(args) -> int:
     unchecked = sum(r.get("unchecked", 0) for r in reports)
     gated = {d["path"]: d["report"]["unverified"] for d in entries
              if d["ok"] and args.fail_on_assumed and d["report"].get("unverified")}
-    failed = (bool(errors) or (args.strict and bool(warnings)) or bool(gated)
+    assumed_configs = datasets.unverified_configs([Path(p) for p in args.paths]) if args.fail_on_assumed else []
+    failed = (bool(errors) or (args.strict and bool(warnings)) or bool(gated) or bool(assumed_configs)
               or ((args.strict or args.fail_on_assumed) and bool(unchecked)))
     # 미확인이 남으면 통과(PASS)로 쓰지 않는다. 검사하지 못한 것을 통과로 옮겨 적지 않게 한다.
     status = "unreadable" if unreadable else ("fail" if failed else ("incomplete" if unchecked else "pass"))
@@ -132,6 +133,7 @@ def cmd_check(args) -> int:
         "fail_on_assumed": args.fail_on_assumed,
         "unchecked": unchecked,
         "acknowledged": acknowledged,
+        "unverified_configs": assumed_configs,
         "datasets": [{k: d.get(k) for k in ("path", "kind", "ok", "error", "report") if k in d} for d in entries],
     }
     if args.out:
@@ -162,6 +164,8 @@ def cmd_check(args) -> int:
                 COUNT_PRINTERS[d["kind"]](r)
             else:
                 _print_data_counts(d)
+        for path in assumed_configs:
+            print(f"gate: 시뮬레이터 설정의 출처가 가정이거나 비어 있거나 읽을 수 없음(보정했으면 provenance를 적습니다): {path}")
         print(f"전체: 파일 {len(entries)}개 · 오류 {errors} · 경고 {warnings}"
               + (f" · 확인한 경고 {acknowledged}" if acknowledged else "")
               + (f" · 미확인 {unchecked}" if unchecked else "")
@@ -307,9 +311,24 @@ def cmd_calibrate(args) -> int:
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
-    calibrate.print_report(result)
+    calibrate.print_report(result, args.off_only)
     if args.out:
         print(f"문서 인용: [계산: {args.out}]")
+    return 0
+
+
+def cmd_runlog(args) -> int:
+    if not Path(args.log).is_file():
+        print(f"파일을 찾을 수 없습니다: {args.log}", file=sys.stderr)
+        return 2
+    try:
+        result = calibrate.summarize_runs(args.log)
+    except meta_sim.ConfigError as exc:
+        print(f"판 로그를 모을 수 없습니다: {exc}", file=sys.stderr)
+        return 2
+    print(f"{Path(args.log).name} · 판 {result['runs']}개 · 강화 상태 {len(result['groups'])}가지."
+          " 파일에 쓰지 않았습니다. 세션(id, date, concept, build 등)에 합쳐 data/playtests.json에 넣습니다.", file=sys.stderr)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -437,7 +456,7 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--no-browser", action="store_true", help="브라우저를 자동으로 열지 않습니다.")
     v.set_defaults(func=cmd_view)
 
-    k = sub.add_parser("check", help="컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·플레이 기록 데이터를 검사합니다.")
+    k = sub.add_parser("check", help="컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터를 검사합니다.")
     k.add_argument("paths", nargs="*", help="프로젝트·데이터 폴더 또는 파일 (하나 이상)")
     k.add_argument("--strict", action="store_true", help="경고도 실패로 처리합니다.")
     k.add_argument("--fail-on-assumed", action="store_true", help="삭제되지 않은 항목 중 출처가 가정이거나 비어 있는 것, 판정이 확정되지 않은 가설이 있으면 실패합니다 (확정 판정 전 게이트).")
@@ -464,9 +483,14 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("path", help="프로젝트·데이터 폴더(가정값 비교만) 또는 시뮬레이터 설정 파일(전투 계산 모델: 통과율 비교와 제안까지)")
     b.add_argument("--sessions", help="쓸 세션 id만 쉼표로 고릅니다. 빌드가 바뀌었으면 지금 빌드의 세션만 씁니다.")
     b.add_argument("--tolerance", type=float, default=calibrate.DEFAULT_TOLERANCE, help="가정값과 측정값이 이 비율을 넘게 다르면 표시합니다 (기본 0.2).")
+    b.add_argument("--off-only", action="store_true", help="가정값 비교에서 차이가 표시된 줄만 보입니다.")
     b.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
     b.add_argument("--out", help="결과 JSON 저장 경로. 문서에서 [계산: 이 경로]로 인용합니다.")
     b.set_defaults(func=cmd_calibrate)
+
+    r = sub.add_parser("runlog", help="판별 로그(CSV)를 세션의 단계 기록으로 모아 출력합니다 (파일에 쓰지 않음).")
+    r.add_argument("log", help="판별 로그 CSV. 들어간 단계마다 한 줄: run, stage, cleared(1/0), upgrades, growth_build, player, level, duration, kills.<적>, income.<재화>")
+    r.set_defaults(func=cmd_runlog)
 
     p = sub.add_parser("provenance", help="기획 문서(md)의 수치 출처 태그를 검사합니다.")
     p.add_argument("paths", nargs="+", help="검사할 .md 파일 또는 폴더")

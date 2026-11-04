@@ -227,11 +227,9 @@ EFFECTS = ("income_pct", "levels")  # 전투 밖 스탯의 효과: 판 사이 �
 
 def _known_keys(d: dict, allowed: set, where: str) -> None:
     """모르는 키는 오타일 가능성이 크다(조용히 기본값으로 돌면 결과가 통째로 달라진다). _로 시작하는 키(_note 등)는 메모로 둔다."""
-    for k in d:
-        if isinstance(k, str) and k.startswith("_"):
-            continue
-        if k not in allowed:
-            raise ConfigError(f"{where}알 수 없는 키 '{k}'.{c.did_you_mean(str(k), allowed)} 쓸 수 있는 키: {', '.join(sorted(allowed))}")
+    text = c.unknown_keys_text(d, allowed)
+    if text:
+        raise ConfigError(f"{where}{text} 쓸 수 있는 키: {', '.join(sorted(allowed))}")
 
 
 def _check_keys(cfg: dict, model: str) -> None:

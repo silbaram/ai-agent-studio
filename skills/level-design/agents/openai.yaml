@@ -1,0 +1,4 @@
+interface:
+  display_name: "레벨 구성"
+  short_description: "레벨을 조우(방·웨이브) 순서로 적고, 조우의 위협도를 곡선 예산과 비교하며 전투 단계의 적과 재화 흐름의 처치 수에 맞춰 봄"
+  default_prompt: "Use $level-design to lay out this game's levels as ordered encounters, compare each encounter's threat with the budget curve, and report anything off budget or out of step with combat and economy data."

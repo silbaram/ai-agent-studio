@@ -350,6 +350,26 @@ def stage_enemies(stage: dict, enemies: dict, errors: list, warnings: list) -> l
     return [e for e in enemies.values() if e.get("zone") == zone and c.is_active(e)]
 
 
+def stage_foes(stage: dict, enemies: dict | None) -> set | None:
+    """전투 계산이 그 단계에서 계산하는 적 id(전투 계산과 같은 규칙: 목록 또는 구역, 삭제·없는 적 제외). 알 수 없으면 None.
+    적 데이터가 없으면 목록에 적힌 id만 쓴다(구역은 알 수 없다)."""
+    if enemies is None:
+        ids = stage.get("enemies")
+        return {x for x in ids if isinstance(x, str)} if isinstance(ids, list) else None
+    found = stage_enemies(stage, enemies, [], [])  # 목록 형식 오류·없는 적은 전투 계산 검사가 보고한다
+    return None if found is None else {e["id"] for e in found}
+
+
+def earlier_zone_hint(outside: list, stage: dict, enemies: dict | None) -> str:
+    """단계 밖의 적 중 앞 구역에서 처음 나온 적이 있으면 zone_rule 안내. 없으면 빈 문자열."""
+    zone = stage.get("zone")
+    earlier = [k for k in outside if c.is_number(zone) and c.is_number((enemies or {}).get(k, {}).get("zone")) and enemies[k]["zone"] < zone]
+    if not earlier or stage.get("zone_rule") == "up_to":
+        return ""
+    return (f" {', '.join(earlier)}는 앞 구역에서 처음 나온 적입니다. 앞 구역의 적이 계속 나오는 게임이면 전투 단계 {stage['id']}에 "
+            "zone_rule: \"up_to\"를 적습니다.")
+
+
 def _role_names(settings: dict, stages: list[dict], refs: dict, warnings: list) -> dict:
     """역할이 가리키는 스탯 이름이 그 쪽 데이터 어디에도 없는 역할. 어느 역할도 쓰지 않는 비슷한 이름이 있으면 오타로 보고 경고한다.
     비슷한 이름도 없으면 '값이 없는 역할'로만 돌려준다(아직 그 스탯을 주는 데이터가 없는 게임). 데이터를 함께 읽지 않은 쪽은 보지 않는다."""

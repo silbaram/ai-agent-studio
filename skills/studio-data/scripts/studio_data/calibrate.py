@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import math
@@ -24,6 +25,7 @@ EVIDENCE = ("computed: assumed values compared with recorded stage statistics; s
 DEFAULT_TOLERANCE = 0.2
 Z95 = 1.96
 SKILL_POINTS = [NormalDist().inv_cdf((i + 0.5) / 9) for i in range(9)]  # 실력 분포를 같은 확률의 9칸으로 나눈 값
+CHI2_95 = {1: 3.84, 2: 5.99, 3: 7.81, 4: 9.49}  # 맞춘 값 수별 95% 기준. 가능도 비 검정으로 기록이 지금 값과 구분되는지 본다
 KIND_LABEL = {"level": "레벨", "duration": "길이", "kills": "처치", "income": "수입"}
 VERDICT_LABEL = {"inside": "구간 안", "model_easier": "모델이 쉬움", "model_harder": "모델이 어려움"}
 
@@ -124,9 +126,13 @@ def fit(points: list, survival: dict, skill: float, spread: float) -> dict:
     if isinstance(even0, dict):
         start = {**start, **even0}
     ranges = {}
-    for rank in ranks:
+    for rank in list(ranks):
         finite = [m for m in (mm.row_margin(r) for p in points for r in p["rows"] if r.get("rank") == rank) if 0 < m < math.inf]
-        ranges[rank] = (math.log(min(finite) / 16), math.log(max(finite) * 16))
+        if finite:
+            ranges[rank] = (math.log(min(finite) / 16), math.log(max(finite) * 16))
+        else:
+            ranks.remove(rank)
+            notes.append(f"{rank} 등급은 여유가 모두 0이거나 끝이 없습니다(서로 피해를 주지 못함). 그 등급의 even_margin을 정할 수 없어 지금 값을 둡니다.")
     ranges["slope"] = (math.log(0.1), math.log(20.0))
 
     def descend(free: list, free_slope: bool) -> tuple[dict, set]:
@@ -152,7 +158,27 @@ def fit(points: list, survival: dict, skill: float, spread: float) -> dict:
             return result, set()
         chosen = apply(best)
         edges = {k for k, v, a, b in zip(names, best, low, high) if v - a < 0.02 or b - v < 0.02}
-        return {"slope": chosen["slope"], "even": chosen["even_margin"]}, edges
+
+        def span(i: int) -> list:
+            """다른 값을 고정하고 이 값만 움직여 95% 안에 드는 범위(로그 공간에서 이분 탐색). 대략의 범위다."""
+            out = []
+            for bound in (low[i], high[i]):
+                inside, outside, x = best[i], bound, list(best)
+                x[i] = bound
+                if score(x) >= best_score - 1.92:
+                    out.append(math.exp(bound))
+                    continue
+                for _ in range(30):
+                    x[i] = (inside + outside) / 2
+                    if score(x) >= best_score - 1.92:
+                        inside = x[i]
+                    else:
+                        outside = x[i]
+                out.append(math.exp(inside))
+            return out
+
+        return {"slope": chosen["slope"], "even": chosen["even_margin"], "spans": {k: span(i) for i, k in enumerate(names)},
+                "gain": 2 * (best_score - current), "count": len(names)}, edges
 
     free, free_slope = list(ranks), fit_slope
     state, edges = descend(free, free_slope)
@@ -163,13 +189,25 @@ def fit(points: list, survival: dict, skill: float, spread: float) -> dict:
         state, edges = descend(free, free_slope)
     for name in sorted(rejected, key=str):
         notes.append(f"{name}의 값이 찾는 범위의 끝에 닿았습니다. 기록으로 정해지지 않은 값이라 제안하지 않고 지금 값을 둡니다.")
-    fitted = {r: r in free for r in decided}
+    # 값을 맞추면 가능도는 늘 조금 오른다. 기록의 잡음을 값으로 옮기지 않게, 지금 값과 구분될 때만 제안한다
+    gain, count = state.get("gain", 0.0), state.get("count", 0)
+    limit = CHI2_95.get(count, 9.49 + 2 * (count - 4))
+    significant = count > 0 and gain >= limit
+    if count and not significant:
+        notes.append(f"기록이 지금 값과 구분되지 않습니다(가능도 차이 {gain:.1f} < 기준 {limit:g}). 바꿀 근거가 없어 제안하지 않습니다.")
+    fitted = {r: significant and r in free for r in decided}
+    fit_slope_now = significant and free_slope
     suggested_even: object = even0
     if any(fitted.values()):
         suggested_even = {r: round(v, 4) if fitted.get(r) else v for r, v in state["even"].items() if r is not None}
-    suggested = {**survival, "slope": round(state["slope"], 3) if free_slope else survival["slope"], "even_margin": suggested_even}
-    return {"slope": {"current": survival["slope"], "suggested": suggested["slope"], "fitted": free_slope},
-            "even_margin": {"current": even0, "suggested": suggested_even, "fitted": fitted},
+    spans = state.get("spans", {})
+    width = lambda name: [round(v, 4) for v in spans[name]]  # noqa: E731
+    suggested = {**survival, "slope": round(state["slope"], 3) if fit_slope_now else survival["slope"], "even_margin": suggested_even}
+    return {"slope": {"current": survival["slope"], "suggested": suggested["slope"], "fitted": fit_slope_now,
+                      "range": width("slope") if fit_slope_now else None},
+            "even_margin": {"current": even0, "suggested": suggested_even, "fitted": fitted,
+                            "range": {r: width(r) for r, ok in fitted.items() if ok}},
+            "significant": significant,
             "log_likelihood": {"current": round(log_likelihood(points, survival, skill, spread), 3),
                                "suggested": round(log_likelihood(points, suggested, skill, spread), 3)},
             "points": len(points), "runs": entered, "notes": notes}
@@ -193,8 +231,8 @@ def _economy_by_stage(entries: list) -> dict:
         if d["ok"] and d["kind"] == "economy":
             timeline = {st["id"]: st for st in d["report"]["stages"]}
             for s in d["data"].get("stages") or []:
-                if isinstance(s, dict) and s.get("id") in timeline:
-                    out.setdefault(s.get("combat_stage") or s["id"], []).append((s, timeline[s["id"]]))
+                if isinstance(s, dict) and isinstance(s.get("id"), str) and s["id"] in timeline and c.combat_link(s):
+                    out.setdefault(c.combat_link(s), []).append((s, timeline[s["id"]]))
     return out
 
 
@@ -255,13 +293,15 @@ def _points(cfg: dict, sessions: list, notes: list) -> list:
     ctx = cfg["_combat"]
     known = {u["id"] for u in cfg["upgrades"]}
     builds = (ctx["growth"] or {}).get("builds", {})
+    if not ctx["growth"] and any(s.get("growth_build") or any("level" in x for x in s["stage_stats"]) for s in sessions):
+        notes.append("설정이 판 안 성장을 쓰지 않아 기록의 growth_build와 level을 예측에 반영하지 못했습니다.")
     out = []
     for s in sessions:
         if "upgrades" not in s:
             notes.append(f"세션 {s['id']}: upgrades(그때 가진 영구 강화)가 없어 통과율 비교에서 뺐습니다. 없었으면 []로 적습니다.")
             continue
         old = [u for u in s["upgrades"] if u not in known]
-        build = s.get("growth_build")
+        build = s.get("growth_build") if ctx["growth"] else None
         if old or (build and build not in builds):
             notes.append(f"세션 {s['id']}: 지금 데이터에 없는 {', '.join(old + ([build] if build and build not in builds else []))} 때문에 통과율 비교에서 뺐습니다.")
             continue
@@ -279,7 +319,6 @@ def _points(cfg: dict, sessions: list, notes: list) -> list:
 def survival_report(cfg: dict, sessions: list, notes: list) -> dict | None:
     points = _points(cfg, sessions, notes)
     if not points:
-        notes.append("통과율을 비교할 기록이 없습니다.")
         return None
     skill, spread, survival = cfg["player"]["skill"], cfg["player"]["skill_spread"], cfg["survival"]
     result = fit(points, survival, skill, spread)
@@ -300,6 +339,14 @@ def survival_report(cfg: dict, sessions: list, notes: list) -> dict | None:
     return {"stages": stages, "fit": result}
 
 
+def _expanded(s: dict) -> list:
+    """세션을 강화 상태별 기록으로 편다. groups가 있으면 묶음마다 하나(세션의 growth_build가 기본값), 없으면 세션 그대로."""
+    if not s.get("groups"):
+        return [s]
+    base = {k: v for k, v in s.items() if k != "groups"}
+    return [{**base, **g, "id": f"{s['id']}#{n}"} for n, g in enumerate(s["groups"], start=1)]
+
+
 def _inputs(entries: list, used: list) -> list:
     kinds = ("playtests", "growth", "economy", "combat", "items", "upgrades", "enemies", "crafting")
     return [{"path": d["path"], "sha256": hashlib.sha256(Path(d["path"]).read_bytes()).hexdigest()}
@@ -309,6 +356,8 @@ def _inputs(entries: list, used: list) -> list:
 def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOLERANCE) -> dict:
     """path: 프로젝트·데이터 폴더(가정값 비교만) 또는 시뮬레이터 설정 파일(전투 계산 모델, 통과율 비교와 제안까지). 파일을 고치지 않는다."""
     path = Path(path)
+    if tolerance < 0:
+        raise ConfigError(f"--tolerance는 0 이상의 비율입니다: {tolerance:g}")
     cfg = None
     if path.is_file():
         read = datasets.read(path)
@@ -326,7 +375,7 @@ def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOL
     if broken:
         raise ConfigError(f"플레이 기록에 오류 {len(broken)}건이 있습니다({broken[0]['where']}: {broken[0]['message']}). `studio.py check`로 먼저 고치세요.")
     raw = [s for d in logs for s in d["data"].get("playtests") or [] if isinstance(s, dict)]
-    chosen = [s for s in raw if s.get("stage_stats")]
+    chosen = [s for s in raw if s.get("stage_stats") or s.get("groups")]
     if sessions:
         missing = [x for x in sessions if x not in {s.get("id") for s in chosen}]
         if missing:
@@ -339,10 +388,16 @@ def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOL
         values = list(dict.fromkeys(s.get(key) for s in chosen))
         if len(values) > 1:
             notes.append(f"{label}가 다른 세션을 합쳐 계산했습니다({', '.join(map(str, values))}). 한쪽만 보려면 --sessions로 고릅니다.")
-    survival = survival_report(cfg, chosen, notes) if cfg else None
+    ids = {s["id"] for s in chosen}
+    broken_counts = dict.fromkeys(w["where"] for d in logs for w in d["report"]["warnings"] if w["code"] == "stage_counts_mismatch" and w["where"] in ids)
+    notes += [f"세션 {sid}: 판 수가 단계 사이에 이어지지 않습니다. 기록을 확인하세요(그대로 계산했습니다)." for sid in broken_counts]
+    records = [r for s in chosen for r in _expanded(s)]
+    survival = survival_report(cfg, records, notes) if cfg else None
+    if cfg is not None and survival is None:
+        raise ConfigError("통과율을 비교할 기록이 없습니다(" + " ".join(notes) + "). 가정값 비교만 하려면 프로젝트 폴더를 넘기세요.")
     if cfg is None:
         notes.append("통과율 비교와 생존 곡선 제안은 시뮬레이터 설정(전투 계산 모델)을 넘기면 합니다.")
-    rows = compare(entries, chosen, tolerance, notes)
+    rows = compare(entries, records, tolerance, notes)
     if not rows and survival is None:
         raise ConfigError("단계 기록은 있지만 비교할 가정값이 없습니다(" + " ".join(notes) + "). 아무것도 비교하지 않았으므로 통과가 아닙니다.")
     return {"evidence": EVIDENCE, "config": str(path) if cfg else None, "tolerance": tolerance,
@@ -351,26 +406,159 @@ def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOL
             "inputs": _inputs(entries, [{"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}] if cfg else [])}
 
 
+# ---------- 판별 로그 ----------
+RUN_REQUIRED = ("run", "stage", "cleared")
+RUN_COLUMNS = (*RUN_REQUIRED, "upgrades", "growth_build", "player", "level", "duration")
+RUN_PREFIXES = ("kills.", "income.")
+RUN_HELP = "열: run, stage, cleared(1/0), upgrades, growth_build, player, level, duration, kills.<적>, income.<재화>. 쓰지 않는 열은 이름 앞에 _를 붙입니다."
+CLEARED = {"1": True, "true": True, "yes": True, "0": False, "false": False, "no": False}
+
+
+def _log_number(raw: str, column: str, n: int) -> float | None:
+    raw = (raw or "").strip()
+    if raw == "":
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        value = math.nan
+    if not math.isfinite(value):
+        raise ConfigError(f"{n}번째 줄 {column}: 수가 아닙니다: {raw!r}")
+    return value
+
+
+def _whole(v: float):
+    return int(v) if float(v).is_integer() else round(v, 4)
+
+
+def _check_run_columns(columns: list) -> None:
+    """모르는 열을 그대로 두면 오타 난 열의 값이 조용히 사라진다. _로 시작하는 열은 쓰지 않는다고 표시한 열이다."""
+    lacking = [k for k in RUN_REQUIRED if k not in columns]
+    if lacking:
+        raise ConfigError(f"판 로그에 {', '.join(lacking)} 열이 필요합니다. {RUN_HELP}")
+    unknown = [k for k in columns if not (k in RUN_COLUMNS or k.startswith("_") or (k.startswith(RUN_PREFIXES) and k.split(".", 1)[1]))]
+    if unknown:
+        names = ", ".join(k or "(이름 없는 열)" for k in unknown)
+        raise ConfigError(f"판 로그에 모르는 열이 있습니다: {names}.{c.did_you_mean(unknown[0].split('.')[0], [*RUN_COLUMNS, 'kills', 'income'])} {RUN_HELP}")
+    repeated = [k for k in dict.fromkeys(columns) if columns.count(k) > 1]
+    if repeated:
+        raise ConfigError(f"판 로그의 열 이름이 겹칩니다: {', '.join(repeated)}")
+
+
+def summarize_runs(path) -> dict:
+    """판별 로그(CSV, 들어간 단계마다 한 줄)를 세션의 단계 기록으로 모은다. 강화 상태(와 빌드)별 묶음을 돌려주고 파일을 고치지 않는다.
+    열: run, stage, cleared(1/0) 필수. upgrades(;로 구분), growth_build, player, level, duration, kills.<적 id>, income.<재화> 선택.
+    레벨은 들어간 판의 평균, 길이·처치·수입은 넘긴 판의 평균이다. 형식: playtest-verdict/references/calibration.md"""
+    path = Path(path)
+    try:
+        with path.open(encoding="utf-8-sig", newline="") as fh:
+            reader = csv.DictReader(fh)
+            columns = [x.strip() for x in reader.fieldnames or []]
+            rows = [(reader.line_num, row) for row in reader]
+    except (OSError, UnicodeDecodeError, csv.Error) as exc:
+        raise ConfigError(f"판 로그를 읽지 못했습니다({path}): {exc}")
+    _check_run_columns(columns)
+    runs: dict = {}
+    for n, row in rows:
+        if None in row:  # DictReader는 열보다 많은 칸을 키 None에 모은다
+            raise ConfigError(f"{n}번째 줄: 칸이 열({len(columns)}개)보다 많습니다: {', '.join(row[None])}")
+        row = {k.strip(): (v or "").strip() for k, v in row.items()}
+        rid, stage, flag = row["run"], row["stage"], CLEARED.get(row["cleared"].lower())
+        if not rid or not stage or flag is None:
+            raise ConfigError(f"{n}번째 줄: run, stage와 cleared(1/0)가 필요합니다: cleared {row['cleared']!r}")
+        state = (tuple(sorted(x.strip() for x in row.get("upgrades", "").split(";") if x.strip())), row.get("growth_build") or None)
+        run = runs.setdefault(rid, {"state": state, "stages": [], "failed": False, "player": row.get("player")})
+        if run["state"] != state:
+            raise ConfigError(f"{n}번째 줄: 판 {rid}의 줄마다 upgrades나 growth_build가 다릅니다. 판 안에서는 같아야 합니다.")
+        if stage in [x["stage"] for x in run["stages"]]:
+            raise ConfigError(f"{n}번째 줄: 판 {rid}에 단계 {stage}가 두 번 있습니다.")
+        if run["failed"]:
+            raise ConfigError(f"{n}번째 줄: 판 {rid}는 앞 단계에서 실패했는데 단계 {stage}가 이어집니다.")
+        rec = {"stage": stage, "cleared": flag, "level": _log_number(row.get("level"), "level", n),
+               "duration": _log_number(row.get("duration"), "duration", n), "kills": {}, "income": {}}
+        for k, v in row.items():
+            if k.startswith(RUN_PREFIXES):
+                got = _log_number(v, k, n)
+                if got is not None:
+                    key, name = k.split(".", 1)
+                    rec[key][name] = got
+        run["stages"].append(rec)
+        run["failed"] = not flag
+    if not runs:
+        raise ConfigError(f"판 로그에 판이 없습니다: {path}")
+    groups: dict = {}
+    for run in runs.values():
+        groups.setdefault(run["state"], []).append(run)
+    out = []
+    for (upgrades, build), mine in groups.items():
+        order = list(dict.fromkeys(x["stage"] for r in mine for x in r["stages"]))
+        stats = []
+        for stage in order:
+            recs = [x for r in mine for x in r["stages"] if x["stage"] == stage]
+            full = [x for x in recs if x["cleared"]]
+            item: dict = {"stage": stage, "entered": len(recs), "cleared": len(full)}
+            levels = [x["level"] for x in recs if x["level"] is not None]
+            durations = [x["duration"] for x in full if x["duration"] is not None]
+            if levels:
+                item["level"] = _whole(sum(levels) / len(levels))
+            if durations:
+                item["duration"] = _whole(sum(durations) / len(durations))
+            for key in ("kills", "income"):
+                names = list(dict.fromkeys(k for x in full for k in x[key]))
+                with_data = [x for x in full if x[key]]
+                if names:
+                    item[key] = {k: _whole(sum(x[key].get(k, 0) for x in with_data) / len(with_data)) for k in names}
+            item["source"] = str(path)
+            stats.append(item)
+        group: dict = {"upgrades": list(upgrades), "stage_stats": stats}
+        if build:
+            group["growth_build"] = build
+        out.append(group)
+    result: dict = {"runs": len(runs), "logs": [str(path)], "groups": out}
+    players = list(dict.fromkeys(r["player"] for r in runs.values() if r["player"]))
+    if players:
+        result["players"] = players
+    return result
+
+
 # ---------- 출력 ----------
 def _num(v) -> str:
     return c.num_text(float(v)) if v is not None else "–"
 
 
-def print_report(r: dict) -> None:
+def _print_fit(f: dict) -> None:
+    if not f["significant"]:
+        print(f"생존 곡선 제안 없음 (기록 {f['points']}건 · {f['runs']}판): 지금 값을 그대로 둡니다. 이유는 아래 참고에 있습니다.")
+        return
+    print(f"생존 곡선 제안 (기록 {f['points']}건 · {f['runs']}판, 가능도 {f['log_likelihood']['current']:g} → {f['log_likelihood']['suggested']:g}):")
+    span = lambda r: f" (대략 {_num(r[0])}~{_num(r[1])})" if r else ""  # noqa: E731
+    print(f"  slope {f['slope']['current']:g} → {f['slope']['suggested']:g}" + (span(f["slope"]["range"]) if f["slope"]["fitted"] else " (그대로)"))
+    e = f["even_margin"]
+    print(f"  even_margin {json.dumps(e['current'])} → {json.dumps(e['suggested'])}")
+    done = [k for k, ok in e["fitted"].items() if ok]
+    print("  맞춘 등급: " + (", ".join(f"{k}{span(e['range'].get(k))}" for k in done) or "없음"))
+    others = [k for k in e["suggested"] if k not in done] if isinstance(e["suggested"], dict) else []
+    if others:
+        print("  기록으로 확인되지 않은 등급(지금 값 그대로): " + ", ".join(others))
+
+
+def print_report(r: dict, off_only: bool = False) -> None:
     print("세션: " + " · ".join(f"{s['id']}({s['build']}, {s['runs']}판)" for s in r["sessions"]))
     s = r["survival"]
     if s:
+        suggested = s["fit"]["significant"]
         for x in s["stages"]:
             print(f"단계 {x['stage']}: 실측 통과 {x['cleared']}/{x['entered']}판 {x['rate']:.0%} (구간 {x['low']:.0%}~{x['high']:.0%}) · "
-                  f"예측 {x['predicted']:.0%} → {VERDICT_LABEL[x['verdict']]} · 제안 값으로 {x['predicted_suggested']:.0%}")
-        f = s["fit"]
-        print(f"생존 곡선 제안 (기록 {f['points']}건 · {f['runs']}판, 가능도 {f['log_likelihood']['current']:g} → {f['log_likelihood']['suggested']:g}):")
-        print(f"  slope {f['slope']['current']:g} → {f['slope']['suggested']:g}" + ("" if f["slope"]["fitted"] else " (그대로)"))
-        print(f"  even_margin {json.dumps(f['even_margin']['current'])} → {json.dumps(f['even_margin']['suggested'])}")
+                  f"예측 {x['predicted']:.0%} → {VERDICT_LABEL[x['verdict']]}" + (f" · 제안 값으로 {x['predicted_suggested']:.0%}" if suggested else ""))
+        _print_fit(s["fit"])
+    off = sum(1 for x in r["compare"] if x["off"])
+    print(f"가정값 비교: {len(r['compare'])}건 중 {off}건이 {r['tolerance']:.0%} 넘게 다름")
     for x in r["compare"]:
+        if off_only and not x["off"]:
+            continue
         item = f"({x['item']})" if x["item"] else ""
         print(f"단계 {x['stage']} {KIND_LABEL[x['kind']]}{item}: 가정 {_num(x['assumed'])} · 측정 {_num(x['measured'])} (판 {x['n']})"
-              + (f" ⚠ {r['tolerance']:.0%} 넘게 다름: {x['where']}" if x["off"] else ""))
+              + (f" ⚠ {x['where']}" if x["off"] else ""))
     for n in r["notes"]:
         print("참고: " + n)
     print("주의: 기록한 빌드와 플레이어에서 나온 값입니다. 제안은 자동으로 적용하지 않습니다. 실제 난이도·재미 판정이 아닙니다.")

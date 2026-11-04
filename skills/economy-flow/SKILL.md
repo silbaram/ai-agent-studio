@@ -38,7 +38,7 @@ description: "Models currency income per stage (kills times enemy rewards, expec
 - `drops`: 드랍 테이블별 기대 드랍 횟수. 아이템 가격 × 판매 비율의 기대값을 곱한다.
 - `income`: 그 밖의 수입(상자, 퀘스트, 판 사이 재화 지급 등) `{재화: 양}`.
 
-처치 수와 드랍 횟수는 에이전트가 정하면 가정이다. 사용자에게 "한 판을 평범하게 깨면 이 정도"가 맞는지 확인한다. 플레이 기록이 있으면 그 값으로 바꾸고 출처를 남긴다([playtest-verdict](../playtest-verdict/SKILL.md)).
+처치 수와 드랍 횟수는 에이전트가 정하면 가정이다. 사용자에게 "한 판을 평범하게 깨면 이 정도"가 맞는지 확인한다. 레벨을 조우로 적었으면([level-design](../level-design/SKILL.md)) 조우로 센 처치 수와 맞춰 본다(`kills_differ`). 플레이 기록이 있으면 그 값으로 바꾸고 출처를 남긴다([playtest-verdict](../playtest-verdict/SKILL.md)).
 
 ### 3. 구매 계획을 적는다
 

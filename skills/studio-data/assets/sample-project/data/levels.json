@@ -1,0 +1,49 @@
+{
+  "_note": "예시 데이터다. 실제 게임 수치가 아니다. 형식: level-design/references/levels-format.md",
+  "threat_budget": {
+    "curve": { "growth": "linear", "base": 90, "rate": 60 },
+    "roles": { "room": 1, "elite_room": 1.2, "boss_room": 1 },
+    "tolerance": 0.25,
+    "provenance": { "kind": "assumed", "note": "방 하나의 위협도는 기획 판단" }
+  },
+  "levels": [
+    {
+      "id": "crypt",
+      "name": "버려진 지하묘지",
+      "combat_stage": "zone_1",
+      "intent": "느린 적으로 시작해 궁수로 움직임을 강요한다",
+      "encounters": [
+        { "id": "crypt_skirmish", "name": "복도 싸움", "role": "room", "repeat": 5, "enemies": { "slime": 6, "skeleton_archer": 4 } },
+        { "id": "crypt_ambush", "name": "좁은 방 매복", "role": "room", "repeat": 2, "enemies": { "slime": 5, "skeleton_archer": 3 } },
+        { "id": "crypt_guard", "name": "묘지기", "role": "elite_room", "enemies": { "grave_knight": 3, "skeleton_archer": 2 }, "intent": "정예를 처음 묶어서 보여 준다" },
+        { "id": "crypt_lord", "name": "뼈의 군주", "role": "boss_room", "enemies": { "bone_lord": 1 } }
+      ],
+      "status": "approved",
+      "provenance": { "kind": "assumed" }
+    },
+    {
+      "id": "citadel",
+      "name": "얼어붙은 성채",
+      "combat_stage": "zone_2",
+      "intent": "빠른 늑대가 궁수 대신 거리를 좁힌다",
+      "encounters": [
+        { "id": "citadel_patrol", "name": "순찰대", "role": "room", "repeat": 6, "enemies": { "frost_wolf": 5, "ice_mage": 3 } },
+        { "id": "citadel_giants", "name": "거인의 문", "role": "elite_room", "enemies": { "frost_giant": 3, "frost_wolf": 3 } },
+        { "id": "citadel_throne", "name": "얼음 여왕", "role": "boss_room", "enemies": { "ice_queen": 1 } }
+      ],
+      "status": "approved",
+      "provenance": { "kind": "assumed" }
+    },
+    {
+      "id": "altar",
+      "name": "심연의 제단",
+      "combat_stage": "zone_3",
+      "encounters": [
+        { "id": "altar_swarm", "name": "심연의 무리", "role": "room", "repeat": 5, "enemies": { "void_spawn": 9 } },
+        { "id": "altar_herald", "name": "공허의 전령", "role": "boss_room", "enemies": { "void_herald": 1 } }
+      ],
+      "status": "proposed",
+      "provenance": { "kind": "assumed" }
+    }
+  ]
+}

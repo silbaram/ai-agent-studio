@@ -63,7 +63,7 @@
 | `purchase_policy` | 아니오 | `listed_order`(기본), `cheapest_first`, `economy`(재화 흐름의 구매 계획 순서. 아래 `economy` 연결이 필요) |
 | `economy` | 아니오 | `{file: 재화 흐름 파일, currency: 판 사이 재화 id}`. 구매 정책 `economy`가 그 파일의 구매 계획에서 이 재화로 사는 영구 강화 순서를 쓴다. 전투 계산 모델은 단계별 수입도 여기서 읽는다(추상 모델은 순서만). 재화 흐름에 오류가 있거나 이 재화의 수입·구매가 미확인이면 실행을 거부한다. 다른 재화만 미확인(예: 골드로 사는 합성의 데이터가 없음)이면 그대로 쓴다 |
 | `milestones` | 아니오 | `clear_room`은 1 ~ `rooms` |
-| `provenance` | 아니오 | 설정 수치(생존 곡선 등)의 출처. 데이터 파일과 같은 형식이다. 보정값이면 `{"kind": "computed", "source": "reports/calibrate.json"}`로 적고, 결과와 주의 문구에 그 출처가 나온다 |
+| `provenance` | 아니오 | 설정 수치(생존 곡선 등)의 출처. 데이터 파일과 같은 형식이다. 보정값이면 `{"kind": "computed", "source": "reports/calibrate.json"}`로 적고, 결과와 주의 문구에 그 출처가 나온다. 없거나 `assumed`거나 형식이 틀리면 `check --fail-on-assumed`에서 실패한다 |
 
 ## 출력
 
