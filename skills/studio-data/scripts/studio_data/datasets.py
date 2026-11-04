@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from . import common as c
@@ -13,14 +14,27 @@ VALIDATORS = {"concepts": concepts, "items": items, "upgrades": upgrades, "enemi
 NOT_DATA = ("컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터가 아닙니다 "
             "(최상위에 concepts / items / upgrades / enemies / levels / playtests 배열이나 combat / growth / budget / crafting / economy 객체가 필요합니다).")
 CONFIG_KEYS = (b'"seed"', b'"trials"', b'"max_runs"')  # 시뮬레이터 설정의 필수 키. 하나만으로는 게임 설정과 나눌 수 없어 모두 있을 때만 센다
+JSON_STRING = re.compile(rb'"(?:[^"\\]|\\.)*"', re.S)
+
+
+def _game_format(raw: bytes) -> bool:
+    """읽지 못한 levels.json이 게임 자기 형식으로 보이는가: 주석이 있는 JSON이거나 내용이 있는 최상위 배열. 문자열 안의 //(URL)는 주석이 아니다."""
+    bare = JSON_STRING.sub(b'""', raw)
+    if b"//" in bare or b"/*" in bare:
+        return True
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return False
+    return isinstance(data, list) and bool(data)
 
 
 def _broken_levels(path: Path, raw: bytes) -> bool:
-    """읽지 못한 JSON이 레벨 구성으로 보이는가. 이름만으로는 게임 자체의 levels.json과 나눌 수 없어 키로 본다.
-    encounters 하나는 게임 파일에도 흔한 키라 levels와 함께 있을 때만 센다. 내용이 없는 levels.json은 게임 파일일 수 없으니 이 형식으로 본다."""
+    """읽지 못한 JSON이 레벨 구성으로 보이는가. 다른 이름의 파일은 키로 본다. encounters 하나는 게임 파일에도 흔한 키라 levels와 함께 있을 때만 센다.
+    levels.json은 게임 형식으로 보이는 것만 건너뛴다. 문법이 깨졌거나 내용이 없으면 어느 쪽 파일이든 고쳐야 하므로 읽기 실패로 알린다."""
     if path.suffix.lower() != ".json":
         return False
-    return b'"threat_budget"' in raw or (b'"levels"' in raw and b'"encounters"' in raw) or (path.stem.lower() == "levels" and not raw.strip())
+    return b'"threat_budget"' in raw or (b'"levels"' in raw and b'"encounters"' in raw) or (path.stem.lower() == "levels" and not _game_format(raw))
 
 
 def _kind_by_name(path: Path) -> str | None:
@@ -112,7 +126,7 @@ def scan(targets: list[Path]) -> list[dict]:
 
 def skipped_note(path: str) -> str:
     """건너뛴 파일을 알리는 문장. check와 뷰어가 같은 문장을 쓴다."""
-    return f"{path}: 레벨 구성 형식이 아니라 건너뛰었습니다(최상위에 levels나 threat_budget이 없습니다). 게임 자체 파일이 아니면 키를 확인합니다."
+    return f"{path}: 레벨 구성 형식이 아니라 건너뛰었습니다(최상위에 levels나 threat_budget이 없거나, 주석이 있는 JSON입니다). 게임 자체 파일이 아니면 고칩니다."
 
 
 def _config_sourced(config: dict | None) -> bool:
@@ -245,14 +259,14 @@ def _threat_scores(entries: list[dict]) -> dict | None:
     return out
 
 
-def _kill_times(entries: list[dict]) -> dict | None:
-    """전투 계산이 낸 처치 시간 {단계: {적: 초}}. 전투 계산이 없거나 검사를 마치지 못했으면 None."""
+def _kill_costs(entries: list[dict], metric: str) -> dict | None:
+    """전투 계산이 낸 처치 시간이나 타수 {단계: {적: 값}}. 전투 계산이 없거나 검사를 마치지 못했으면 None."""
     report = next((d.get("report") for d in entries if d["ok"] and d["kind"] == "combat"), None)
     if report is None:
         return None
     out: dict = {}
     for r in report["rows"]:
-        out.setdefault(r["stage"], {})[r["enemy"]] = r["time_to_kill"]
+        out.setdefault(r["stage"], {})[r["enemy"]] = r[metric]
     return out
 
 
@@ -326,7 +340,8 @@ def validate_all(entries: list[dict]) -> list[dict]:
             elif d["kind"] == "levels":
                 enemy_side = (budget_settings or {}).get("sides", {}).get("enemies") or {}
                 d["report"] = levels.validate(d["data"], enemies=by_id["enemies"], threat=_threat_scores(entries), combat=combat_data, economy=economy_data,
-                                              kill_times=_kill_times(entries), enemy_curve=enemy_side.get("curve"))
+                                              kill_times=_kill_costs(entries, "time_to_kill"), kill_hits=_kill_costs(entries, "hits_to_kill"),
+                                              enemy_curve=enemy_side.get("curve"))
                 first = next(x for x in entries if x["ok"] and x["kind"] == "levels")
                 if d is not first:  # 단계 범위와 처치 수는 파일을 넘어 세지 않는다. 일부만 세어 틀린 결과를 내지 않게 한 파일로 둔다
                     c.add_issue(d["report"]["errors"], "schema", "levels", f"레벨 구성 파일은 하나만 씁니다. {first['name']}에 합칩니다.")

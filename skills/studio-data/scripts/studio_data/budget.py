@@ -242,7 +242,7 @@ def validate(data: dict, items: dict | None = None, enemies: dict | None = None,
                     code = "over_budget" if ratio > 1 else "under_budget"
                     row["flag"] = "over" if ratio > 1 else "under"
                     issue = {"code": code, "where": e["id"], "owner": f"{side}:{e['id']}",
-                             "message": f"{SIDE_LABEL[side]} {e['id']}의 예산 {actual:g}가 {by} {at:g} 기대 예산 {expected:g}의 "
+                             "message": f"{SIDE_LABEL[side]} {e['id']}의 예산 {c.josa(f'{actual:g}', '이가')} {by} {at:g} 기대 예산 {expected:g}의 "
                                         f"{ratio:.0%}입니다(허용 ±{tol:.0%})."}
                     reason = c.ack_reason(e, code)  # 형식이 틀린 확인은 그 항목의 파일에서 오류로 보고된다
                     if reason:

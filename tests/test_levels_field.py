@@ -451,12 +451,11 @@ class TableCurve(unittest.TestCase):
     def budget(self, **values):
         return {**BUDGET, "curve": {"growth": "table", "values": {"s1": 80, "s2": 120, **values}}}
 
-    def test_value_for_no_stage_is_warned_with_a_guess(self):
+    def test_value_for_no_stage_is_warned(self):
         r = run(budget=self.budget(s22=200))
         w = next(x for x in r["warnings"] if x["code"] == "curve_unused_point")
         self.assertEqual(w["where"], "threat_budget")
         self.assertIn("s22", w["message"])
-        self.assertIn("오타", w["message"])
 
     def test_cut_stage_keeps_its_value_quietly(self):
         self.assertNotIn("curve_unused_point", codes(run(budget=self.budget(old=100))["warnings"]))
