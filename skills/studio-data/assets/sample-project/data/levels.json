@@ -29,7 +29,7 @@
       "encounters": [
         { "id": "citadel_patrol", "name": "순찰대", "role": "room", "repeat": 6, "enemies": { "frost_wolf": 5, "ice_mage": 3 } },
         { "id": "citadel_giants", "name": "거인의 문", "role": "elite_room", "enemies": { "frost_giant": 3, "frost_wolf": 3 } },
-        { "id": "citadel_throne", "name": "얼음 여왕", "role": "boss_room", "enemies": { "ice_queen": 1 } }
+        { "id": "citadel_throne", "name": "얼음 여왕", "role": "boss_room", "repeat": 2, "enemies": { "ice_queen": 1, "frost_wolf": 1 }, "enemy_repeat": { "ice_queen": 1 }, "intent": "여왕은 한 번, 곁의 늑대는 다시 나온다" }
       ],
       "status": "approved",
       "provenance": { "kind": "assumed" }

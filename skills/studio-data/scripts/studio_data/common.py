@@ -278,6 +278,12 @@ def combat_link(stage: dict) -> str | None:
     return link if isinstance(link, str) else None
 
 
+def time_unit(cfg) -> str:
+    """재화 흐름 설정의 시간 단위. 적지 않았거나 문자열이 아니면 초다."""
+    unit = cfg.get("time_unit") if isinstance(cfg, dict) else None
+    return unit if isinstance(unit, str) else "초"
+
+
 def is_active(entry: dict) -> bool:
     return entry.get("status") != "cut"
 

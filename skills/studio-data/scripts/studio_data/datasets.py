@@ -17,8 +17,16 @@ CONFIG_KEYS = (b'"seed"', b'"trials"', b'"max_runs"')  # 시뮬레이터 설정�
 
 def _broken_levels(path: Path, raw: bytes) -> bool:
     """읽지 못한 JSON이 레벨 구성으로 보이는가. 이름만으로는 게임 자체의 levels.json과 나눌 수 없어 키로 본다.
-    encounters 하나는 게임 파일에도 흔한 키라 levels와 함께 있을 때만 센다."""
-    return path.suffix.lower() == ".json" and (b'"threat_budget"' in raw or (b'"levels"' in raw and b'"encounters"' in raw))
+    encounters 하나는 게임 파일에도 흔한 키라 levels와 함께 있을 때만 센다. 내용이 없는 levels.json은 게임 파일일 수 없으니 이 형식으로 본다."""
+    if path.suffix.lower() != ".json":
+        return False
+    return b'"threat_budget"' in raw or (b'"levels"' in raw and b'"encounters"' in raw) or (path.stem.lower() == "levels" and not raw.strip())
+
+
+def _kind_by_name(path: Path) -> str | None:
+    """파일 이름이 곧 종류인 JSON(economy.json 등). 깨져서 키를 읽지 못해도 그 종류의 읽기 실패로 알린다. 게임이 자기 형식으로도 쓰는 이름은 뺀다."""
+    named = path.stem.lower()
+    return named if path.suffix.lower() == ".json" and named in c.DATASET_KINDS and named not in c.FOREIGN_NAMES else None
 
 
 def read(path: Path) -> dict:
@@ -35,7 +43,7 @@ def read(path: Path) -> dict:
     try:
         kind, data = c.load_dataset(path)
     except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        entry["kind"] = c.kind_from_filename(path) or ("levels" if _broken_levels(path, raw) else None)
+        entry["kind"] = c.kind_from_filename(path) or _kind_by_name(path) or ("levels" if _broken_levels(path, raw) else None)
         entry["error"] = f"파일 형식 오류: {exc}"
         if path.suffix.lower() == ".json" and all(k in raw for k in CONFIG_KEYS):
             entry["config"] = None
@@ -45,7 +53,7 @@ def read(path: Path) -> dict:
         if entry["meta"]:
             entry["config"] = data
         named = path.stem.lower()
-        if kind is None and named in c.DATASET_KINDS and named not in c.FOREIGN_NAMES:
+        if kind is None and named in c.DATASET_KINDS and (named not in c.FOREIGN_NAMES or not data):
             # 이름이 concepts.json 같은데 최상위 키가 없으면 건너뛰지 않고 이유를 알린다(예: 제약만 적은 직후).
             entry["kind"] = named
             entry["error"] = (f"최상위에 \"{named}\" 배열이 없어 {c.KIND_LABELS[named]} 파일로 읽지 못했습니다. "
@@ -74,23 +82,37 @@ def _files(targets: list[Path]):
             yield t, True
 
 
-def scan(targets: list[Path]) -> list[dict]:
-    """_files의 파일 중 데이터 파일을 읽어 돌려준다. 각 파일은 한 번만 읽는다."""
+def scan_all(targets: list[Path]) -> tuple[list[dict], list[str]]:
+    """_files의 파일 중 데이터 파일을 읽어 (항목, 건너뛴 파일)로 돌려준다. 각 파일은 한 번만 읽는다.
+    건너뛴 파일은 폴더를 훑다 뺀 FOREIGN_NAMES 이름의 JSON이다. 게임 자기 파일일 수 있어 오류로 올리지 않지만, 키 오타일 수도 있어 말없이 지나가지 않는다.
+    같은 파일을 직접 지정했으면 항목으로 읽었으니 건너뛴 파일이 아니다."""
     entries: list[dict] = []
     seen: set = set()
+    passed: dict = {}
 
     def add(path: Path, explicit: bool) -> None:
         key = path.resolve()
-        if key in seen:
+        if key in seen or (key in passed and not explicit):
             return
         entry = read(path)
         if explicit or _wanted_in_folder(entry):
             seen.add(key)
             entries.append(entry)
+        elif path.suffix.lower() == ".json" and path.stem.lower() in c.FOREIGN_NAMES:
+            passed[key] = str(path)
 
     for path, explicit in _files(targets):
         add(path, explicit)
-    return entries
+    return entries, [p for key, p in passed.items() if key not in seen]
+
+
+def scan(targets: list[Path]) -> list[dict]:
+    return scan_all(targets)[0]
+
+
+def skipped_note(path: str) -> str:
+    """건너뛴 파일을 알리는 문장. check와 뷰어가 같은 문장을 쓴다."""
+    return f"{path}: 레벨 구성 형식이 아니라 건너뛰었습니다(최상위에 levels나 threat_budget이 없습니다). 게임 자체 파일이 아니면 키를 확인합니다."
 
 
 def _config_sourced(config: dict | None) -> bool:
@@ -223,6 +245,17 @@ def _threat_scores(entries: list[dict]) -> dict | None:
     return out
 
 
+def _kill_times(entries: list[dict]) -> dict | None:
+    """전투 계산이 낸 처치 시간 {단계: {적: 초}}. 전투 계산이 없거나 검사를 마치지 못했으면 None."""
+    report = next((d.get("report") for d in entries if d["ok"] and d["kind"] == "combat"), None)
+    if report is None:
+        return None
+    out: dict = {}
+    for r in report["rows"]:
+        out.setdefault(r["stage"], {})[r["enemy"]] = r["time_to_kill"]
+    return out
+
+
 def validate_all(entries: list[dict]) -> list[dict]:
     """읽은 항목들에 검사 결과(report)를 붙인다. 적의 드랍 테이블은 함께 읽은 아이템 데이터로,
     플레이 기록의 컨셉·가설 참조는 함께 읽은 컨셉 데이터로, 전투 계산은 함께 읽은 아이템·영구 강화·적 데이터로 확인한다.
@@ -232,7 +265,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
     재화 흐름은 적 보상·드랍 테이블·아이템 가격·영구 강화 비용·강화·합성 비용을 함께 읽은 데이터에서 가져오고,
     전투 단계 연결(combat_stage)과 메타 성장 설정(meta_config)을 맞춰 본다.
     판 안 성장은 전투 계산 파일과 그 참조 데이터로 빌드마다 전투 계산을 다시 한다.
-    레벨 구성은 적의 위협도와 전투 단계로 조우를 재고, 재화 흐름의 처치 수와 맞춰 본다.
+    레벨 구성은 적의 위협도와 전투 단계로 조우를 재고, 재화 흐름의 처치 수와 맞춰 본다. 전투 계산의 처치 시간과 스탯 예산의 적 곡선을 참고 값으로 낸다.
     검사기가 예상하지 못한 예외를 내면 그 파일만 오류로 표시하고 나머지는 계속 검사한다."""
     loaded_items = [d for d in entries if d["ok"] and d["kind"] == "items"]
     broken_items = [d for d in entries if not d["ok"] and d.get("kind") == "items"]
@@ -291,7 +324,9 @@ def validate_all(entries: list[dict]) -> list[dict]:
                                                upgrades=by_id["upgrades"], crafting=crafting_data, combat=combat_data,
                                                meta=_meta_configs(d))
             elif d["kind"] == "levels":
-                d["report"] = levels.validate(d["data"], enemies=by_id["enemies"], threat=_threat_scores(entries), combat=combat_data, economy=economy_data)
+                enemy_side = (budget_settings or {}).get("sides", {}).get("enemies") or {}
+                d["report"] = levels.validate(d["data"], enemies=by_id["enemies"], threat=_threat_scores(entries), combat=combat_data, economy=economy_data,
+                                              kill_times=_kill_times(entries), enemy_curve=enemy_side.get("curve"))
                 first = next(x for x in entries if x["ok"] and x["kind"] == "levels")
                 if d is not first:  # 단계 범위와 처치 수는 파일을 넘어 세지 않는다. 일부만 세어 틀린 결과를 내지 않게 한 파일로 둔다
                     c.add_issue(d["report"]["errors"], "schema", "levels", f"레벨 구성 파일은 하나만 씁니다. {first['name']}에 합칩니다.")

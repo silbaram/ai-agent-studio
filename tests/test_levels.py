@@ -28,11 +28,11 @@ def both(first=None, second=None):
     return [first or level("s1"), second or level("s2", enc("e2", {"c": 6}))]
 
 
-def run(levels=None, budget=BUDGET, enemies=ENEMIES, threat=THREAT, combat=COMBAT, economy=None):
+def run(levels=None, budget=BUDGET, enemies=ENEMIES, threat=THREAT, combat=COMBAT, economy=None, **extra):
     data = {"levels": both() if levels is None else levels}
     if budget is not None:
         data["threat_budget"] = budget
-    return lv.validate(data, enemies=enemies, threat=threat, combat=combat, economy=economy)
+    return lv.validate(data, enemies=enemies, threat=threat, combat=combat, economy=economy, **extra)
 
 
 def codes(entries):
@@ -238,7 +238,7 @@ class Kills(unittest.TestCase):
         self.assertEqual((w["code"], w["where"], w["owner"], w["part"]), ("kills_differ", "s1", "s1", "a"))
 
     def test_edge_of_the_tolerance_is_inside(self):
-        r = run(economy=self.economy({"id": "s1", "kills": {"a": 4, "b": 1}}))
+        r = run(budget={**BUDGET, "kills_tolerance": 0.25}, economy=self.economy({"id": "s1", "kills": {"a": 4, "b": 1}}))
         self.assertEqual(r["warnings"], [])
 
     def test_an_enemy_only_one_side_counts_is_warned(self):
@@ -644,7 +644,7 @@ class ThirdReviewUnits(unittest.TestCase):
 
     def test_economy_kills_that_reach_no_level_are_warned(self):
         r = run(economy={"stages": [{"id": "part_1", "kills": {"a": 900}}]})
-        self.assertEqual([(w["code"], w["where"], w["owner"], w["part"]) for w in r["warnings"]], [("kills_not_linked", "s1", "s1", "part_1")])
+        self.assertEqual([(w["code"], w["where"], w["owner"], w["part"]) for w in r["warnings"]], [("kills_not_linked", "part_1", "s1", "part_1")])
 
     def test_stage_that_only_lacks_a_level_is_left_to_the_gap_report(self):
         r = run([level("s1")], economy={"stages": [{"id": "s2", "kills": {"c": 9}}]})

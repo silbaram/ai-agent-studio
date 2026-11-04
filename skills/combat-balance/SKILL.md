@@ -49,7 +49,7 @@ description: "Connects player, item, upgrade, and enemy data through one stat mo
 
 - `base`: 아이템·강화 전 기본 스탯
 - `items`, `upgrades`: 그 시점에 흔히 갖춘 아이템과 산 영구 강화의 id (스탯은 원본에서 더한다). 강화한 아이템은 `{"item": id, "enhance": 강화 id, "level": 단계}`로 적으면 [crafting-balance](../crafting-balance/SKILL.md)의 누적 `bonus_pct`만큼 그 아이템 스탯을 키운다
-- `enemies` 또는 `zone`: 계산할 적. `zone`을 주면 적 데이터의 `zone`(처음 나오는 구역)이 그 값인 적(삭제 제외)을 모두 쓴다. 앞 구역의 적이 계속 나오는 게임(서바이버라이크 등)은 `"zone_rule": "up_to"`로 그 구역까지 나온 적을 모두 쓴다
+- `enemies` 또는 `zone`: 계산할 적. `zone`을 주면 적 데이터의 `zone`(처음 나오는 구역)이 그 값인 적(삭제 제외)을 모두 쓴다. 앞 구역의 적이 모두 계속 나오는 게임은 `"zone_rule": "up_to"`로 그 구역까지 나온 적을 모두 쓴다. 일부만 이어지고 나머지는 끝나면 `enemies` 목록을 쓴다. `up_to`는 끝난 적까지 센다
 
 기준 장비는 에이전트가 정하면 가정이다. 사용자에게 "이 단계에서 보통 이 정도를 갖췄다"가 맞는지 확인한다. 스탯은 더하기만 한다(곱셈 보너스는 v1에서 지원하지 않는다).
 
