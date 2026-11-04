@@ -355,7 +355,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
                 enemy_side = (budget_settings or {}).get("sides", {}).get("enemies") or {}
                 d["report"] = levels.validate(d["data"], enemies=by_id["enemies"], threat=_threat_scores(entries), combat=combat_data, economy=economy_data,
                                               kill_times=_kill_costs(entries, "time_to_kill"), kill_hits=_kill_costs(entries, "hits_to_kill"),
-                                              enemy_curve=enemy_side.get("curve"))
+                                              enemy_curve=enemy_side.get("curve"), purchases=_purchase_plan(entries))
                 first = next(x for x in entries if x["ok"] and x["kind"] == "levels")
                 if d is not first:  # 단계 범위와 처치 수는 파일을 넘어 세지 않는다. 일부만 세어 틀린 결과를 내지 않게 한 파일로 둔다
                     c.add_issue(d["report"]["errors"], "schema", "levels", f"레벨 구성 파일은 하나만 씁니다. {first['name']}에 합칩니다.")
@@ -368,6 +368,12 @@ def validate_all(entries: list[dict]) -> list[dict]:
             d.update({"ok": False, "error": f"검사기가 처리하지 못한 형식입니다 ({type(exc).__name__}: {exc}). 이 파일의 형식을 확인하세요."})
             d.pop("report", None)
     return entries
+
+
+def _purchase_plan(entries: list) -> dict | None:
+    """재화 흐름이 계산한 구매 {id: 행}. 레벨 구성보다 먼저 검사하므로 보고서가 있다. 재화 흐름이 없거나 읽지 못했으면 None."""
+    report = next((d.get("report") for d in entries if d["ok"] and d["kind"] == "economy"), None)
+    return {p["id"]: p for p in report["purchases"]} if report else None
 
 
 def collect(targets: list[Path]) -> list[dict]:
