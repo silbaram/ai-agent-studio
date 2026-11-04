@@ -9,6 +9,7 @@ from __future__ import annotations
 from . import provenance
 from .common import ID_PATTERN, STATUSES, check_identity, is_active, josa
 from .common import did_you_mean as _did_you_mean
+from .common import table_cell as _cell
 
 STATUS_LABEL = {"proposed": "후보", "approved": "선택", "cut": "제외", "unspecified": "미지정"}
 REQUIRED_TEXT = ("name", "pitch", "core_verb", "decision", "state_read", "skill_expression", "risk")
@@ -310,10 +311,6 @@ def hypothesis_index(data: dict) -> dict:
                for h in (hyps if isinstance(hyps, list) else [])]
         out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids}
     return out
-
-
-def _cell(v) -> str:
-    return str(v).replace("|", "\\|").replace("\n", " ") if v else "–"
 
 
 def table(data: dict, result: dict, ids: list[str] | None = None) -> str:

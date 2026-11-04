@@ -117,7 +117,7 @@ class Shapes(unittest.TestCase):
         self.assertSchema(run([{"id": "s1"}]), "encounters")
 
     def test_encounter_fields(self):
-        for bad in (enc(enemies={}), enc(enemies=["a"]), enc(enemies={"a": 0}), enc(enemies={"a": -1}), enc(enemies={"a": "3"}), enc(enemies={"a": True}),
+        for bad in (enc(enemies=["a"]), enc(enemies={"a": 0}), enc(enemies={"a": -1}), enc(enemies={"a": "3"}), enc(enemies={"a": True}),
                     enc(repeat=0), enc(repeat=-1), enc(repeat="2"), enc(role=3)):
             with self.subTest(bad):
                 self.assertSchema(run(both(level("s1", bad))))
@@ -365,7 +365,8 @@ class Workspace(unittest.TestCase):
 
     def test_kills_are_compared_with_the_economy_in_the_project(self):
         self.edit("data/economy.json", lambda d: d["stages"][0]["kills"].__setitem__("slime", 400))
-        self.assertEqual([(w["code"], w["part"]) for w in self.report()["warnings"]], [("kills_differ", "slime")])
+        # 처치가 늘면 수입이 늘어 표본의 구매가 대장간 시각보다 앞당겨진다
+        self.assertEqual([(w["code"], w["part"]) for w in self.report()["warnings"]], [("kills_differ", "slime"), ("purchase_off_span", "weapon_plus_2")])
 
     def test_enemy_with_broken_stats_leaves_its_encounter_unscored(self):
         self.edit("data/enemies.json", lambda d: d["enemies"][0].__setitem__("stats", {"hp": "많음"}))

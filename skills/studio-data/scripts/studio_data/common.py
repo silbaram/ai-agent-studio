@@ -96,6 +96,11 @@ def out_of_range(v, rng) -> bool:
     return (lo is not None and v < lo) or (hi is not None and v > hi)
 
 
+def table_cell(v) -> str:
+    """자유 글을 마크다운 표의 한 칸에 넣는다. 비었으면 –."""
+    return str(v).replace("|", "\\|").replace("\n", " ") if v else "–"
+
+
 def range_text(rng) -> str:
     lo, hi = rng
     return f"{'' if lo is None else f'{lo:g}'}~{'' if hi is None else f'{hi:g}'}"

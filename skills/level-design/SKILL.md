@@ -1,13 +1,13 @@
 ---
 name: level-design
-description: "Lays out each level as an ordered list of encounters (rooms, waves, packs, time spans), scores every encounter's threat from the same enemy stats used by combat and stat budgets, compares it with a threat budget curve per stage and role, shows single-target kill time against stage length, and cross-checks placed enemies against combat stages and kill counts against the economy. Use when composing levels, waves or rooms, sizing encounters, or checking that a level agrees with combat and economy assumptions, in any genre and engine."
+description: "Lays out each level as an ordered list of encounters (rooms, waves, packs, time spans), scores every encounter's threat from the same enemy stats used by combat and stat budgets, compares it with a threat budget curve per stage and role, shows single-target kill time against stage length, and cross-checks placed enemies against combat stages and kill counts against the economy. Also lays out pacing: enemy-less stretches, encounter times against economy stage lengths and purchases, accumulated load between rest points and rewards, and runs of strong encounters. Use when composing levels, waves or rooms, sizing encounters, placing rests and rewards, or checking that a level agrees with combat and economy assumptions, in any genre and engine."
 ---
 
 # 레벨 구성
 
-레벨을 조우의 순서로 적고, 조우마다 위협도가 의도한 크기인지 계산으로 본다. 목적은 "이 방은 앞 방보다 얼마나 센가", "이 구역의 보스 방은 예산 안인가", "이 처치 수를 단계 시간 안에 해낼 수 있는가", "레벨에 놓은 적이 전투 계산과 재화 흐름의 가정과 같은가"를 감 대신 계산으로 답하는 것이다.
+레벨을 조우의 순서로 적고, 조우마다 위협도가 의도한 크기인지 계산으로 본다. 목적은 "이 방은 앞 방보다 얼마나 센가", "이 구역의 보스 방은 예산 안인가", "이 처치 수를 단계 시간 안에 해낼 수 있는가", "레벨에 놓은 적이 전투 계산과 재화 흐름의 가정과 같은가", "쉬는 곳 사이가 너무 길지 않은가", "보상이 뜸한 곳은 어디인가"를 감 대신 계산으로 답하는 것이다.
 
-조우는 그 게임이 플레이어를 적과 맞붙이는 단위다. 방, 웨이브, 무리, 시간 구간 어느 것이든 된다.
+조우는 그 게임이 플레이어를 적과 맞붙이는 단위다. 방, 웨이브, 무리, 시간 구간 어느 것이든 된다. 쉬는 방이나 상점처럼 적이 없는 구간도 조우로 적어 순서에 넣는다.
 
 위협도는 스탯으로 낸 **설계 가정**이다. 적을 더한 값이므로 적의 조합, 지형, 동시에 몰리는 정도는 반영하지 않는다. 실제 난이도나 재미를 판정하지 않는다.
 
@@ -18,8 +18,8 @@ description: "Lays out each level as an ordered list of encounters (rooms, waves
 | 명령 | 하는 일 |
 |---|---|
 | `python3 .claude/skills/studio-data/scripts/studio.py check .` | 형식·참조 검사, 조우의 위협도와 예산, 전투 단계의 적, 재화 흐름의 처치 수, 단계별 처치 시간 |
-| `… check . --table levels` | 조우 표, 단계 표, 재화 흐름에 옮길 처치 수(마크다운). 검사 보고는 그대로 나온다 |
-| `… view .` | 레벨 구성 탭: 단계 표, 레벨별 조우, 위협도와 예산 범위 |
+| `… check . --table levels` | 조우 표, 단계 표, 페이싱을 적었으면 리듬 표와 구간 표, 재화 흐름에 옮길 처치 수(마크다운). 검사 보고는 그대로 나온다 |
+| `… view .` | 레벨 구성 탭: 단계 표, 페이싱 구간, 레벨별 조우, 위협도와 예산 범위 |
 
 데이터는 `data/levels.json` 한 파일이다. 형식은 [references/levels-format.md](references/levels-format.md). 적은 [progression-economy](../progression-economy/SKILL.md)의 원본에서, 위협도의 가중치는 [stat-budget](../stat-budget/SKILL.md)의 적 원가에서(없으면 `threat_weights`), 단계는 [combat-balance](../combat-balance/SKILL.md)에서 가져온다. 프로젝트 폴더(`check .`)로 검사해야 참조를 확인한다. 적이나 전투 계산을 함께 넘기지 않으면 `INCOMPLETE`다.
 
@@ -90,6 +90,35 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table levels
 
 **플레이어 행동으로만 나오는 적**(놓친 보석이 깨어나는 정예, 선택으로 부르는 증원)은 단계의 적으로 넣지 않는다. 넣으면 그 적이 단계 통과를 정한다. 조우에는 그대로 놓고, 나오는 `enemy_not_in_stage`와 재화 흐름의 `kill_not_in_stage`를 `acknowledged`에 이유와 함께 적는다. 그 구역이 처음인 적은 `zone`만으로 단계에 들어가므로 단계에 `enemies` 목록을 적어 뺀다. 그러면 그 적의 처치 시간을 몰라 단계 표에 "이상"이 붙고, `simulate`의 통과율은 그 적의 위험이 빠진 낙관값이 된다.
 
+### 5. 페이싱을 본다
+
+조우의 순서가 잡히면 리듬을 본다. 단계의 위협도 합이 맞아도 쉬는 곳이 한쪽에 몰리면 판이 고르지 않다.
+
+**표시를 적는다.** 쉬는 곳에 `rest: true`, 보상을 주는 곳에 `reward`를 적는다. 적이 없는 구간은 `enemies`를 `{}`로 적는다. 함정처럼 적 없이 드는 소모는 `hazard`에 평범한 적 몇 마리 몫인지를 위협도로 적는다. 상점이나 제단에서 재화 흐름의 구매가 일어나면 `purchases`로 잇는다.
+
+**시각을 적는다.** 시간이 재미에 들어가는 게임(시간 구간, 라운드)만 적는다. 방을 지나는 게임은 건너뛰어도 된다. `duration`만 적으면 앞 조우에 이어 놓인다. 시각이 정해진 사건은 `at`을 적는다. 재화 흐름의 단계 길이와 맞춰 보고, 어떤 조우도 차지하지 않는 시간이나 단계 밖 시각을 경고한다. 재화 흐름의 단위가 방이면 시각도 방으로 적는다.
+
+**기준을 정한다.** `pacing`의 상한은 예산처럼 조우 바깥에서 가져온다. 조우를 놓은 뒤 경고가 사라지는 값을 고르면 뜻을 잃는다. 사용자에게 묻는다.
+
+- `max_rest_load`: 쉬는 곳 없이 평범한 조우 몇 개를 버티게 할 것인가. 전투 계산의 버티는 타수와 "평범한 조우에서 몇 대쯤 맞는가"에서 어림한다.
+- `max_reward_load`: 평범한 조우 몇 개마다 보상을 줄 것인가.
+- `max_strong_run`: 강한 조우를 몇 번까지 잇는가. 강한 조우의 기준은 `strong_at`이다.
+- `carry_levels`: 레벨 사이에 체력이 이어지면 `true`로 둔다. 레벨마다 다시 차거나 임무가 따로인 게임은 두지 않는다.
+
+**읽는다.** `--table levels`의 리듬 표와 구간 표를 본다.
+
+- **세기**: 평범한 조우가 1이다. 레벨 안에서 오르내리는 모양을 본다. 곡선이 단계별이라 한 층의 방은 예산이 같으므로, 층 안의 상승은 역할과 세기로 적는다.
+- **부담**: 구간에 쌓이는 평범한 조우 몇 개 분량이다. 구간끼리 견주어 유독 긴 곳을 찾는다. 길이도 함께 본다.
+- 상한을 적지 않으면 표만 나온다. 구간끼리 견주는 것만으로도 쉬는 곳을 옮길 자리가 보인다.
+
+경고는 이렇게 처리한다.
+
+- `long_stretch`·`reward_drought`: 조우를 줄이거나 표시를 옮긴다. 의도한 구간이면 첫 조우의 id로 `acknowledged`에 이유를 적는다. 상한을 올려 없애지 않는다.
+- `strong_run`: 사이에 약한 조우나 쉬는 곳을 넣는다. 보스 앞 시험처럼 일부러 잇는 곳이면 `acknowledged`에 적는다.
+- `time_gap`: 적이 없는 구간도 조우로 적는다. 시간을 비운 것이 맞으면 단계 id로 `acknowledged`에 적는다.
+- `time_outside_stage`: 시각이나 재화 흐름의 `duration`을 맞춘다. 단계 길이의 원본은 재화 흐름이다.
+- `purchase_off_span`: 재화 흐름의 구매가 그 조우의 시각 밖에 일어난다. 제단이 열리기 전에 돈이 모이면 재화 흐름의 `after`로 막고, 돈이 늦으면 가격이나 수입을 본다.
+
 ### 같은 사실의 원본
 
 한 사실을 여러 파일에 적으므로 어느 쪽이 원본인지 정해 둔다.
@@ -99,7 +128,8 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table levels
 | 단계 id | 전투 계산 `stages` | 레벨, 재화 흐름, 판 안 성장의 `level_at`, 시뮬레이터 설정 |
 | 어떤 적이 어느 단계에 나오는가 | 전투 계산의 단계. 적의 `zone`은 처음 나오는 구역이다 | 조우의 `enemies` |
 | 처치 수 | 레벨이 있으면 조우가 **처치 수의 원본**이다. 측정값이 있으면 측정값이 앞선다 | 재화 흐름의 `kills`. `--table levels` 끝의 값을 옮긴다 |
-| 단계 길이 | 재화 흐름의 `duration` | 단계 표의 길이 |
+| 단계 길이 | 재화 흐름의 `duration` | 단계 표의 길이, 조우의 `at`·`duration` |
+| 구매 시점 | 재화 흐름의 구매 계획 | 조우의 `purchases`가 놓인 시각 |
 | 단계의 기준 장비 | 재화 흐름의 구매 계획(사는 것이면) | 전투 단계의 `player.items`. 늦게 사는 장비를 넣으면 `gear_before_purchase`가 난다 |
 
 처치 수를 플레이 기록으로 보정하면(`calibrate`는 재화 흐름의 `kills`와 비교한다) 조우의 `repeat`도 그 값에 맞게 다시 본다.
@@ -111,14 +141,17 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table levels
 - 레벨별 조우 표: 역할, 횟수, 구성, 위협도, 앞 조우 대비, 예산 범위
 - 예산을 벗어난 조우와 이유
 - 전투 단계·재화 흐름과 어긋난 적과 처치 수, 처치 수 대조가 몇 단계까지 됐는가
+- 페이싱을 적었으면: 구간 표, 가장 긴 구간, 강한 조우 연속, 시각과 구매 대조가 어디까지 됐는가. 기준의 출처가 가정이면 "경고 없음"을 근거로 쓰지 않는다
 - 오류·경고 수, `INCOMPLETE` 여부
-- 사용자가 정해야 할 것: 곡선, 역할 배수, 조우의 구성과 횟수, 시간 구간이면 무리가 다시 차는 주기, 조건부로 나오는 적
+- 사용자가 정해야 할 것: 곡선, 역할 배수, 조우의 구성과 횟수, 시간 구간이면 무리가 다시 차는 주기, 조건부로 나오는 적, 페이싱 기준, 체력이 레벨 사이에 이어지는가
 
 ## 한계
 
 - 위협도는 적의 합이다. 조합의 시너지, 지형, 등장 간격은 넣지 않는다. 플레이어의 힘도 보지 않는다. 플레이어와 잇는 값은 처치 시간이다.
 - 처치 시간은 단일 대상 기준이다. 범위 공격과 이동 시간은 넣지 않는다. 단위가 초가 아닌 재화 흐름은 비율을 내지 않는다.
-- 적이 없는 구간(쉬는 방, 제단, 함정)은 조우로 적지 못한다. 레벨의 `note`에 남긴다. 쉬는 곳과 보상의 배치, 시간 축, 회복 지점 사이의 소모는 페이싱 단계(L2)에서 다룬다.
+- 부담은 곡선에 견준 상대값이다. 플레이어의 체력이나 회복량을 보지 않고, 맞는 비율도 넣지 않는다. 쉬는 곳은 모두 회복하는 것으로 본다. 일부만 회복하는 곳은 그만큼 부담이 남는데 표에 나오지 않는다. `rest` 없이 `reward`나 `note`로 적어 끊지 않는 쪽이 안전하다.
+- 갈림길은 구조로 남지 않고 평균만 남는다. 경로마다 구간을 보려면 대체 경로를 레벨로 나눠 따로 본다.
+- 보상의 크기는 보지 않는다. `reward`는 있고 없음만 센다.
 - 재화 흐름 단계에 처치 수가 없으면 그 단계는 맞춰 보지 않는다.
 
 예시: `studio-data/assets/sample-project/data/levels.json` (실제 게임 수치가 아니다).
