@@ -148,7 +148,7 @@ def _candidates(side: dict, items: dict, where: str, errors: list, warnings: lis
             _err(errors, "unknown_item", where, f"아이템 데이터에 없는 id입니다: {side['item']}")
             return None
         if not c.is_active(e):
-            _err(warnings, "cut_referenced", where, f"삭제(cut)된 아이템 {side['item']}를 씁니다. 이 레시피는 계산에서 뺍니다.", owner=where)
+            _err(warnings, "cut_referenced", where, f"삭제(cut)된 아이템 {c.josa(side['item'], '을를')} 씁니다. 이 레시피는 계산에서 뺍니다.", owner=where)
             return None
         return [side["item"]]
     found = match_items(items, side["match"])
@@ -263,7 +263,7 @@ def validate(data: dict, items: dict | None = None, drop_tables: dict | None = N
     raw_tracks, raw_recipes = data.get("enhance", []), data.get("recipes", [])
     for key, raw in (("enhance", raw_tracks), ("recipes", raw_recipes)):
         if not isinstance(raw, list):
-            _err(errors, "schema", key, f"{key}는 배열이어야 합니다.")
+            _err(errors, "schema", key, f"{c.josa(key, '은는')} 배열이어야 합니다.")
     tracks = [t for _, t in c.check_identity(raw_tracks if isinstance(raw_tracks, list) else [], "enhance", errors) if check_track(t, errors)]
     recipe_entries = [r for _, r in c.check_identity(raw_recipes if isinstance(raw_recipes, list) else [], "recipes", errors)]
     recipes = [x for x in (check_recipe(r, errors) for r in recipe_entries) if x]
@@ -423,7 +423,7 @@ def validate(data: dict, items: dict | None = None, drop_tables: dict | None = N
             reason = c.ack_reason(items[i], "unobtainable")  # 일부러 얻는 곳이 없는 아이템은 그 아이템에서 확인한다
             if reason:
                 acknowledged.append({"code": "unobtainable", "where": i, "owner": f"items:{i}", "reason": reason,
-                                     "message": f"{i}는 드랍·합성·other_sources·레벨업 선택지 어디서도 얻을 수 없습니다."})
+                                     "message": f"{c.josa(i, '은는')} 드랍·합성·other_sources·레벨업 선택지 어디서도 얻을 수 없습니다."})
             else:
                 open_.append(i)
         if open_:

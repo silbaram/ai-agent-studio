@@ -14,18 +14,30 @@ VALIDATORS = {"concepts": concepts, "items": items, "upgrades": upgrades, "enemi
 NOT_DATA = ("컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터가 아닙니다 "
             "(최상위에 concepts / items / upgrades / enemies / levels / playtests 배열이나 combat / growth / budget / crafting / economy 객체가 필요합니다).")
 CONFIG_KEYS = (b'"seed"', b'"trials"', b'"max_runs"')  # 시뮬레이터 설정의 필수 키. 하나만으로는 게임 설정과 나눌 수 없어 모두 있을 때만 센다
-JSON_STRING = re.compile(rb'"(?:[^"\\]|\\.)*"', re.S)
+JSON_PIECE = re.compile(rb'("(?:[^"\\]|\\.)*")|//[^\n]*|/\*.*?\*/', re.S)  # 문자열은 그대로 두고 주석을 고른다. 문자열 안의 //(URL)는 주석이 아니다
+
+
+def _uncommented(raw: bytes):
+    """주석을 지워야 읽히는 JSON이면 그 값. 주석이 없거나 지워도 읽히지 않으면 None."""
+    bare = JSON_PIECE.sub(lambda m: m.group(1) or b"", raw)
+    if bare == raw:
+        return None
+    try:
+        return json.loads(bare)
+    except ValueError:
+        return None
 
 
 def _game_format(raw: bytes) -> bool:
-    """읽지 못한 levels.json이 게임 자기 형식으로 보이는가: 주석이 있는 JSON이거나 내용이 있는 최상위 배열. 문자열 안의 //(URL)는 주석이 아니다."""
-    bare = JSON_STRING.sub(b'""', raw)
-    if b"//" in bare or b"/*" in bare:
-        return True
-    try:
-        data = json.loads(raw)
-    except ValueError:
-        return False
+    """읽지 못한 levels.json이 게임 자기 형식으로 보이는가: 내용이 있는 최상위 배열, 또는 주석을 지우면 읽히고 내용이 있으며 이 형식의 키가 없는 값."""
+    data = _uncommented(raw)
+    if data is None:
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            return False
+    if isinstance(data, dict):
+        return bool(data) and not {"levels", "threat_budget"} & set(data)
     return isinstance(data, list) and bool(data)
 
 
@@ -59,6 +71,8 @@ def read(path: Path) -> dict:
     except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         entry["kind"] = c.kind_from_filename(path) or _kind_by_name(path) or ("levels" if _broken_levels(path, raw) else None)
         entry["error"] = f"파일 형식 오류: {exc}"
+        if path.suffix.lower() == ".json" and _uncommented(raw) is not None:
+            entry["error"] += " JSON에는 주석을 쓸 수 없습니다."
         if path.suffix.lower() == ".json" and all(k in raw for k in CONFIG_KEYS):
             entry["config"] = None
         return entry

@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from . import provenance
-from .common import ID_PATTERN, STATUSES, check_identity, is_active
+from .common import ID_PATTERN, STATUSES, check_identity, is_active, josa
 from .common import did_you_mean as _did_you_mean
 
 STATUS_LABEL = {"proposed": "후보", "approved": "선택", "cut": "제외", "unspecified": "미지정"}
@@ -66,7 +66,7 @@ def check_concept(c: dict, where: str, errors: list, warnings: list, ctx: dict |
     ok = True
     for f in REQUIRED_TEXT:
         if not _text(c.get(f)):
-            errors.append({"code": "missing_field", "where": where, "message": f"{f}가 비어 있습니다."})
+            errors.append({"code": "missing_field", "where": where, "message": f"{josa(f, '이가')} 비어 있습니다."})
             ok = False
     status = c.get("status")
     if status is not None and status not in STATUSES:
@@ -80,7 +80,7 @@ def check_concept(c: dict, where: str, errors: list, warnings: list, ctx: dict |
         missing = [a for a in REQUIRED_AXES if a not in sig and a not in fixed]
         if missing:
             errors.append({"code": "signature_missing_axis", "where": where,
-                           "message": f"signature에 필수 축 {', '.join(missing)}이 없습니다. 축 이름의 오타인지 확인하세요."})
+                           "message": f"signature에 필수 축 {josa(', '.join(missing), '이가')} 없습니다. 축 이름의 오타인지 확인하세요."})
             ok = False
         for k in sig:
             if k not in known:

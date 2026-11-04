@@ -155,7 +155,8 @@ def cmd_check(args) -> int:
             for w in r["warnings"]:
                 print(f"warning [{w['code']}] {w['where']}: {w['message']}")
             for a in r.get("acknowledged", []):
-                print(f"확인한 경고 [{a['code']}] {a['where']}: {a['reason']}")
+                target = f"({a['part']})" if a.get("part") and a["part"] != a["where"] else ""
+                print(f"확인한 경고 [{a['code']}] {a['where']}{target}: {a['reason']}")
             if d["kind"] in EXTRA_PRINTERS:
                 EXTRA_PRINTERS[d["kind"]](r)
             if args.table and d["kind"] in TABLE_PRINTERS and (table_kinds is None or d["kind"] in table_kinds):

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from .common import STATUSES, check_identity, did_you_mean, is_int, is_number, unknown_keys_text
+from .common import STATUSES, check_identity, did_you_mean, is_int, is_number, unknown_keys_text, josa
 from .common import add_issue as _err
 
 RESULTS = ("holds", "refuted", "unknown")
@@ -56,10 +56,10 @@ def _check_records(holder: dict, label: str, runs, where: str, errors: list, war
             ok = False
         seen.add(x["stage"])
         if x["cleared"] > x["entered"]:
-            _err(errors, "schema", where, f"{at}: cleared {x['cleared']}가 entered {x['entered']}보다 큽니다.")
+            _err(errors, "schema", where, f"{at}: cleared {josa(x['cleared'], '이가')} entered {x['entered']}보다 큽니다.")
             ok = False
         if is_int(runs) and x["entered"] > runs:
-            _err(errors, "schema", where, f"{at}: entered {x['entered']}가 세션의 판 수 {runs}보다 큽니다.")
+            _err(errors, "schema", where, f"{at}: entered {josa(x['entered'], '이가')} 세션의 판 수 {runs}보다 큽니다.")
             ok = False
         if "level" in x and not (is_number(x["level"]) and x["level"] >= 1):
             _err(errors, "schema", where, f"{at}: level은 1 이상의 수입니다(그 단계에 들어설 때의 평균 레벨): {x['level']!r}")
@@ -69,13 +69,13 @@ def _check_records(holder: dict, label: str, runs, where: str, errors: list, war
             ok = False
         for key in ("kills", "income"):
             if key in x and not _amounts(x[key]):
-                _err(errors, "schema", where, f"{at}: {key}는 {{id: 0 이상의 판 평균}}입니다.")
+                _err(errors, "schema", where, f"{at}: {josa(key, '은는')} {{id: 0 이상의 판 평균}}입니다.")
                 ok = False
     if ok:
         for a, b in zip(stats, stats[1:]):
             if b["entered"] > a["cleared"]:
                 _err(warnings, "stage_counts_mismatch", where,
-                     f"단계 {b['stage']}에 {b['entered']}판이 들어갔는데 앞 단계 {a['stage']}를 넘긴 판은 {a['cleared']}판입니다. 기록을 확인합니다.")
+                     f"단계 {b['stage']}에 {b['entered']}판이 들어갔는데 앞 단계 {josa(a['stage'], '을를')} 넘긴 판은 {a['cleared']}판입니다. 기록을 확인합니다.")
     return ok
 
 
@@ -100,7 +100,7 @@ def check_stage_stats(s: dict, errors: list, warnings: list) -> bool:
         return False
     for key in ("stage_stats", "upgrades"):
         if key in s:
-            _err(errors, "schema", where, f"groups를 쓰면 세션의 {key}를 함께 쓰지 않습니다. 묶음마다 적습니다.")
+            _err(errors, "schema", where, f"groups를 쓰면 세션의 {josa(key, '을를')} 함께 쓰지 않습니다. 묶음마다 적습니다.")
             ok = False
     totals: dict = {}
     for n, g in enumerate(groups):
@@ -174,7 +174,7 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
         ok = False
     for f in ("concept", "build"):
         if not _text(s.get(f)):
-            _err(errors, "schema", where, f"{f}가 비어 있습니다." + (" 빌드는 커밋 해시나 빌드 이름입니다." if f == "build" else ""))
+            _err(errors, "schema", where, f"{josa(f, '이가')} 비어 있습니다." + (" 빌드는 커밋 해시나 빌드 이름입니다." if f == "build" else ""))
             ok = False
     players = s.get("players")
     if not (isinstance(players, list) and players and all(_text(p) for p in players)):
@@ -304,7 +304,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                     _err(errors, "unknown_session", where, f"플레이 기록에 없는 세션입니다: {sid}")
                 continue  # 형식 오류가 있는 세션은 그 세션 쪽에서 이미 보고했다
             if s["concept"] != v["concept"]:
-                _err(errors, "session_concept_mismatch", where, f"세션 {sid}는 {s['concept']}의 기록입니다.")
+                _err(errors, "session_concept_mismatch", where, f"세션 {josa(sid, '은는')} {s['concept']}의 기록입니다.")
                 continue
             found.append(s)
         if v["result"] in DECIDED and found and not any(o["hypothesis"] == v["hypothesis"] for s in found for o in s.get("observations", [])):

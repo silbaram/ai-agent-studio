@@ -795,13 +795,15 @@ class ReviewOfFieldFixes(Workspace):
 
     def test_gate_does_not_pass_a_config_it_cannot_read(self):
         self.source({"kind": "computed", "source": "reports/calibrate.json"})
-        good = self.config.read_text(encoding="utf-8")
-        for broken in (good[:-1], "\ufeff" + good):
-            with self.subTest(broken[:5]):
-                self.config.write_text(broken, encoding="utf-8")
-                code, listed = self.gate()
-                self.assertEqual(code, 1)
-                self.assertIn("meta_combat.json", listed)
+        self.config.write_text(self.config.read_text(encoding="utf-8")[:-1], encoding="utf-8")
+        code, listed = self.gate()
+        self.assertEqual(code, 1)
+        self.assertIn("meta_combat.json", listed)
+
+    def test_gate_reads_a_config_with_a_byte_order_mark(self):
+        self.source({"kind": "computed", "source": "reports/calibrate.json"})
+        self.config.write_text("\ufeff" + self.config.read_text(encoding="utf-8"), encoding="utf-8")
+        self.assertNotIn("meta_combat.json", self.gate()[1])
 
     def test_gate_leaves_other_broken_json_alone(self):
         self.source({"kind": "computed", "source": "reports/calibrate.json"})

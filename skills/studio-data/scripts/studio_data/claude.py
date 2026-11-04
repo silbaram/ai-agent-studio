@@ -15,6 +15,7 @@ import shlex
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
+from . import common as c
 from . import datasets
 
 JUDGE = "studio-judge"
@@ -73,11 +74,11 @@ def setup(project: Path, python: str) -> tuple[int, list[str]]:
         try:
             settings = json.loads(settings_path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
-            return 2, [f"{settings_path}를 읽지 못했습니다 ({exc}). 형식을 고친 뒤 다시 실행하세요. 아무것도 바꾸지 않았습니다."]
+            return 2, [f"{c.josa(settings_path, '을를')} 읽지 못했습니다 ({exc}). 형식을 고친 뒤 다시 실행하세요. 아무것도 바꾸지 않았습니다."]
         if not isinstance(settings, dict) or not isinstance(settings.get("hooks", {}), dict):
             return 2, [f"{settings_path}의 최상위나 hooks가 객체가 아닙니다. 아무것도 바꾸지 않았습니다."]
     if agent_path.exists() and MARKER not in agent_path.read_text(encoding="utf-8"):
-        return 2, [f"{agent_path}가 이미 있고 setup이 만든 파일이 아닙니다. 덮어쓰지 않았습니다. 옮기거나 지운 뒤 다시 실행하세요."]
+        return 2, [f"{c.josa(agent_path, '이가')} 이미 있고 setup이 만든 파일이 아닙니다. 덮어쓰지 않았습니다. 옮기거나 지운 뒤 다시 실행하세요."]
     template = TEMPLATE.read_text(encoding="utf-8")
     script_ref = script_reference(project)
     merge_hooks(settings, python, script_ref)
@@ -166,8 +167,10 @@ def post_edit(payload_text: str, project: Path | None = None) -> tuple[int, str,
         rel = path.relative_to(project)
     except ValueError:
         return 0, "", ""
-    if not rel.parts or rel.parts[0] not in WATCHED or not path.is_file():
+    at_root = len(rel.parts) == 1 and path.suffix.lower() == ".json" and path.stem.lower() in c.FOREIGN_NAMES  # check는 프로젝트 바로 아래의 levels.json도 읽는다
+    if not rel.parts or (rel.parts[0] not in WATCHED and not at_root) or not path.is_file():
         return 0, "", ""
+    notes: list = []
     suffix = path.suffix.lower()
     if suffix in (".json", ".csv"):
         code, out = _run(["check", str(project), "--json"])
@@ -177,7 +180,7 @@ def post_edit(payload_text: str, project: Path | None = None) -> tuple[int, str,
             return 0, "", ""  # 검사할 데이터가 없다(예: 시뮬레이터 설정만 고침)
         errors, warnings = _check_lines(result)
         # 건너뛴 파일이 게임 자기 파일일 수 있어 그 파일을 고칠 때만 알린다. 다른 편집마다 되풀이하지 않는다
-        warnings += [datasets.skipped_note(p) for p in result.get("skipped", []) if Path(p).resolve() == path]
+        notes = [datasets.skipped_note(rel.as_posix()) for p in result.get("skipped", []) if Path(p).resolve() == path]
         title = "studio.py check"
     elif suffix == ".md":
         code, out = _run(["provenance", str(path), "--json"])
@@ -192,9 +195,9 @@ def post_edit(payload_text: str, project: Path | None = None) -> tuple[int, str,
     else:
         return 0, "", ""
     if errors:
-        return 2, "", f"{title}: 오류 {len(errors)}개 (편집은 이미 반영됨, 고쳐야 합니다)\n" + "\n".join(errors + warnings) + "\n"
-    if warnings:
-        context = f"{title}: 경고 {len(warnings)}개\n" + "\n".join(warnings)
+        return 2, "", f"{title}: 오류 {len(errors)}개 (편집은 이미 반영됨, 고쳐야 합니다)\n" + "\n".join(errors + warnings + notes) + "\n"
+    if warnings or notes:
+        context = f"{title}: 경고 {len(warnings)}개\n" + "\n".join(warnings + notes)
         out = json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": context}})
         return 0, out, ""
     return 0, "", ""

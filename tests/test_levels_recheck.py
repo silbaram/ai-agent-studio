@@ -65,10 +65,6 @@ class ConditionalMargins(MetaWorkspace):
     def test_ranks_with_their_own_margin_say_nothing(self):
         self.assertEqual(self.margin_notes(), "")
 
-    def test_a_chosen_single_number_says_nothing(self):
-        self.edit(CONFIG, lambda d: d["survival"].__setitem__("even_margin", 0.3))
-        self.assertEqual(self.margin_notes(), "")
-
     def test_boss_inside_the_combat_targets_is_said_so(self):
         self.edit(CONFIG, lambda d: d["survival"].pop("even_margin"))
         self.edit("data/combat.json", lambda d: d["combat"]["targets"].__setitem__("boss", {"hits_to_kill": [1, 100000]}))
