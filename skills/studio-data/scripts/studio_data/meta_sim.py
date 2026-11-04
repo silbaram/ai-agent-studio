@@ -43,14 +43,14 @@ class ConfigError(ValueError):
 
 def _req(cfg: dict, key: str, kind, where: str = ""):
     if key not in cfg:
-        raise ConfigError(f"{where}{key}가 필요합니다.")
+        raise ConfigError(f"{where}{c.josa(key, '이가')} 필요합니다.")
     val = cfg[key]
     if kind is float:
         if not isinstance(val, (int, float)) or isinstance(val, bool):
-            raise ConfigError(f"{where}{key}는 수여야 합니다: {val!r}")
+            raise ConfigError(f"{where}{c.josa(key, '은는')} 수여야 합니다: {val!r}")
     elif kind is int:
         if not isinstance(val, int) or isinstance(val, bool):
-            raise ConfigError(f"{where}{key}는 정수여야 합니다: {val!r}")
+            raise ConfigError(f"{where}{c.josa(key, '은는')} 정수여야 합니다: {val!r}")
     elif not isinstance(val, kind):
         raise ConfigError(f"{where}{key}의 형식이 잘못되었습니다: {val!r}")
     return val
@@ -60,7 +60,7 @@ def _opt_num(d: dict, key: str, default: float, where: str = "") -> float:
     """선택 수치. 없으면 기본값, 있으면 수여야 한다(불리언·문자열·객체는 형식 오류)."""
     v = d.get(key, default)
     if not isinstance(v, (int, float)) or isinstance(v, bool):
-        raise ConfigError(f"{where}{key}는 수여야 합니다: {v!r}")
+        raise ConfigError(f"{where}{c.josa(key, '은는')} 수여야 합니다: {v!r}")
     return float(v)
 
 
@@ -68,14 +68,14 @@ def _numbers(v, where: str) -> dict:
     if v is None:
         return {}
     if not (isinstance(v, dict) and all(isinstance(k, str) and isinstance(x, (int, float)) and not isinstance(x, bool) for k, x in v.items())):
-        raise ConfigError(f"{where}는 {{이름: 수}}여야 합니다.")
+        raise ConfigError(f"{c.josa(where, '은는')} {{이름: 수}}여야 합니다.")
     return {k: float(x) for k, x in v.items()}
 
 
 def _path(cfg: dict, key: str, base_dir: Path | None, where: str = "") -> Path:
     name = cfg.get(key)
     if not isinstance(name, str) or not name.strip():
-        raise ConfigError(f"{where}{key}는 파일 경로 문자열이어야 합니다.")
+        raise ConfigError(f"{where}{c.josa(key, '은는')} 파일 경로 문자열이어야 합니다.")
     path = Path(name)
     return path if path.is_absolute() else (base_dir or Path.cwd()) / path
 
@@ -115,7 +115,7 @@ def normalize(cfg: dict, base_dir: Path | None = None) -> dict:
     out = {"model": model, "seed": _req(cfg, "seed", int), "trials": _req(cfg, "trials", int), "max_runs": _req(cfg, "max_runs", int)}
     for k in ("trials", "max_runs"):
         if out[k] < 1:
-            raise ConfigError(f"{k}는 1 이상이어야 합니다.")
+            raise ConfigError(f"{c.josa(k, '은는')} 1 이상이어야 합니다.")
     if prov is not None:
         out["provenance"] = prov
     if model == "abstract":
@@ -181,7 +181,7 @@ def normalize(cfg: dict, base_dir: Path | None = None) -> dict:
         stats = {k for u in seen.values() for k in u["stats"]}
         for name in out["stat_effects"]:
             if name not in stats:  # 오타면 가정한 효과가 조용히 사라진다
-                raise ConfigError(f"stat_effects의 스탯 {name}을 가진 영구 강화가 없습니다.{c.did_you_mean(name, stats)} "
+                raise ConfigError(f"stat_effects의 스탯 {c.josa(name, '을를')} 가진 영구 강화가 없습니다.{c.did_you_mean(name, stats)} "
                                   f"강화 스탯: {', '.join(sorted(stats)) or '없음'}")
 
     policy = cfg.get("purchase_policy", "listed_order")
@@ -253,7 +253,7 @@ def _stat_effects(v, has_growth: bool) -> dict:
     for stat, eff in v.items():
         where = f"stat_effects.{stat}."
         if not (isinstance(eff, dict) and eff):
-            raise ConfigError(f"{where[:-1]}는 {{{', '.join(EFFECTS)}: 스탯 1당 값}}입니다.")
+            raise ConfigError(f"{c.josa(where[:-1], '은는')} {{{', '.join(EFFECTS)}: 스탯 1당 값}}입니다.")
         _known_keys(eff, set(EFFECTS), where)
         out[stat] = {k: _opt_num(eff, k, 0.0, where) for k in eff}
         if "levels" in out[stat] and not has_growth:
@@ -287,7 +287,7 @@ def _even_margin(v):
         out = _opt_num({"even_margin": v}, "even_margin", 1.0, "survival.")
         values = [out]
     if any(x <= 0 for x in values):
-        raise ConfigError(f"{where}은 0보다 커야 합니다(평균 실력이 절반의 확률로 넘기는 여유).")
+        raise ConfigError(f"{c.josa(where, '은는')} 0보다 커야 합니다(평균 실력이 절반의 확률로 넘기는 여유).")
     return out
 
 
@@ -318,7 +318,7 @@ def _combat_part(cfg: dict, out: dict, base_dir: Path | None) -> None:
     """전투 계산 모델: 방·난이도 대신 전투 계산의 단계를 순서대로 지난다."""
     for key in ("rooms", "difficulty"):
         if key in cfg:
-            raise ConfigError(f"전투 계산 모델(model: combat)에는 {key}를 쓰지 않습니다. 판은 combat_file의 단계를 순서대로 지납니다.")
+            raise ConfigError(f"전투 계산 모델(model: combat)에는 {c.josa(key, '을를')} 쓰지 않습니다. 판은 combat_file의 단계를 순서대로 지납니다.")
     out["combat_file"] = _path(cfg, "combat_file", base_dir)
     stages = cfg.get("stages")
     if stages is not None and not (isinstance(stages, list) and stages and all(isinstance(x, str) for x in stages)):
@@ -513,16 +513,16 @@ def _inside_targets(stage: str, row: dict, targets: dict, checked: list) -> bool
 
 def margin_notes(even, deciders: list, targets: dict, checked: list) -> list:
     """정예·보스가 단계를 정하는데 그 등급의 기준을 잡지 않았으면 알린다. 여유는 버티는 타수 ÷ 처치 타수라 그 등급은 설계대로여도 작게 나온다.
-    기준을 수 하나로 골랐으면(1 제외) 고른 것으로 본다. deciders: [(단계, 그 단계를 정한 적의 행)]. 강화 없음, 판 안 성장, 강화 모두의 경우를 다 본다. checked: 전투 검사의 행."""
+    수 하나는 모든 등급의 값이라 등급별로 잡은 것이 아니다. deciders: [(단계, 그 단계를 정한 적의 행)]. 강화 없음, 판 안 성장, 강화 모두의 경우를 다 본다. checked: 전투 검사의 행."""
     out = []
     for rank in ("elite", "boss"):
-        unset = rank not in even if isinstance(even, dict) else even == 1.0
+        unset = rank not in even if isinstance(even, dict) else True
         found = list({(sid, r["enemy"]): (sid, r) for sid, r in deciders if r and r.get("rank") == rank}.values())
         if not (unset and found):
             continue
         label = cb.RANK_LABEL.get(rank, rank)
         spots = ", ".join(sid + ": " + r["enemy"] for sid, r in found)
-        text = (f"{c.josa(label, '이가')} 정하는 단계({spots})를 일반 적과 같은 기준 1로 쟀습니다. "
+        text = (f"{c.josa(label, '이가')} 정하는 단계({spots})를 일반 적과 같은 기준({margin_reference(even, rank):g})으로 쟀습니다. "
                 f"여유는 버티는 타수 ÷ 처치 타수라 {c.josa(label, '은는')} 설계대로여도 작게 나옵니다.")
         inside = sorted({r["enemy"] for sid, r in found if _inside_targets(sid, r, targets, checked)})
         if inside:
@@ -555,7 +555,7 @@ def _entry(entries: list, path: Path, kind: str, label: str, currency: str | Non
     if not found["ok"]:
         raise ConfigError(f"{label} 파일을 읽지 못했습니다({path}): {found.get('error')}")
     if found["kind"] != kind:
-        raise ConfigError(f"{label} 파일이 아닙니다({path}): 최상위 {kind}가 필요합니다.")
+        raise ConfigError(f"{label} 파일이 아닙니다({path}): 최상위 {c.josa(kind, '이가')} 필요합니다.")
     r = found["report"]
     if currency is not None and not r["errors"] and r.get("unchecked"):
         if currency in r.get("unchecked_currencies", []):
@@ -600,7 +600,7 @@ def _attach_economy(cfg: dict, entry: dict, ups: dict, need_income: bool) -> Non
     if cur not in r["currencies"]:
         raise ConfigError(f"재화 흐름에 없는 재화입니다: {cur}.{c.did_you_mean(cur, r['currencies'])}")
     if not r["currencies"][cur]["carry"]:
-        raise ConfigError(f"economy.currency {cur}는 판 사이 재화(carry: true)여야 합니다. 메타 성장은 판 사이에 남는 재화로 산다.")
+        raise ConfigError(f"economy.currency {c.josa(cur, '은는')} 판 사이 재화(carry: true)여야 합니다. 메타 성장은 판 사이에 남는 재화로 산다.")
     raw = {p.get("id"): p for p in entry["data"].get("purchases") or [] if isinstance(p, dict)}
     order: list = []
     for row in r["purchases"]:
@@ -643,11 +643,11 @@ def _attach_combat(cfg: dict, entries: list, ups: dict) -> None:
         if sid not in active:
             raise ConfigError(f"전투 계산에 없거나 삭제된 단계입니다: {sid}{c.did_you_mean(sid, active)}")
         if prep is None or sid not in prep["stages"]:
-            raise ConfigError(f"전투 단계 {sid}를 계산할 수 없습니다(계산할 적이 없음 등). 전투 계산 결과를 확인하세요.")
+            raise ConfigError(f"전투 단계 {c.josa(sid, '을를')} 계산할 수 없습니다(계산할 적이 없음 등). 전투 계산 결과를 확인하세요.")
     index = {sid: n for n, sid in enumerate(stages, start=1)}
     for m in cfg["milestones"]:
         if m["clear_stage"] in active and m["clear_stage"] not in index:
-            raise ConfigError(f"마일스톤 {m['id']}의 clear_stage {m['clear_stage']}는 전투 계산에 있지만 이 설정의 stages에서 뺀 단계입니다. "
+            raise ConfigError(f"마일스톤 {m['id']}의 clear_stage {c.josa(m['clear_stage'], '은는')} 전투 계산에 있지만 이 설정의 stages에서 뺀 단계입니다. "
                               f"stages에 넣거나 마일스톤을 판의 단계({', '.join(stages)})로 바꿉니다.")
         if m["clear_stage"] not in index:
             raise ConfigError(f"마일스톤 {m['id']}의 clear_stage가 판의 단계에 없습니다: {m['clear_stage']}{c.did_you_mean(m['clear_stage'], stages)}")
@@ -673,7 +673,7 @@ def _attach_combat(cfg: dict, entries: list, ups: dict) -> None:
     roles = set(prep["settings"]["roles"]["player"].values())
     doubled = sorted(set(cfg["stat_effects"]) & roles)
     if doubled:
-        raise ConfigError(f"stat_effects의 {', '.join(doubled)}는 전투 계산의 역할에 연결된 스탯이라 이미 생존에 들어갑니다. "
+        raise ConfigError(f"stat_effects의 {c.josa(', '.join(doubled), '은는')} 전투 계산의 역할에 연결된 스탯이라 이미 생존에 들어갑니다. "
                           "전투 밖 효과를 더하면 두 번 계산됩니다. 전투 역할에 연결되지 않은 스탯만 적습니다.")
     known = roles | set(cfg["stat_effects"])
     cfg["rooms"] = len(stages)
@@ -820,9 +820,10 @@ def combat_overview(cfg: dict) -> dict:
                      "margin_growth": margin(who_new), "p_growth": round(combat_survival(cfg, rel_new, skill), 4),
                      "decided_by_all": who_all["enemy"] if who_all else None,
                      "margin_all": margin(who_all), "p_all": round(combat_survival(cfg, rel_all, skill), 4)})
+    calibrated = (cfg.get("provenance") or {}).get("kind") in ("computed", "measured")  # 보정한 값은 수 하나여도 근거가 있다
     return {"survival_by_stage": rows, "stage_income": {k: _round(v) for k, v in ctx["income"].items()},
             "upgrades_without_combat_effect": ctx["no_effect"],
-            "margin_notes": margin_notes(even, deciders, ctx["prep"]["settings"]["targets"], ctx["checked"]),
+            "margin_notes": [] if calibrated else margin_notes(even, deciders, ctx["prep"]["settings"]["targets"], ctx["checked"]),
             "growth_build": cfg.get("build")}
 
 

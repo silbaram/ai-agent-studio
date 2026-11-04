@@ -46,7 +46,7 @@ def _read_ratio(cfg: dict, key: str, where: str, errors: list) -> float | None:
     v = cfg.get(key, DEFAULT_TOLERANCE)
     if c.is_number(v) and 0 <= v < 1:
         return v
-    _err(errors, "schema", where, f"{key}는 0 이상 1 미만의 비율입니다: {v!r}")
+    _err(errors, "schema", where, f"{c.josa(key, '은는')} 0 이상 1 미만의 비율입니다: {v!r}")
     return None
 
 
@@ -285,8 +285,8 @@ def _check_unlinked_kills(links: dict, active: list, by_stage: dict, stages: dic
         if link and info["kills"] and link not in by_stage and link not in (stages or {}) and link not in dropped:
             for eid in info["ids"]:
                 owner = _stage_owner(active, "kills_not_linked", eid)
-                _err(warnings, "kills_not_linked", eid, f"재화 흐름 단계 {eid}의 처치 수가 어떤 레벨과도 이어지지 않아 맞춰 보지 못했습니다. "
-                                                        "그 단계에 combat_stage를 적거나 전투 단계와 같은 id로 둡니다.", owner=owner, part=eid)
+                advice = "그 단계에 combat_stage를 적거나 전투 단계와 같은 id로 둡니다." if eid == link else f"combat_stage {c.josa(link, '이가')} 전투 단계 id인지 봅니다."
+                _err(warnings, "kills_not_linked", eid, f"재화 흐름 단계 {eid}의 처치 수가 어떤 레벨과도 이어지지 않아 맞춰 보지 못했습니다. {advice}", owner=owner, part=eid)
 
 
 def _check_stage_foes(stage: dict, levels: list, group: list, enemies: dict, warnings: list) -> None:
@@ -302,7 +302,7 @@ def _check_stage_foes(stage: dict, levels: list, group: list, enemies: dict, war
     for eid in sorted(spots):
         owner = _stage_owner(levels, "enemy_not_in_stage", eid)
         _err(warnings, "enemy_not_in_stage", owner,
-             f"전투 단계 {stage['id']}에 나오지 않는 적입니다: {eid}(조우 {', '.join(spots[eid])}). 전투 계산과 레벨이 다른 적을 보고 있습니다.{cb.earlier_zone_hint([eid], stage, enemies)}{cb.CONDITIONAL_HINT}",
+             f"전투 단계 {stage['id']}에 나오지 않는 적입니다: {eid}(조우 {', '.join(spots[eid])}). 전투 계산과 레벨이 다른 적을 보고 있습니다.{cb.outside_hint([eid], stage, enemies)}",
              owner=owner, part=eid)
     for eid in sorted(foes - {k for _, _, placed in group for k in placed}):
         owner = _stage_owner(levels, "enemy_unplaced", eid)
@@ -361,6 +361,10 @@ def _stage_rows(listed: list, by_stage: dict, order: list | None, stages: dict |
                      "kill_ratio": round(spent / length, 2) if spent is not None and length and _in_seconds(unit) else None,
                      "hits_per_unit": round(hits / length, 2) if hits is not None and length else None,
                      "group_size": _group_size(info["base"] if info else None, (stages or {}).get(sid), enemy_curve)})
+    previous = None
+    for row in rows:   # 값이 없는 단계를 건너뛰고 앞뒤를 잇는다
+        row["vs_previous"] = round(row["threat"] / previous, 4) if row["threat"] is not None and previous else None
+        previous = row["threat"] if row["threat"] is not None else previous
     return rows
 
 
@@ -383,6 +387,9 @@ def _kill_check_note(listed: list, by_stage: dict, links: dict, economy, whole, 
         text += f" · 조우가 없는 단계: {', '.join(bare)}"
     if len(bare) < len(missed):
         text += f" · 오류로 못 본 단계: {', '.join(k for k in missed if k not in bare)}"
+    strays = sorted(k for k in astray if k and k not in listed)
+    if strays:
+        text += f" · 이어지지 않은 재화 흐름 단계: {', '.join(strays)}"
     return text
 
 
@@ -391,11 +398,22 @@ def _gap_notes(rows: list, economy, unit: str, enemy_curve: dict | None) -> list
     out = []
     shown = [s for s in rows if s["kills"] is not None]
     timed = [s for s in shown if s["kill_time"] is not None]
-    if not timed and any(s["kill_hits"] is not None for s in shown):
+    hit = [s for s in shown if s["kill_hits"] is not None]
+    if hit and not timed:
         out.append("처치 시간: 전투 계산에 공격 속도가 없어 타수로 냅니다.")
-    if timed and economy is not None and all(s["kill_ratio"] is None for s in timed):
-        out.append("처치 시간 ÷ 길이: " + ("재화 흐름에 단계 길이(duration)가 없어 내지 않습니다." if all(s["duration"] is None for s in timed)
-                                         else "재화 흐름의 time_unit이 초가 아니라 내지 않습니다."))
+    elif hit:
+        out.append(f"처치 시간: 공격 속도가 없는 단계: {', '.join(s['id'] for s in hit)}. 그 단계는 타수라 다른 단계와 견주지 못합니다.")
+    counted = [s for s in shown if s["kill_time"] is not None or s["kill_hits"] is not None]
+    lacking = [s["id"] for s in counted if s["duration"] is None]
+    if counted and economy is None:
+        out.append("처치 시간 ÷ 길이: 재화 흐름을 함께 읽지 않아 내지 않습니다.")
+    elif counted and len(lacking) == len(counted):
+        out.append("처치 시간 ÷ 길이: 재화 흐름에 단계 길이(duration)가 없어 내지 않습니다.")
+    elif lacking:
+        out.append(f"처치 시간 ÷ 길이: 길이를 모르는 단계: {', '.join(lacking)}.")
+    sized = [s for s in timed if s["duration"] is not None]
+    if sized and all(s["kill_ratio"] is None for s in sized):
+        out.append("처치 시간 ÷ 길이: 재화 흐름의 time_unit이 초가 아니라 내지 않습니다.")
     based = [s for s in shown if s["curve"] is not None]
     if based and all(s["group_size"] is None for s in based):
         out.append("평범한 조우의 적 수: " + ("스탯 예산의 적 곡선이 없어 내지 않습니다." if not enemy_curve
@@ -512,6 +530,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
     _check_unlinked_kills(links, active, by_stage, stages, dropped, warnings)
     _check_curve_points(cfg, stages, order, active, warnings)
     empty = [k for k in order or [] if not (k in by_stage and by_stage[k]["group"])]
+    unread = [k for k in empty if dropped & {k, None} or (k in by_stage and not by_stage[k]["whole"])]   # 조우나 레벨이 형식 오류로 빠진 단계
     if empty:
         missing.add("stages")
     if not computed:
@@ -542,7 +561,8 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
         "unscored": unscored,
         "tolerance": cfg["tolerance"] if cfg else DEFAULT_TOLERANCE,
         "kills_tolerance": kills_tol,
-        "stages_without_levels": empty,
+        "stages_without_levels": [k for k in empty if k not in unread],
+        "stages_unread": unread,
         "unchecked": len(missing),
         "unchecked_kinds": sorted(missing),
         "errors": errors,
@@ -629,8 +649,10 @@ def print_extra(result: dict) -> None:
         print("레벨 구성 미확인: " + ", ".join(data_kinds) + " 데이터를 함께 검사하지 않았거나 읽지 못함")
     if "threat_budget" in kinds:
         print("레벨 구성 미확인: threat_budget이 없어 위협도를 예산과 비교하지 못함")
-    if "stages" in kinds:
+    if result["stages_without_levels"]:
         print("레벨 구성 미확인: 조우가 없는 전투 단계 " + ", ".join(result["stages_without_levels"]))
+    if result["stages_unread"]:
+        print("레벨 구성 미확인: 형식 오류로 조우를 세지 못한 전투 단계 " + ", ".join(result["stages_unread"]))
     if "nothing" in kinds:
         print("레벨 구성 미확인: 계산한 조우가 없음(빈 levels이거나 모두 삭제)")
     if "scores" in kinds:
@@ -645,10 +667,10 @@ def table(data: dict, result: dict, ids: list[str] | None = None) -> str:
         for x in lv["encounters"]:
             rows.append("| " + " | ".join((lv["id"], x["id"], x["role"] or "–", _fmt(x["repeat"]), _mix(x), _fmt(x["threat"]), _vs(x), _cost(x),
                                             f"{_fmt(x['expected'])} ({_fmt(x['low'])}~{_fmt(x['high'])})", _verdict(x))) + " |")
-    rows += ["", f"| 단계 | 순서 | 위협도 합 | {total} | 길이 | {pace} | 평범한 조우의 적 수 |", "|---|---|---|---|---|---|---|"]
+    rows += ["", f"| 단계 | 순서 | 위협도 합 | 앞 단계 대비 | {total} | 길이 | {pace} | 평범한 조우의 적 수 |", "|---|---|---|---|---|---|---|---|"]
     for s in result["stages"]:
         length = "–" if s["duration"] is None else f"{_fmt(s['duration'])}{s['time_unit']}"
-        rows.append("| " + " | ".join((s["id"], _fmt(s["position"]), _fmt(s["threat"]), _stage_time(s), length, _ratio(s), _fmt(s["group_size"]))) + " |")
+        rows.append("| " + " | ".join((s["id"], _fmt(s["position"]), _fmt(s["threat"]), _vs(s), _stage_time(s), length, _ratio(s), _fmt(s["group_size"]))) + " |")
     counted = [s for s in result["stages"] if s["kills"]]
     if counted:
         rows += ["", "재화 흐름 kills로 옮길 값(조우로 센 처치 수, 단계는 전투 단계 id, 파일에 쓰지 않음):"]

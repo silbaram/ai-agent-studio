@@ -41,7 +41,7 @@ def read_settings(data: dict, errors: list) -> dict | None:
     for key, default, top in (("offers", None, None), ("trials", DEFAULT_TRIALS, MAX_TRIALS)):
         v = cfg.get(key, default)
         if not c.is_int(v, 1) or (top is not None and v > top):
-            _err(errors, "schema", f"growth.{key}", f"{key}는 1 이상" + (f" {top} 이하" if top else "") + f"의 정수입니다: {v!r}")
+            _err(errors, "schema", f"growth.{key}", f"{c.josa(key, '은는')} 1 이상" + (f" {top} 이하" if top else "") + f"의 정수입니다: {v!r}")
             ok = False
     seed = cfg.get("seed", DEFAULT_SEED)
     if not c.is_int(seed):
@@ -212,7 +212,7 @@ def choice_stats(choices: list[dict], items: dict | None, errors: list, warnings
                 _err(errors, "unknown_item", ch["id"], f"아이템 데이터에 없는 id입니다: {ref}{did_you_mean(ref, items)}")
                 continue
             if not c.is_active(it):
-                _err(warnings, "cut_referenced", ch["id"], f"삭제(cut)된 아이템 {ref}를 주는 선택지입니다. 계산에서 뺍니다.", owner=ch["id"])
+                _err(warnings, "cut_referenced", ch["id"], f"삭제(cut)된 아이템 {c.josa(ref, '을를')} 주는 선택지입니다. 계산에서 뺍니다.", owner=ch["id"])
                 continue
             if not (isinstance(it.get("stats", {}), dict) and all(c.is_number(v) for v in it.get("stats", {}).values())):
                 unchecked = True  # 아이템의 형식 오류는 아이템 검사가 보고한다
@@ -269,7 +269,7 @@ def validate(data: dict, combat: dict | None = None, items: dict | None = None, 
             levels = [own.get(sid, level_at[sid]) for sid in order]
             for a, b, la, lb in zip(order, order[1:], levels, levels[1:]):
                 if lb < la:
-                    _err(warnings, "level_decreases", bid, f"{b}의 레벨 {lb}가 앞 단계 {a}의 {la}보다 낮습니다. 레벨은 판 안에서 줄지 않습니다.",
+                    _err(warnings, "level_decreases", bid, f"{b}의 레벨 {c.josa(lb, '이가')} 앞 단계 {a}의 {la}보다 낮습니다. 레벨은 판 안에서 줄지 않습니다.",
                          **({"owner": bid} if bid != "growth.level_at" else {}))
         gains, items_unchecked = choice_stats(active_choices, items, errors, warnings)
         if items_unchecked:
@@ -288,7 +288,7 @@ def validate(data: dict, combat: dict | None = None, items: dict | None = None, 
                         off_combat[ch["id"]] = c.ack_reason(ch, "stat_not_in_combat")
                         hint = "".join(did_you_mean(k, known) for k in extra)
                         _err(warnings, "stat_not_in_combat", ch["id"],
-                             f"선택지 {ch['id']}의 스탯 {', '.join(extra)}는 전투 계산이 쓰지 않아 효과가 0으로 계산됩니다.{hint} "
+                             f"선택지 {ch['id']}의 스탯 {c.josa(', '.join(extra), '은는')} 전투 계산이 쓰지 않아 효과가 0으로 계산됩니다.{hint} "
                              "전투 밖 효과(이동 속도 등)라면 acknowledged에 이유를 적습니다.", owner=ch["id"])
                 usable = [dict(ch, stats=gains[ch["id"]]) for ch in active_choices if ch["id"] in gains]
                 prep = cb.prepare(combat, items=items, upgrades=upgrades, enemies=enemies, crafting=crafting)
@@ -360,12 +360,12 @@ def _dominance(builds: dict, off_combat: dict, warnings: list) -> list[dict]:
             if off and all(off_combat[ch] for ch in off):
                 combat_only.append({"build": loser, "winner": winner, "off_combat_picks": off})
                 break
-            note = ""
+            note = f" {c.josa(loser, '을를')} 고를 이유가 없습니다."
             if off:
                 note = (" 전투 밖 선택지(" + ", ".join(f"{ch} 평균 {n:g}회" for ch, n in off.items()) + ")는 효과 0으로 계산했습니다. "
                         "전투 밖 효과가 의도라면 그 선택지의 acknowledged에 stat_not_in_combat 이유를 적으면 '전투 계산상 밀림'으로만 표시합니다.")
             _err(warnings, "build_dominated", loser,
-                 f"전투 계산상 빌드 {winner}가 {loser}보다 모든 단계·적에서 같거나 낫습니다.{note or f' {loser}를 고를 이유가 없습니다.'} "
+                 f"전투 계산상 빌드 {c.josa(winner, '이가')} {loser}보다 모든 단계·적에서 같거나 낫습니다.{note} "
                  "선택지 수치를 바꾸거나 빌드 정의를 확인하세요.", owner=loser)
             break
     return combat_only

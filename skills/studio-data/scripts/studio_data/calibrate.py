@@ -362,7 +362,7 @@ def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOL
     if path.is_file():
         read = datasets.read(path)
         if read["ok"] and "trials" not in read["data"]:  # 데이터 파일(playtests.json 등). 설정의 모르는 키로 보고하면 엉뚱한 오타 안내가 된다
-            raise ConfigError(f"{path.name}은 시뮬레이터 설정이 아닙니다. 시뮬레이터 설정(전투 계산 모델)이나 프로젝트·데이터 폴더를 넘기세요.")
+            raise ConfigError(f"{c.josa(path.name, '은는')} 시뮬레이터 설정이 아닙니다. 시뮬레이터 설정(전투 계산 모델)이나 프로젝트·데이터 폴더를 넘기세요.")
         cfg = mm.load_config(path)
         if cfg["model"] != "combat":
             raise ConfigError("통과율 비교는 전투 계산 모델(model: combat) 설정만 씁니다. 가정값 비교만 하려면 프로젝트 폴더를 넘기세요.")
@@ -387,7 +387,7 @@ def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOL
     for key, label in (("build", "빌드"), ("concept", "컨셉")):
         values = list(dict.fromkeys(s.get(key) for s in chosen))
         if len(values) > 1:
-            notes.append(f"{label}가 다른 세션을 합쳐 계산했습니다({', '.join(map(str, values))}). 한쪽만 보려면 --sessions로 고릅니다.")
+            notes.append(f"{c.josa(label, '이가')} 다른 세션을 합쳐 계산했습니다({', '.join(map(str, values))}). 한쪽만 보려면 --sessions로 고릅니다.")
     ids = {s["id"] for s in chosen}
     broken_counts = dict.fromkeys(w["where"] for d in logs for w in d["report"]["warnings"] if w["code"] == "stage_counts_mismatch" and w["where"] in ids)
     notes += [f"세션 {sid}: 판 수가 단계 사이에 이어지지 않습니다. 기록을 확인하세요(그대로 계산했습니다)." for sid in broken_counts]
@@ -471,9 +471,9 @@ def summarize_runs(path) -> dict:
         if run["state"] != state:
             raise ConfigError(f"{n}번째 줄: 판 {rid}의 줄마다 upgrades나 growth_build가 다릅니다. 판 안에서는 같아야 합니다.")
         if stage in [x["stage"] for x in run["stages"]]:
-            raise ConfigError(f"{n}번째 줄: 판 {rid}에 단계 {stage}가 두 번 있습니다.")
+            raise ConfigError(f"{n}번째 줄: 판 {rid}에 단계 {c.josa(stage, '이가')} 두 번 있습니다.")
         if run["failed"]:
-            raise ConfigError(f"{n}번째 줄: 판 {rid}는 앞 단계에서 실패했는데 단계 {stage}가 이어집니다.")
+            raise ConfigError(f"{n}번째 줄: 판 {c.josa(rid, '은는')} 앞 단계에서 실패했는데 단계 {c.josa(stage, '이가')} 이어집니다.")
         rec = {"stage": stage, "cleared": flag, "level": _log_number(row.get("level"), "level", n),
                "duration": _log_number(row.get("duration"), "duration", n), "kills": {}, "income": {}}
         for k, v in row.items():

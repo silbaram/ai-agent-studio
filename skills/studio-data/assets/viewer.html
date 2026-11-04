@@ -229,7 +229,7 @@ const LABEL = {
           level_missing: "레벨 없는 단계", duplicate_purchase: "중복 구매", enhance_gap: "강화 단계 어긋남", weights_ignored: "가중치 무시",
           meta_income_differs: "메타 설정과 수입 다름", meta_order_differs: "메타 설정과 순서 다름", kill_not_in_stage: "전투 단계 밖 처치",
           stage_counts_mismatch: "단계 판 수 어긋남", unknown_reference: "지금 데이터에 없는 id",
-          unknown_role: "없는 역할", kills_differ: "처치 수 다름", kills_not_linked: "이어지지 않은 처치 수", enemy_unplaced: "조우에 없는 적", curve_unused_point: "곡선의 남는 값", enemy_not_in_stage: "전투 단계 밖 적" },
+          gear_before_purchase: "구매보다 앞선 기준 장비", unknown_role: "없는 역할", kills_differ: "처치 수 다름", kills_not_linked: "이어지지 않은 처치 수", enemy_unplaced: "조우에 없는 적", curve_unused_point: "곡선의 남는 값", enemy_not_in_stage: "전투 단계 밖 적" },
   unchecked: { nothing: "계산한 것 없음", value: "가치 비교(스탯 예산 없음)", meta: "메타 성장 설정 없음", drop_tables: "드랍 테이블 없음",
                threat_budget: "위협도 예산 없음", stages: "조우 없는 단계", scores: "위협도를 내지 못한 조우", enemies: "적 데이터 없음", combat: "전투 계산 없음" },
 };
@@ -494,7 +494,7 @@ function renderSummary(ds, idx) {
       el("span", { class: "mono", text: it.where + " " }), it.message)),
     ...acks.map((it) => el("li", { onclick: () => focusTarget(it.where) },
       el("span", { class: "tag info", text: "확인함 · " + (LABEL.code[it.code] || it.code) }),
-      el("span", { class: "mono", text: it.where + " " }), it.reason)));
+      el("span", { class: "mono", text: it.where + (it.part && it.part !== it.where ? `(${it.part})` : "") + " " }), it.reason)));
 }
 
 function focusTarget(where) {
@@ -988,7 +988,7 @@ function renderEconomy(ds, idx) {
     return el("tr", { "data-id": p.id, class: issues.length ? "has-warn" : "" },
       el("td", { class: "name" }, el("div", {}, el("span", { class: "nm", text: p.name || p.id })), p.name ? el("div", { class: "mono muted", text: p.id }) : null, badges(issues)),
       el("td", { text: p.currency + (carry(p.currency) ? " (판 사이 유지)" : "") }), el("td", { class: "num" }, num(p.price)),
-      el("td", { class: "num" + (bad ? " off" : "") }, when), el("td", { class: "mono" }, p.stage || dash()));
+      el("td", { class: "num" + (bad ? " off" : "") }, when), el("td", { class: "mono" }, p.stage ? p.stage + (r.purchase_timing === "stage_end" ? " 끝" : "") : dash()));
   });
   const left = Object.entries(r.leftover || {}).map(([k, v]) => el("tr", {}, el("td", { class: "mono", text: k }), el("td", { class: "num" }, num(v.amount)),
     el("td", { class: "num" + ((r.warnings || []).some((w) => w.code === "currency_piles_up" && w.where.endsWith("." + k)) ? " off" : "") }, Math.round(v.share * 100) + "%")));
@@ -1034,6 +1034,7 @@ function renderLevels(ds, idx) {
   const pace = (s) => (given(s.kill_ratio) ? `${s.kill_ratio.toFixed(2)}배` : given(s.hits_per_unit) ? `${s.hits_per_unit.toFixed(2)}타/${s.time_unit || ""}` : null);
   const stageRows = stages.map((s) => el("tr", {},
     el("td", { class: "mono", text: s.id }), el("td", { class: "num" }, num(s.position)), el("td", { class: "num" }, num(s.threat)),
+    el("td", { class: "num" }, given(s.vs_previous) ? `×${fmt(Math.round(s.vs_previous * 100) / 100)}` : dash()),
     el("td", { class: "num" }, cost(s) === null ? dash() : atLeast(s, cost(s)) + (leftOut(s).length ? ` (${leftOut(s).join(", ")} 제외)` : "")),
     el("td", { class: "num" }, s.duration === null || s.duration === undefined ? dash() : `${fmt(s.duration)}${s.time_unit || ""}`),
     el("td", { class: "num" + (s.kill_ratio > 1 ? " off" : "") }, pace(s) === null ? dash() : atLeast(s, pace(s))),
@@ -1049,7 +1050,7 @@ function renderLevels(ds, idx) {
       : el("p", { class: "muted", text: "threat_budget이 없어 예산과 비교하지 않습니다." }),
       r.run_threat === null || r.run_threat === undefined ? null : el("p", { text: `판 전체 위협도 ${fmt(r.run_threat)}` })),
     ...(Array.isArray(r.notes) ? r.notes : []).map(hint),
-    stageRows.length ? small(["단계", "순서", "위협도 합", byHits ? "단일 대상 처치 타수" : "단일 대상 처치 시간(초)", "길이", byHits ? "타수 ÷ 길이" : "처치 시간 ÷ 길이", "평범한 조우의 적 수"], stageRows, "") : null)];
+    stageRows.length ? small(["단계", "순서", "위협도 합", "앞 단계 대비", byHits ? "단일 대상 처치 타수" : "단일 대상 처치 시간(초)", "길이", byHits ? "타수 ÷ 길이" : "처치 시간 ÷ 길이", "평범한 조우의 적 수"], stageRows, "") : null)];
   for (const lv of list.filter((e) => matches(ds, e, entryIssues(idx, e.id)))) {
     const info = (r.levels || []).find((x) => x.id === lv.id);
     const encounters = info ? info.encounters : (Array.isArray(lv.encounters) ? lv.encounters.filter(object) : []);

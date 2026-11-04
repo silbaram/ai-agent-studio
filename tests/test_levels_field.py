@@ -36,7 +36,7 @@ def differ(result, enemy="a"):
 
 
 def stage_cells(result, sid="s1"):
-    return next(x for x in lv.table({}, result).splitlines() if x.startswith(f"| {sid} | ") and x.count("|") == 8)
+    return next(x for x in lv.table({}, result).splitlines() if x.startswith(f"| {sid} | ") and x.count("|") == 9)
 
 
 class EnemyRepeat(unittest.TestCase):

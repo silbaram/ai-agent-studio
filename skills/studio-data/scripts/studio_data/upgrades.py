@@ -34,7 +34,7 @@ def check_schema(upgrades: list, errors: list) -> list[dict]:
             ok = False
         for f in ("track",):
             if f in u and not isinstance(u[f], str):
-                errors.append({"code": "schema", "where": where, "message": f"{f}는 문자열이어야 합니다."})
+                errors.append({"code": "schema", "where": where, "message": f"{c.josa(f, '은는')} 문자열이어야 합니다."})
                 ok = False
         if "level" in u and u["level"] is not None and not c.is_int(u["level"]):
             errors.append({"code": "schema", "where": where, "message": "level은 정수여야 합니다."})

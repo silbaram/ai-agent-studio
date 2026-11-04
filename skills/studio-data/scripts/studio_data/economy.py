@@ -16,6 +16,7 @@ from . import meta_sim
 from .common import add_issue as _err, did_you_mean
 
 PRICE_SOURCES = ("items", "enhance", "recipes", "upgrades")
+PURCHASE_TIMINGS = ("any", "stage_end")  # 단계 안 어느 때나 산다 / 단계가 끝날 때만 산다(라운드 사이의 상점)
 PRICE_KEY = {"item": "items", "enhance": "enhance", "recipe": "recipes", "upgrade": "upgrades"}
 INCOME_PARTS = ("kills", "drops", "other")
 UNCHECKED_LABEL = {"enemies": "적", "items": "아이템", "upgrades": "영구 강화", "crafting": "강화·합성",
@@ -32,7 +33,7 @@ def _amounts(d, currencies: dict, where: str, label: str, errors: list) -> dict 
     if d is None:
         return {}
     if not (isinstance(d, dict) and all(isinstance(k, str) and _num(v) for k, v in d.items())):
-        _err(errors, "schema", where, f"{label}은 {{재화: 0 이상의 수}}여야 합니다.")
+        _err(errors, "schema", where, f"{c.josa(label, '은는')} {{재화: 0 이상의 수}}여야 합니다.")
         return None
     unknown = [k for k in d if k not in currencies]
     if unknown:
@@ -77,7 +78,7 @@ def read_settings(data: dict, errors: list) -> dict | None:
             _err(errors, "schema", "economy.prices", f"알 수 없는 가격 출처 '{k}'.{did_you_mean(k, PRICE_SOURCES)} 출처: {', '.join(PRICE_SOURCES)}")
         elif v not in cur:
             _err(errors, "schema", f"economy.prices.{k}",
-                 f"prices.{k}의 재화 {v!r}가 currencies에 없습니다.{did_you_mean(str(v), cur)} 이 출처의 가격을 쓰는 구매는 계산에서 뺍니다.")
+                 f"prices.{k}의 재화 {c.josa(repr(v), '이가')} currencies에 없습니다.{did_you_mean(str(v), cur)} 이 출처의 가격을 쓰는 구매는 계산에서 뺍니다.")
             bad[k] = v
         else:
             good[k] = v
@@ -85,10 +86,14 @@ def read_settings(data: dict, errors: list) -> dict | None:
     if left is not None and not (_num(left) and left <= 1):
         _err(errors, "schema", "economy.leftover_max", "leftover_max는 0~1 비율입니다(판 끝에 남아도 되는 수입의 비율).")
         ok = False
+    timing = cfg.get("purchase_timing", "any")
+    if timing not in PURCHASE_TIMINGS:
+        _err(errors, "schema", "economy.purchase_timing", f"purchase_timing은 {', '.join(PURCHASE_TIMINGS)} 중 하나입니다: {timing!r}")
+        ok = False
     if not ok:
         return None
     return {"currencies": cur, "kill_reward": kill, "sell": sell, "prices": good, "bad_prices": bad, "leftover_max": left,
-            "time_unit": c.time_unit(cfg)}
+            "time_unit": c.time_unit(cfg), "purchase_timing": timing}
 
 
 # ---------- 수입 ----------
@@ -140,7 +145,7 @@ def _stage_income(s: dict, settings: dict, refs: dict, errors: list, warnings: l
     ok = other is not None
     for key, val in (("kills", kills), ("drops", drops)):
         if not (isinstance(val, dict) and all(isinstance(k, str) and _num(v) for k, v in val.items())):
-            _err(errors, "schema", where, f"{key}는 {{id: 0 이상의 횟수}}여야 합니다.")
+            _err(errors, "schema", where, f"{c.josa(key, '은는')} {{id: 0 이상의 횟수}}여야 합니다.")
             ok = False
     if not ok:
         return None
@@ -229,7 +234,7 @@ def _price(p: dict, settings: dict, refs: dict, errors: list, warnings: list, mi
     currency = settings["prices"].get(source)
     if currency is None:
         if source not in settings["bad_prices"]:  # 틀린 재화는 economy.prices에서 이미 보고했다
-            _err(errors, "schema", where, f"{source} 가격의 재화가 정해지지 않았습니다. economy.prices.{source}를 적습니다.")
+            _err(errors, "schema", where, f"{source} 가격의 재화가 정해지지 않았습니다. economy.prices.{c.josa(source, '을를')} 적습니다.")
         return "error"
     ref = spec[kind]
     if source in ("items", "upgrades"):
@@ -246,7 +251,7 @@ def _price(p: dict, settings: dict, refs: dict, errors: list, warnings: list, mi
             return "cut"
         field = "price" if source == "items" else "cost"
         if not c.is_number(e.get(field)):
-            _err(errors, "price_missing", where, f"{label} {ref}에 {field}가 없습니다.")
+            _err(errors, "price_missing", where, f"{label} {ref}에 {c.josa(field, '이가')} 없습니다.")
             return "error"
         return e[field], currency
     if refs["crafting"] is None:
@@ -308,6 +313,52 @@ def _stage_at(stages: list[dict], t: float) -> str:
             return s["id"]
         acc += s["duration"]
     return stages[-1]["id"] if stages else ""
+
+def _stage_end(stages: list[dict], t: float) -> tuple[float, str]:
+    """시점 t 뒤로 처음 끝나는 단계의 끝과 그 단계. 단계 사이에만 사는 게임의 구매 시점이다. 판을 시작할 때 살 수 있으면 그대로 둔다."""
+    if not stages:
+        return 0.0, ""
+    if t <= EPS:
+        return 0.0, stages[0]["id"]
+    end = 0.0
+    for s in stages:
+        end += s["duration"]
+        if t <= end + EPS:
+            return end, s["id"]
+    return end, stages[-1]["id"]
+
+
+def _kit_buys(x, item_buys: dict, enhance_buys: dict) -> list:
+    """기준 장비 한 칸을 사는 구매 [(이름, 구매 행)]. 아이템을 사는 구매와, 강화했으면 그 단계에 처음 닿는 구매다. 합성으로 얻는 장비는 보지 않는다."""
+    rid = x.get("item") if isinstance(x, dict) else x
+    out = [(rid, item_buys[rid])] if isinstance(rid, str) and rid in item_buys else []
+    if isinstance(x, dict) and isinstance(x.get("enhance"), str) and c.is_int(x.get("level")):
+        reach = next((row for level, row in enhance_buys.get(x["enhance"], []) if level >= x["level"]), None)
+        if reach:
+            out.append((f"{rid} +{x['level']}", reach))
+    return out
+
+
+def _check_gear(item_buys: dict, enhance_buys: dict, stages: list[dict], combat_stages: dict, stage_end: bool, warnings: list) -> None:
+    """전투 단계의 기준 장비가 구매 계획보다 앞서면 알린다. 처치 시간의 입력이 아직 살 수 없는 장비가 된다.
+    단계 끝에 사면 다음 단계부터, 단계 안에서 사면 그 단계부터 쓴다고 본다."""
+    place = {s["id"]: n for n, s in enumerate(stages)}
+    linked: dict = {}
+    for n, s in enumerate(stages):
+        linked.setdefault(c.combat_link(s), n)
+    for sid, cs in combat_stages.items():
+        kit = (cs.get("player") or {}).get("items") if isinstance(cs.get("player"), dict) else None
+        if sid not in linked or not c.is_active(cs) or not isinstance(kit, list):
+            continue
+        for name, row in (pair for x in kit for pair in _kit_buys(x, item_buys, enhance_buys)):
+            if row["stage"] not in place or row["at"] <= EPS:  # 시점이 없는 구매는 stage도 없다. 판을 시작할 때 산 것은 어느 단계에나 있다
+                continue
+            bought = place[row["stage"]]
+            if bought > linked[sid] or (stage_end and bought == linked[sid]):
+                _err(warnings, "gear_before_purchase", row["id"],
+                     f"전투 단계 {sid}의 기준 장비에 {c.josa(name, '이가')} 있는데 구매 계획은 {row['stage']}{' 끝' if stage_end else ''}에 삽니다. "
+                     "기준 장비를 맞추거나, 드랍처럼 다른 길로 먼저 얻으면 acknowledged에 이유를 적습니다.", owner=row["id"], part=sid)
+
 
 def _time_reaching(stages: list[dict], currency: str, amount: float, settings: dict) -> tuple[float, str] | None:
     """누적 수입이 amount에 처음 닿는 판 안의 시점과 그 단계. 닿지 못하면 None. 단계 안에서는 고르게 들어온다고 본다."""
@@ -387,6 +438,8 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
         reached: dict = {}         # 강화 → 앞 구매까지 오른 단계
         blocked: dict = {}         # 재화 → 시점을 계산하지 못한 앞 구매("*"는 재화를 알 수 없음 = 모든 재화)
         upgrade_order: dict = {}   # 재화 → 계획 순서대로 사는 영구 강화
+        item_buys: dict = {}       # 아이템 → 처음 사는 구매 행
+        enhance_buys: dict = {}    # 강화 → [(닿는 단계, 구매 행)] 계획 순서대로
         for p in (x for x in buys if c.is_active(x)):
             spec = p.get("price") if isinstance(p.get("price"), dict) else {}
             ref_up, prior = spec.get("upgrade"), set(planned_ups)
@@ -436,6 +489,10 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
             row = {"id": p["id"], "name": p.get("name"), "currency": currency, "price": round(price, 4),
                    "at": None, "stage": None, "runs": None, "affordable": True, "out_of_range": False, "blocked": None}
             rows.append(row)
+            if isinstance(spec.get("item"), str):
+                item_buys.setdefault(spec["item"], row)
+            if isinstance(ref_enh, str) and c.is_int(spec.get("level")):
+                enhance_buys.setdefault(ref_enh, []).append((spec["level"], row))
             stop = blocked.get(currency) or blocked.get("*")
             if stop:
                 row["blocked"] = stop  # 앞 구매를 계산하지 못해 이 구매의 시점도 알 수 없다(목표도 검사하지 않는다)
@@ -451,9 +508,9 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
                 if hit:
                     # 돈이 모이는 시점, 파는 단계가 시작하는 시점, 앞선 구매 시점 중 가장 늦은 때(계획 순서대로 산다)
                     at = max(hit[0], starts.get(after, 0.0), last_time)
+                    at, row["stage"] = _stage_end(timeline, at) if settings["purchase_timing"] == "stage_end" else (at, _stage_at(timeline, at))
                     last_time = at
                     row["at"] = round(at, 4)
-                    row["stage"] = _stage_at(timeline, at)
                 row["affordable"] = hit is not None or not complete
                 measure, unit = row["at"], settings["time_unit"]
             if not row["affordable"]:
@@ -466,6 +523,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
                 row["out_of_range"] = True
                 _err(warnings, "target_out_of_range", p["id"],
                      f"{c.josa(p['id'], '을를')} {c.num_text(measure)}{unit}에 삽니다. 목표 {c.josa(c.range_text(target) + unit, '을를')} 벗어납니다.", owner=p["id"])
+        _check_gear(item_buys, enhance_buys, [x for x in stages if c.is_active(x)], combat_stages, settings["purchase_timing"] == "stage_end", warnings)
         if complete:
             for k in cur:
                 if cur[k].get("carry") or per_run[k] <= 0 or k in blocked or "*" in blocked:
@@ -493,6 +551,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
         "count": len(stages) + len(buys),
         **summary,
         "time_unit": c.time_unit(settings),
+        "purchase_timing": settings["purchase_timing"] if settings else "any",
         "currencies": {k: {"name": v.get("name"), "carry": bool(v.get("carry"))} for k, v in (settings or {}).get("currencies", {}).items()},
         "stages": timeline,
         "purchases": rows,
@@ -530,7 +589,7 @@ def _check_link(s: dict, combat: dict | None, combat_stages: dict, free: list, e
     for k in sorted(k for k in kills if foes is not None and k not in foes):  # 적마다 확인할 수 있게 한 줄씩 낸다
         _err(warnings, "kill_not_in_stage", s["id"],
              f"전투 단계 {link}에 나오지 않는 적의 처치를 셉니다: {k}. 전투 계산과 재화 흐름이 다른 적을 보고 있습니다."
-             f"{cb.earlier_zone_hint([k], cs, enemies)}{cb.CONDITIONAL_HINT}", owner=s["id"], part=k)
+             f"{cb.outside_hint([k], cs, enemies)}", owner=s["id"], part=k)
 
 
 def _check_meta(settings: dict, meta: dict | None, complete: bool, blocked: dict, per_run: dict, upgrade_order: dict,
@@ -545,7 +604,7 @@ def _check_meta(settings: dict, meta: dict | None, complete: bool, blocked: dict
             missing.add("meta")
             continue
         if "error" in cfg:
-            _err(errors, "schema", where, f"meta_config {v['meta_config']}를 읽지 못했습니다: {cfg['error']}")
+            _err(errors, "schema", where, f"meta_config {c.josa(v['meta_config'], '을를')} 읽지 못했습니다: {cfg['error']}")
             continue
         if not complete or k in blocked or "*" in blocked:
             continue
@@ -584,7 +643,8 @@ def _when(p: dict, result: dict) -> str:
         return "살 수 없음"
     if result["currencies"].get(p["currency"], {}).get("carry"):
         return f"{p['runs']}번째 판" if p["runs"] is not None else "–"
-    return f"{_fmt(p['at'])}{result['time_unit']} ({p['stage']})" if p["at"] is not None else "–"
+    end = " 끝" if result["purchase_timing"] == "stage_end" else ""
+    return f"{_fmt(p['at'])}{result['time_unit']} ({p['stage']}{end})" if p["at"] is not None else "–"
 
 
 def print_extra(result: dict) -> None:
@@ -611,9 +671,10 @@ def table(data: dict, result: dict, ids: list[str] | None = None) -> str:
         rows.append("| " + " | ".join((st["id"], _fmt(st["duration"]) + unit, _amounts_text(st["income"]), _amounts_text(st["rate"]),
                                         _amounts_text(st["cumulative"]) if st["cumulative"] is not None else "– (앞 단계 미확인)")) + " |")
     rows += ["", f"| 구매 | 재화 | 가격 | 시점({unit}) | 단계 | 판 | 판정 |", "|---|---|---|---|---|---|---|"]
+    end = " 끝" if result["purchase_timing"] == "stage_end" else ""
     for p in result["purchases"]:
         verdict = ("미확인" if p.get("blocked") else "살 수 없음" if not p["affordable"] else "목표 이탈" if p["out_of_range"] else "–")
-        rows.append("| " + " | ".join((p["id"], p["currency"], _fmt(p["price"]), _fmt(p["at"]), p["stage"] or "–", _fmt(p["runs"]), verdict)) + " |")
+        rows.append("| " + " | ".join((p["id"], p["currency"], _fmt(p["price"]), _fmt(p["at"]), (p["stage"] + end) if p["stage"] else "–", _fmt(p["runs"]), verdict)) + " |")
     rows += ["", "기대값 계산입니다. 처치 수·드랍 횟수는 기획 가정이며, 실제 체감이나 재미를 판정하지 않습니다."]
     return "\n".join(rows)
 

@@ -61,8 +61,11 @@ _DIGIT_FINAL = "0136780"  # 영·일·삼·육·칠·팔·십(0)은 받침이 �
 
 
 def josa(word: str, pair: str) -> str:
-    """word에 받침에 맞는 조사를 붙인다. pair: "을를", "이가", "은는", "과와". 영문으로 끝나면 받침 없는 쪽."""
-    last = str(word)[-1:] if word else ""
+    """word에 받침에 맞는 조사를 붙인다. pair: "을를", "이가", "은는", "과와". 닫는 따옴표는 건너뛰고 본다.
+    영문은 끝소리를 글자로 알 수 없어(queen, elite) 두 조사를 함께 적는다."""
+    last = str(word).rstrip("'\"")[-1:] if word else ""
+    if last.isascii() and last.isalpha():
+        return f"{word}{pair[0]}({pair[1]})"
     if "가" <= last <= "힣":
         final = (ord(last) - 0xAC00) % 28 != 0
     else:
@@ -176,7 +179,7 @@ def load_dataset(path: Path, expected: str | None = None) -> tuple[str | None, d
         if kind not in CSV_KINDS:
             raise ValueError("CSV 종류를 알 수 없습니다. 파일 이름에 items / upgrades / enemies를 넣으세요. 컨셉은 JSON만 지원합니다.")
         return kind, {kind: read_csv(path, kind)}
-    with path.open(encoding="utf-8") as fh:
+    with path.open(encoding="utf-8-sig") as fh:  # Windows 메모장은 BOM을 붙여 저장한다
         data = json.load(fh)
     if isinstance(data, list) and expected:
         data = {expected: data}
@@ -190,7 +193,7 @@ def check_common(entry: dict, where: str, errors: list) -> bool:
     ok = True
     for f in TEXT_FIELDS:
         if f in entry and not isinstance(entry[f], str):
-            errors.append({"code": "schema", "where": where, "message": f"{f}는 문자열이어야 합니다."})
+            errors.append({"code": "schema", "where": where, "message": f"{josa(f, '은는')} 문자열이어야 합니다."})
             ok = False
     status = entry.get("status")
     if status is not None and status not in STATUSES:
@@ -258,8 +261,8 @@ def pick_weights(own, costs: dict | None, entries: list[dict], own_key: str, cos
     if own and ratios and max(ratios.values()) > min(ratios.values()) * (1 + 1e-6):
         diff = ", ".join(f"{k} {num_text(own.get(k, 1.0))}/{num_text(costs[k])}" for k in used[:4])
         add_issue(warnings, "weights_ignored", own_key,
-                  f"{own_key}가 스탯 예산({costs_key})과 비율이 달라 무시하고 budget.json의 원가를 씁니다({own_key}/원가: {diff}). "
-                  f"{own_key}를 지우거나 같은 비율로 맞춥니다.")
+                  f"{josa(own_key, '이가')} 스탯 예산({costs_key})과 비율이 달라 무시하고 budget.json의 원가를 씁니다({own_key}/원가: {diff}). "
+                  f"{josa(own_key, '을를')} 지우거나 같은 비율로 맞춥니다.")
     # 원가가 없는 스탯(예산 비교에서는 stat_without_cost로 빠진다)은 옛 가중치를 원가 단위로 바꿔 쓴다. 1로 두면 판정이 조용히 바뀐다
     ordered = sorted(ratios.values())
     scale = 1 / ordered[len(ordered) // 2] if ordered else 1.0

@@ -96,7 +96,7 @@ def read_settings(data: dict, errors: list) -> dict | None:
         params = [k for k in FORMS[formula["form"]]]
         bad = [k for k in params if not c.is_number(formula.get(k))]
         if bad:
-            _err(errors, "schema", "combat.defense", f"{formula['form']} 공식에는 수 {', '.join(bad)}가 필요합니다.")
+            _err(errors, "schema", "combat.defense", f"{formula['form']} 공식에는 수 {c.josa(', '.join(bad), '이가')} 필요합니다.")
             ok = False
         elif ((formula["form"] == "ratio" and formula["k"] <= 0)
               or (formula["form"] == "percent" and not 0 < formula["cap"] <= 100)
@@ -153,15 +153,15 @@ def _enhance_bonus(x: dict, item: dict, refs: dict, where: str, errors: list, wa
     if not cr.check_track(track, []):
         return None, 1  # 강화의 형식 오류는 강화·합성 검사가 보고한다
     if not c.is_active(track):
-        _err(warnings, "cut_referenced", where, f"삭제(cut)된 강화 {x['enhance']}를 기준 장비에 썼습니다. 강화 없이 계산합니다.", owner=where)
+        _err(warnings, "cut_referenced", where, f"삭제(cut)된 강화 {c.josa(x['enhance'], '을를')} 기준 장비에 썼습니다. 강화 없이 계산합니다.", owner=where)
         return 0.0, 0
     targets = track.get("items")
     fits = x["item"] in targets if targets is not None else all(item.get(k) == v for k, v in track["applies_to"].items())
     if not fits:
-        _err(errors, "schema", where, f"아이템 {x['item']}는 강화 {x['enhance']}의 대상이 아닙니다.")
+        _err(errors, "schema", where, f"아이템 {c.josa(x['item'], '은는')} 강화 {x['enhance']}의 대상이 아닙니다.")
         return None, 0
     if x["level"] > len(track["levels"]):
-        _err(errors, "schema", where, f"강화 {x['enhance']}는 +{len(track['levels'])}까지입니다: level {x['level']}")
+        _err(errors, "schema", where, f"강화 {c.josa(x['enhance'], '은는')} +{len(track['levels'])}까지입니다: level {x['level']}")
         return None, 0
     return sum(lv.get("bonus_pct", 0.0) for lv in track["levels"][:x["level"]]), 0
 
@@ -183,7 +183,7 @@ def _player(stage: dict, settings: dict, refs: dict, errors: list, warnings: lis
     for kind, label in (("items", "아이템"), ("upgrades", "영구 강화")):
         ids = player.get(kind, [])
         if not (isinstance(ids, list) and all((_item_ref if kind == "items" else lambda x: isinstance(x, str))(x) for x in ids)):
-            _err(errors, "schema", where, f"player.{kind}는 {label} id 배열이어야 합니다"
+            _err(errors, "schema", where, f"player.{c.josa(kind, '은는')} {label} id 배열이어야 합니다"
                  + (". 강화한 아이템은 {\"item\": id, \"enhance\": 강화 id, \"level\": 단계}로 적습니다." if kind == "items" else "."))
             ok = False
             continue
@@ -198,7 +198,7 @@ def _player(stage: dict, settings: dict, refs: dict, errors: list, warnings: lis
                 _err(errors, "unknown_item" if kind == "items" else "unknown_upgrade", where, f"{label} 데이터에 없는 id입니다: {rid}")
                 ok = False
             elif not c.is_active(e):
-                _err(warnings, "cut_referenced", where, f"삭제(cut)된 {label} {rid}를 기준 장비에 넣었습니다. 계산에서 뺍니다.", owner=where)
+                _err(warnings, "cut_referenced", where, f"삭제(cut)된 {label} {c.josa(rid, '을를')} 기준 장비에 넣었습니다. 계산에서 뺍니다.", owner=where)
             else:
                 stats = _stats_of(e)
                 if stats is None:
@@ -222,7 +222,7 @@ def _player(stage: dict, settings: dict, refs: dict, errors: list, warnings: lis
             missing = [r for r in reqs if isinstance(r, str) and r not in owned] if isinstance(reqs, list) else []
             if missing:
                 _err(warnings, "requirement_missing", where,
-                     f"기준 장비의 강화 {uid}는 {', '.join(missing)}가 먼저 필요합니다. 살 수 없는 조합으로 계산됩니다.", owner=where)
+                     f"기준 장비의 강화 {c.josa(uid, '은는')} {c.josa(', '.join(missing), '이가')} 먼저 필요합니다. 살 수 없는 조합으로 계산됩니다.", owner=where)
     return (total if ok else None), unchecked
 
 
@@ -338,7 +338,7 @@ def stage_enemies(stage: dict, enemies: dict, errors: list, warnings: list) -> l
             if eid not in enemies:
                 _err(errors, "unknown_enemy", where, f"적 데이터에 없는 id입니다: {eid}")
             elif not c.is_active(enemies[eid]):
-                _err(warnings, "cut_referenced", where, f"삭제(cut)된 적 {eid}를 이 단계에 넣었습니다. 계산에서 뺍니다.", owner=where)
+                _err(warnings, "cut_referenced", where, f"삭제(cut)된 적 {c.josa(eid, '을를')} 이 단계에 넣었습니다. 계산에서 뺍니다.", owner=where)
             else:
                 out.append(enemies[eid])
         return out
@@ -386,6 +386,12 @@ def earlier_zone_hint(outside: list, stage: dict, enemies: dict | None) -> str:
         return f" 앞 구역에서 처음 나온 적: {names}. 평소에도 이 단계에 나오면 전투 단계 {stage['id']}의 enemies 목록에 넣습니다."
     return (f" 앞 구역에서 처음 나온 적: {names}. 앞 구역의 적이 모두 계속 나오면 전투 단계 {stage['id']}에 zone_rule: \"up_to\"를, "
             "일부만 이어지면 enemies 목록을 적습니다.")
+
+
+def outside_hint(outside: list, stage: dict, enemies: dict | None) -> str:
+    """단계 밖의 적을 놓았을 때의 처방. 평소에도 나오는 적과 조건부로 나오는 적을 함께 말한다."""
+    usual = earlier_zone_hint(outside, stage, enemies) or f" 평소에도 이 단계에 나오면 전투 단계 {stage['id']}의 enemies 목록에 넣습니다."
+    return usual + CONDITIONAL_HINT
 
 
 def _role_names(settings: dict, stages: list[dict], refs: dict, warnings: list) -> dict:
@@ -490,7 +496,7 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
             me = _side(stats, roles["player"])
             lacking = [roles["player"][r] for r in REQUIRED_ROLES if not c.is_number(me[r])]
             if lacking:
-                _err(errors, "missing_stat", where, f"플레이어에 {', '.join(lacking)}가 없습니다(base·아이템·강화 합계 기준).")
+                _err(errors, "missing_stat", where, f"플레이어에 {c.josa(', '.join(lacking), '이가')} 없습니다(base·아이템·강화 합계 기준).")
                 continue
             bad = _bad_stats(me, roles["player"])
             if bad:
@@ -513,7 +519,7 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
                 unmapped["enemy"] |= set(estats) - set(roles["enemy"].values())
                 lacking = [roles["enemy"][r] for r in REQUIRED_ROLES if not c.is_number(foe[r])]
                 if lacking:
-                    _err(errors, "missing_stat", ewhere, f"적 {e['id']}에 {', '.join(lacking)}가 없습니다.")
+                    _err(errors, "missing_stat", ewhere, f"적 {e['id']}에 {c.josa(', '.join(lacking), '이가')} 없습니다.")
                     continue
                 bad = _bad_stats(foe, roles["enemy"])
                 if bad:
@@ -593,7 +599,7 @@ def _check_upgrade_stats(settings: dict, stages: list, stage_info: dict, upgrade
             problem = _side_problem(_side(total, roles), roles, formula)
             if problem:
                 _err(errors, "bad_stat", f"upgrades:{uid}",
-                     f"영구 강화 {uid}를 단계 {sid}의 기준 장비에 더하면 플레이어 스탯을 계산에 쓸 수 없습니다: {problem}. 강화 수치를 고치세요.")
+                     f"영구 강화 {c.josa(uid, '을를')} 단계 {sid}의 기준 장비에 더하면 플레이어 스탯을 계산에 쓸 수 없습니다: {problem}. 강화 수치를 고치세요.")
                 break
 
 

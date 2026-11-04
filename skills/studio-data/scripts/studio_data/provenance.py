@@ -142,7 +142,7 @@ def _missing_session(path: Path, sid: str) -> str | None:
     if path.suffix.lower() != ".json" or not path.is_file():
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return None
     if not (isinstance(data, dict) and isinstance(data.get("playtests"), list)):
