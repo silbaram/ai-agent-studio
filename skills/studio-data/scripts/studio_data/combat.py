@@ -360,6 +360,20 @@ def stage_foes(stage: dict, enemies: dict | None) -> set | None:
     return None if found is None else {e["id"] for e in found}
 
 
+CONDITIONAL_HINT = " 플레이어 행동으로만 나오는 조건부 적이면 단계에 넣지 않고 acknowledged에 이유를 적습니다."
+
+
+def stage_hint(sid: str, free: list, order: list, free_label: str, near_note: str) -> str:
+    """없는 전투 단계의 안내. 아직 이어지지 않은 단계(free)를 먼저 오타로 본다. 이미 이어진 단계는 이름만 비슷한 새 단계일 수 있어 오타로 단정하지 않는다."""
+    text = did_you_mean(sid, free)
+    near = None if text else c.closest(sid, [k for k in order if k not in free])
+    if free:
+        text += f" {free_label}: {', '.join(free)}."
+    if near:
+        text += f" 이름이 비슷한 단계: {near}({near_note})."
+    return text
+
+
 def earlier_zone_hint(outside: list, stage: dict, enemies: dict | None) -> str:
     """단계 밖의 적 중 앞 구역에서 처음 나온 적이 있으면 안내. 없으면 빈 문자열.
     up_to는 앞 구역의 적을 모두 넣는다. 일부만 이어지는 게임이면 끝난 적까지 들어오므로 단계의 enemies 목록을 쓴다."""
@@ -369,7 +383,7 @@ def earlier_zone_hint(outside: list, stage: dict, enemies: dict | None) -> str:
         return ""
     names = ", ".join(earlier)
     if isinstance(stage.get("enemies"), list):
-        return f" 앞 구역에서 처음 나온 적: {names}. 이 단계에도 나오면 전투 단계 {stage['id']}의 enemies 목록에 넣습니다."
+        return f" 앞 구역에서 처음 나온 적: {names}. 평소에도 이 단계에 나오면 전투 단계 {stage['id']}의 enemies 목록에 넣습니다."
     return (f" 앞 구역에서 처음 나온 적: {names}. 앞 구역의 적이 모두 계속 나오면 전투 단계 {stage['id']}에 zone_rule: \"up_to\"를, "
             "일부만 이어지면 enemies 목록을 적습니다.")
 

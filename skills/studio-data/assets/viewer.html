@@ -1028,11 +1028,15 @@ function renderLevels(ds, idx) {
   const stages = (Array.isArray(r.stages) ? r.stages : []).filter(object);
   const leftOut = (s) => (Array.isArray(s.kill_time_unknown) ? s.kill_time_unknown : []);
   const atLeast = (s, text) => (leftOut(s).length ? `${text} 이상` : text);  // 처치 시간을 모르는 적을 뺀 값은 실제보다 작다
+  const byHits = r.kill_measure === "hits";  // 공격 속도가 없는 게임은 열 이름도 타수다
+  const given = (v) => v !== null && v !== undefined;
+  const cost = (x) => (given(x.kill_time) ? fmt(x.kill_time) : given(x.kill_hits) ? `${fmt(x.kill_hits)}타` : null);  // 처치 시간이 없는 게임은 타수
+  const pace = (s) => (given(s.kill_ratio) ? `${s.kill_ratio.toFixed(2)}배` : given(s.hits_per_unit) ? `${s.hits_per_unit.toFixed(2)}타/${s.time_unit || ""}` : null);
   const stageRows = stages.map((s) => el("tr", {},
     el("td", { class: "mono", text: s.id }), el("td", { class: "num" }, num(s.position)), el("td", { class: "num" }, num(s.threat)),
-    el("td", { class: "num" }, s.kill_time === null || s.kill_time === undefined ? dash() : atLeast(s, fmt(s.kill_time)) + (leftOut(s).length ? ` (${leftOut(s).join(", ")} 제외)` : "")),
+    el("td", { class: "num" }, cost(s) === null ? dash() : atLeast(s, cost(s)) + (leftOut(s).length ? ` (${leftOut(s).join(", ")} 제외)` : "")),
     el("td", { class: "num" }, s.duration === null || s.duration === undefined ? dash() : `${fmt(s.duration)}${s.time_unit || ""}`),
-    el("td", { class: "num" + (s.kill_ratio > 1 ? " off" : "") }, s.kill_ratio === null || s.kill_ratio === undefined ? dash() : atLeast(s, `${s.kill_ratio.toFixed(2)}배`)),
+    el("td", { class: "num" + (s.kill_ratio > 1 ? " off" : "") }, pace(s) === null ? dash() : atLeast(s, pace(s))),
     el("td", { class: "num" }, num(s.group_size))));
   const general = idx.all.filter((x) => !known.has(String(x.where).split(".")[0]));
   const curveText = curve.growth === "table" ? "단계별 표" : `${curve.growth || "linear"} · 시작 ${fmt(curve.base)} · 변화 ${fmt(curve.rate)}`;
@@ -1045,7 +1049,7 @@ function renderLevels(ds, idx) {
       : el("p", { class: "muted", text: "threat_budget이 없어 예산과 비교하지 않습니다." }),
       r.run_threat === null || r.run_threat === undefined ? null : el("p", { text: `판 전체 위협도 ${fmt(r.run_threat)}` })),
     ...(Array.isArray(r.notes) ? r.notes : []).map(hint),
-    stageRows.length ? small(["단계", "순서", "위협도 합", "단일 대상 처치 시간(초)", "길이", "처치 시간 ÷ 길이", "평범한 조우의 적 수"], stageRows, "") : null)];
+    stageRows.length ? small(["단계", "순서", "위협도 합", byHits ? "단일 대상 처치 타수" : "단일 대상 처치 시간(초)", "길이", byHits ? "타수 ÷ 길이" : "처치 시간 ÷ 길이", "평범한 조우의 적 수"], stageRows, "") : null)];
   for (const lv of list.filter((e) => matches(ds, e, entryIssues(idx, e.id)))) {
     const info = (r.levels || []).find((x) => x.id === lv.id);
     const encounters = info ? info.encounters : (Array.isArray(lv.encounters) ? lv.encounters.filter(object) : []);
@@ -1059,17 +1063,17 @@ function renderLevels(ds, idx) {
         el("td", { class: "mono", text: x.role || "–" }), el("td", { class: "num" }, num(x.repeat ?? 1)), el("td", { text: mix(x) }),
         el("td", { class: "num" + (off ? " off" : "") }, num(x.threat)),
         el("td", { class: "num" }, x.vs_previous === null || x.vs_previous === undefined ? dash() : `×${fmt(Math.round(x.vs_previous * 100) / 100)}`),
-        el("td", { class: "num" }, num(x.kill_time)),
+        el("td", { class: "num" }, cost(x) === null ? dash() : cost(x)),
         el("td", { class: "num" }, x.expected === null || x.expected === undefined ? dash() : `${fmt(x.expected)} (${fmt(x.low)}~${fmt(x.high)})`));
     });
     const stray = Object.keys(idx.byEntry).filter((k) => k.startsWith(lv.id + ".") && !shown.has(k)).flatMap((k) => idx.byEntry[k]);
     out.push(el("section", { class: "panel", id: "group-" + lv.id },
       el("div", { class: "ph" }, el("h2", {}, (lv.name || lv.id) + " ", el("span", { class: "mono muted", text: lv.id }), " ", statusPill(lv), " ", sourcePill(lv)),
-        el("span", { class: "group-meta", text: info ? `전투 단계 ${info.stage} · 레벨 위협도 ${info.threat === null ? "–" : fmt(info.threat)} · 처치 ${parts(info.kills)}`
+        el("span", { class: "group-meta", text: info ? `전투 단계 ${info.stage} · 레벨 위협도 ${info.threat === null ? "–" : fmt(info.threat)} · 처치 ${parts(info.kills)}${info.kills_partial ? " (일부)" : ""}`
           : `전투 단계 ${lv.combat_stage || lv.id}` + (lv.status === "cut" ? " · 삭제해서 계산에서 뺍니다" : "") })),
       ...[...(idx.byEntry[lv.id] || []), ...stray].map(note),
       lv.intent ? el("div", { class: "group-note", style: "color: var(--muted)", text: "의도: " + lv.intent }) : null,
-      small(["조우", "역할", "횟수", "구성", "위협도", "앞 조우 대비", "처치 시간(초)", "예산(범위)"], body, "조우가 없습니다.")));
+      small(["조우", "역할", "횟수", "구성", "위협도", "앞 조우 대비", byHits ? "처치 타수" : "처치 시간(초)", "예산(범위)"], body, "조우가 없습니다.")));
   }
   return out;
 }

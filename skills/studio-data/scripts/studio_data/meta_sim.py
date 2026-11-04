@@ -505,6 +505,32 @@ def stage_margin(rows: list[dict], even=1.0) -> float:
     return stage_limit(rows, even)[0]
 
 
+def _inside_targets(stage: str, row: dict, targets: dict, checked: list) -> bool:
+    """그 단계의 기준 장비로 그 적이 전투 계산의 등급별 목표를 지키는가. 시뮬레이터의 행은 영구 강화를 뺀 값이라 전투 검사의 행을 본다."""
+    mine = next((x for x in checked if x["stage"] == stage and x["enemy"] == row["enemy"]), None)
+    return bool(targets.get(row.get("rank"))) and mine is not None and not mine["out_of_range"]
+
+
+def margin_notes(even, deciders: list, targets: dict, checked: list) -> list:
+    """정예·보스가 단계를 정하는데 그 등급의 기준을 잡지 않았으면 알린다. 여유는 버티는 타수 ÷ 처치 타수라 그 등급은 설계대로여도 작게 나온다.
+    기준을 수 하나로 골랐으면(1 제외) 고른 것으로 본다. deciders: [(단계, 그 단계를 정한 적의 행)]. 강화 없음, 판 안 성장, 강화 모두의 경우를 다 본다. checked: 전투 검사의 행."""
+    out = []
+    for rank in ("elite", "boss"):
+        unset = rank not in even if isinstance(even, dict) else even == 1.0
+        found = list({(sid, r["enemy"]): (sid, r) for sid, r in deciders if r and r.get("rank") == rank}.values())
+        if not (unset and found):
+            continue
+        label = cb.RANK_LABEL.get(rank, rank)
+        spots = ", ".join(sid + ": " + r["enemy"] for sid, r in found)
+        text = (f"{c.josa(label, '이가')} 정하는 단계({spots})를 일반 적과 같은 기준 1로 쟀습니다. "
+                f"여유는 버티는 타수 ÷ 처치 타수라 {c.josa(label, '은는')} 설계대로여도 작게 나옵니다.")
+        inside = sorted({r["enemy"] for sid, r in found if _inside_targets(sid, r, targets, checked)})
+        if inside:
+            text += f" {c.josa(', '.join(inside), '은는')} 전투 목표 안에 있습니다."
+        out.append(text + " 통과율을 읽기 전에 survival.even_margin을 등급별로 잡습니다(progression-economy의 meta-model.md).")
+    return out
+
+
 def combat_survival(cfg: dict, relative: float, skill: float) -> float:
     """단계를 넘길 확률 = clamp(sigmoid(slope × ln(기준 대비 여유) + skill), floor, ceiling). 기준 대비 여유 = 여유 ÷ even_margin(stage_limit).
     even_margin(기본 1, 등급별로 줄 수 있음)은 평균 실력(skill 0)의 플레이어가 절반의 확률로 넘기는 여유다. 피하며 싸우는 액션 게임은
@@ -651,7 +677,7 @@ def _attach_combat(cfg: dict, entries: list, ups: dict) -> None:
                           "전투 밖 효과를 더하면 두 번 계산됩니다. 전투 역할에 연결되지 않은 스탯만 적습니다.")
     known = roles | set(cfg["stat_effects"])
     cfg["rooms"] = len(stages)
-    cfg["_combat"] = {"prep": prep, "stages": stages, "income": {sid: float(income.get(sid, 0.0)) for sid in stages},
+    cfg["_combat"] = {"prep": prep, "stages": stages, "checked": combat_entry["report"]["rows"], "income": {sid: float(income.get(sid, 0.0)) for sid in stages},
                       "upgrade_stats": {uid: u["stats"] for uid, u in ups.items()},
                       "growth": growth, "no_effect": [u for u, x in ups.items() if not set(x["stats"]) & known]}
     _check_reachable_stats(cfg)
@@ -777,7 +803,7 @@ def combat_overview(cfg: dict) -> dict:
         got, _ = cb.evaluate(ctx["prep"], sid, bonus)
         return stage_limit(got, even) if got else (0.0, None)
 
-    rows = []
+    rows, deciders = [], []
     for n, sid in enumerate(ctx["stages"]):
         rel_none, who_none = limit({})
         # 첫 판의 새 플레이어: 영구 강화는 없지만 판 안 성장은 있다(성장 설정이 없으면 위와 같다)
@@ -786,6 +812,7 @@ def combat_overview(cfg: dict) -> dict:
         if g:
             bonus = gr.stat_bonus(g["stats"], avg[n].items(), bonus)
         rel_all, who_all = limit(bonus)
+        deciders += [(sid, who_none), (sid, who_new), (sid, who_all)]
         margin = lambda who: _round(row_margin(who)) if who else 0  # noqa: E731
         rows.append({"stage": sid, "decided_by": who_none["enemy"], "rank": who_none.get("rank"),
                      "margin_none": margin(who_none), "p_none": round(combat_survival(cfg, rel_none, skill), 4),
@@ -795,6 +822,7 @@ def combat_overview(cfg: dict) -> dict:
                      "margin_all": margin(who_all), "p_all": round(combat_survival(cfg, rel_all, skill), 4)})
     return {"survival_by_stage": rows, "stage_income": {k: _round(v) for k, v in ctx["income"].items()},
             "upgrades_without_combat_effect": ctx["no_effect"],
+            "margin_notes": margin_notes(even, deciders, ctx["prep"]["settings"]["targets"], ctx["checked"]),
             "growth_build": cfg.get("build")}
 
 

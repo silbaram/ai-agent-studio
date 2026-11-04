@@ -198,7 +198,7 @@ def _stage_income(s: dict, settings: dict, refs: dict, errors: list, warnings: l
 def _cut(entry: dict, label: str, ref: str, where: str, warnings: list) -> bool:
     if c.is_active(entry):
         return False
-    _err(warnings, "cut_referenced", where, f"삭제(cut)된 {label} {ref}를 삽니다. 구매 계획에서 뺍니다.", owner=where)
+    _err(warnings, "cut_referenced", where, f"삭제(cut)된 {label} {c.josa(ref, '을를')} 삽니다. 구매 계획에서 뺍니다.", owner=where)
     return True
 
 
@@ -349,11 +349,13 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
     affected: set = set()  # 미확인 때문에 시점·판 수·남는 양을 다 내지 못한 재화
     combat_stages = {x["id"]: x for x in (combat or {}).get("stages") or [] if isinstance(x, dict) and isinstance(x.get("id"), str)} \
         if isinstance((combat or {}).get("stages"), list) else {}
+    linked = {c.combat_link(s) for s in stages if c.is_active(s)}
+    free = [k for k, x in combat_stages.items() if c.is_active(x) and k not in linked]  # 재화 흐름과 이어지지 않은 전투 단계
     if settings is not None:
         cur = settings["currencies"]
         complete, gap = True, False
         for s in (x for x in stages if c.is_active(x)):
-            _check_link(s, combat, combat_stages, enemies, errors, warnings, missing)
+            _check_link(s, combat, combat_stages, free, enemies, errors, warnings, missing)
             if not _num(s.get("duration"), strict=True):
                 _err(errors, "schema", s["id"], f"duration(단계 길이, {settings['time_unit']})은 0보다 큰 수여야 합니다: {s.get('duration')!r}")
                 complete, gap = False, True
@@ -392,7 +394,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
                 planned_ups.add(ref_up)
                 if ref_up in first_buy:
                     _err(warnings, "duplicate_purchase", p["id"],
-                         f"영구 강화 {ref_up}를 {first_buy[ref_up]}에서 이미 삽니다. 같은 영구 강화를 두 번 사는 계획입니다.", owner=p["id"])
+                         f"영구 강화 {c.josa(ref_up, '을를')} {first_buy[ref_up]}에서 이미 삽니다. 같은 영구 강화를 두 번 사는 계획입니다.", owner=p["id"])
                 else:
                     first_buy[ref_up] = p["id"]
             ref_enh = spec.get("enhance")
@@ -400,7 +402,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
                 start, now = spec.get("from", 0), reached.get(ref_enh, 0)
                 if start != now:
                     _err(warnings, "enhance_gap", p["id"],
-                         f"강화 {ref_enh}를 +{start}부터 사는데 계획의 앞 구매까지는 +{now}입니다. "
+                         f"강화 {c.josa(ref_enh, '을를')} +{start}부터 사는데 계획의 앞 구매까지는 +{now}입니다. "
                          + ("단계를 건너뜁니다." if start > now else "이미 산 단계를 다시 삽니다.") + " from을 앞 구매의 level과 맞춥니다.", owner=p["id"])
                 reached[ref_enh] = spec["level"]
             target = p.get("target")
@@ -430,7 +432,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
                 lacking = [x for x in reqs if isinstance(x, str) and x not in prior] if isinstance(reqs, list) else []
                 if lacking:
                     _err(warnings, "requirement_missing", p["id"],
-                         f"{p['id']}의 영구 강화 {ref_up}는 {', '.join(lacking)}가 먼저 필요한데 계획에서 그보다 앞에 있습니다.", owner=p["id"])
+                         f"{p['id']}의 영구 강화 {c.josa(ref_up, '은는')} {c.josa(', '.join(lacking), '이가')} 먼저 필요한데 계획에서 그보다 앞에 있습니다.", owner=p["id"])
             row = {"id": p["id"], "name": p.get("name"), "currency": currency, "price": round(price, 4),
                    "at": None, "stage": None, "runs": None, "affordable": True, "out_of_range": False, "blocked": None}
             rows.append(row)
@@ -463,7 +465,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
             if target is not None and measure is not None and c.out_of_range(measure, target):
                 row["out_of_range"] = True
                 _err(warnings, "target_out_of_range", p["id"],
-                     f"{p['id']}를 {c.num_text(measure)}{unit}에 삽니다. 목표 {c.josa(c.range_text(target) + unit, '을를')} 벗어납니다.", owner=p["id"])
+                     f"{c.josa(p['id'], '을를')} {c.num_text(measure)}{unit}에 삽니다. 목표 {c.josa(c.range_text(target) + unit, '을를')} 벗어납니다.", owner=p["id"])
         if complete:
             for k in cur:
                 if cur[k].get("carry") or per_run[k] <= 0 or k in blocked or "*" in blocked:
@@ -503,7 +505,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
     }
 
 
-def _check_link(s: dict, combat: dict | None, combat_stages: dict, enemies: dict | None, errors: list, warnings: list, missing: set) -> None:
+def _check_link(s: dict, combat: dict | None, combat_stages: dict, free: list, enemies: dict | None, errors: list, warnings: list, missing: set) -> None:
     """단계의 combat_stage(같은 구간의 전투 단계)를 확인하고, 그 전투 단계에 나오지 않는 적의 처치를 경고한다."""
     link = s.get("combat_stage")
     if link is None:
@@ -516,18 +518,19 @@ def _check_link(s: dict, combat: dict | None, combat_stages: dict, enemies: dict
         return
     cs = combat_stages.get(link)
     if cs is None:
-        _err(errors, "unknown_stage", s["id"], f"combat_stage가 전투 계산(combat.json)에 없는 단계입니다: {link}{did_you_mean(link, combat_stages)}")
+        _err(errors, "unknown_stage", s["id"], f"combat_stage가 전투 계산(combat.json)에 없는 단계입니다: {link}."
+             + cb.stage_hint(link, free, [k for k, x in combat_stages.items() if c.is_active(x)], "재화 흐름과 이어지지 않은 전투 단계",
+                             "이미 재화 흐름 단계가 이어져 있습니다. 같은 전투 단계를 나눠 적는 것이면 그 id로 적습니다"))
         return
     if not c.is_active(cs):
         _err(warnings, "cut_referenced", s["id"], f"삭제(cut)된 전투 단계 {link}에 이었습니다.", owner=s["id"])
         return
     foes = cb.stage_foes(cs, enemies)
     kills = s.get("kills") if isinstance(s.get("kills"), dict) else {}
-    outside = sorted(k for k in kills if foes is not None and k not in foes)
-    if outside:
+    for k in sorted(k for k in kills if foes is not None and k not in foes):  # 적마다 확인할 수 있게 한 줄씩 낸다
         _err(warnings, "kill_not_in_stage", s["id"],
-             f"전투 단계 {link}에 나오지 않는 적의 처치를 셉니다: {', '.join(outside)}. 전투 계산과 재화 흐름이 다른 적을 보고 있습니다."
-             f"{cb.earlier_zone_hint(outside, cs, enemies)}", owner=s["id"])
+             f"전투 단계 {link}에 나오지 않는 적의 처치를 셉니다: {k}. 전투 계산과 재화 흐름이 다른 적을 보고 있습니다."
+             f"{cb.earlier_zone_hint([k], cs, enemies)}{cb.CONDITIONAL_HINT}", owner=s["id"], part=k)
 
 
 def _check_meta(settings: dict, meta: dict | None, complete: bool, blocked: dict, per_run: dict, upgrade_order: dict,
@@ -576,7 +579,7 @@ def _amounts_text(d) -> str:
 
 def _when(p: dict, result: dict) -> str:
     if p.get("blocked"):
-        return f"– (앞 구매 {p['blocked']}를 계산하지 못해 미확인)"
+        return f"– (앞 구매 {c.josa(p['blocked'], '을를')} 계산하지 못해 미확인)"
     if not p["affordable"]:
         return "살 수 없음"
     if result["currencies"].get(p["currency"], {}).get("carry"):

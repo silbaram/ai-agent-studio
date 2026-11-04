@@ -15,6 +15,8 @@ import shlex
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
+from . import datasets
+
 JUDGE = "studio-judge"
 MARKER = "<!-- studio-data setup이 만든 파일. 고치려면 스킬 저장소의 assets/claude/studio-judge.md를 고치고 setup을 다시 실행한다. -->"
 TEMPLATE = Path(__file__).resolve().parents[2] / "assets/claude/studio-judge.md"
@@ -174,6 +176,8 @@ def post_edit(payload_text: str, project: Path | None = None) -> tuple[int, str,
         except ValueError:
             return 0, "", ""  # 검사할 데이터가 없다(예: 시뮬레이터 설정만 고침)
         errors, warnings = _check_lines(result)
+        # 건너뛴 파일이 게임 자기 파일일 수 있어 그 파일을 고칠 때만 알린다. 다른 편집마다 되풀이하지 않는다
+        warnings += [datasets.skipped_note(p) for p in result.get("skipped", []) if Path(p).resolve() == path]
         title = "studio.py check"
     elif suffix == ".md":
         code, out = _run(["provenance", str(path), "--json"])

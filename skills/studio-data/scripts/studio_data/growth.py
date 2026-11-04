@@ -249,7 +249,8 @@ def validate(data: dict, combat: dict | None = None, items: dict | None = None, 
         level_at = settings["level_at"]
         unknown = [k for k in level_at if k not in stage_ids and k not in cut_ids]
         for k in unknown:
-            _err(errors, "unknown_stage", "growth.level_at", f"전투 계산(combat.json)에 없는 단계입니다: {k}{did_you_mean(k, stage_ids)}")
+            _err(errors, "unknown_stage", "growth.level_at", f"전투 계산(combat.json)에 없는 단계입니다: {k}."
+                 + cb.stage_hint(k, [x for x in stage_ids if x not in level_at], stage_ids, "level_at이 없는 전투 단계", "이미 level_at에 있습니다"))
         for k in sorted(k for k in set(level_at) & cut_ids if level_at[k] is not None):
             _err(warnings, "cut_referenced", "growth.level_at", f"삭제(cut)된 전투 단계 {k}의 레벨이 있습니다. 계산에서 뺍니다.")
         missing = [sid for sid in stage_ids if sid not in level_at]

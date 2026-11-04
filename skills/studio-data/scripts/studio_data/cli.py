@@ -230,6 +230,8 @@ def _compare_policies(args) -> int:
     for policy, r in results.items():
         s = r["longest_stall_runs"]
         print(f"  {policy:<{width}}  중앙 {s['median']} / p90 {s['p90']} / 최대 {s['max']}")
+    for text in first.get("margin_notes", []):
+        print("참고: " + text)
     print("정책에 따라 결론이 다르면 그 자체를 발견으로 보고합니다. 한쪽만 골라 보고하지 않습니다.")
     print(_caution(cfg))
     if args.out:
@@ -262,6 +264,8 @@ def _print_combat_overview(result: dict) -> None:
               f"{growth}여유 {f(s['margin_all'])} → 통과 {s['p_all']:.0%} (계획한 강화 모두 + 판 안 성장 평균) · 재화 {result['stage_income'][s['stage']]:g}")
     if result["upgrades_without_combat_effect"]:
         print("전투 계산에 효과가 없는 강화(전투 역할에 연결된 스탯이 없음): " + ", ".join(result["upgrades_without_combat_effect"]))
+    for text in result["margin_notes"]:
+        print("참고: " + text)
 
 
 def cmd_simulate(args) -> int:
