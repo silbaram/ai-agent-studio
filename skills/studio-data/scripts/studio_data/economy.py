@@ -88,7 +88,7 @@ def read_settings(data: dict, errors: list) -> dict | None:
     if not ok:
         return None
     return {"currencies": cur, "kill_reward": kill, "sell": sell, "prices": good, "bad_prices": bad, "leftover_max": left,
-            "time_unit": cfg.get("time_unit") if isinstance(cfg.get("time_unit"), str) else "초"}
+            "time_unit": c.time_unit(cfg)}
 
 
 # ---------- 수입 ----------
@@ -490,7 +490,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
         "kind": "economy",
         "count": len(stages) + len(buys),
         **summary,
-        "time_unit": settings["time_unit"] if settings else "초",
+        "time_unit": c.time_unit(settings),
         "currencies": {k: {"name": v.get("name"), "carry": bool(v.get("carry"))} for k, v in (settings or {}).get("currencies", {}).items()},
         "stages": timeline,
         "purchases": rows,

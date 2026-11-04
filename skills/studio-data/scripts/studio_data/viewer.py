@@ -31,13 +31,19 @@ def watched_folders(targets: list[Path]) -> list[str]:
     return out
 
 
-def _version(entries: list[dict]) -> str:
-    return hashlib.sha256("|".join(f"{d['path']}:{d['version']}" for d in entries).encode("utf-8")).hexdigest()[:16]
+def _version(entries: list[dict], skipped: list[str]) -> str:
+    parts = [f"{d['path']}:{d['version']}" for d in entries] + [f"{p}:skipped" for p in skipped]
+    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
+
+
+def _payload(version: str, targets: list[Path], entries: list[dict], skipped: list[str]) -> dict:
+    return {"mode": "server", "version": version, "watched": watched_folders(targets),
+            "notices": [datasets.skipped_note(p) for p in skipped], "datasets": entries}
 
 
 def snapshot(targets: list[Path]) -> dict:
-    entries = datasets.validate_all(datasets.scan(targets))
-    return {"mode": "server", "version": _version(entries), "watched": watched_folders(targets), "datasets": entries}
+    entries, skipped = datasets.scan_all(targets)
+    return _payload(_version(entries, skipped), targets, datasets.validate_all(entries), skipped)
 
 
 class SnapshotCache:
@@ -51,14 +57,13 @@ class SnapshotCache:
         self.validations = 0
 
     def body_bytes(self) -> bytes:
-        entries = datasets.scan(self.targets)
-        key = _version(entries)
+        entries, skipped = datasets.scan_all(self.targets)
+        key = _version(entries, skipped)
         with self.lock:
             if key != self.key:
                 datasets.validate_all(entries)
                 self.validations += 1
-                self.body = json.dumps({"mode": "server", "version": key, "watched": watched_folders(self.targets),
-                                        "datasets": entries}, ensure_ascii=False).encode("utf-8")
+                self.body = json.dumps(_payload(key, self.targets, entries, skipped), ensure_ascii=False).encode("utf-8")
                 self.key = key
             return self.body
 

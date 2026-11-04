@@ -55,6 +55,7 @@
   .chip.pass { color: var(--ok); border-color: var(--ok); }
   .chip.none { color: var(--warn); border-color: var(--warn); }
   .banner { border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; background: var(--err-bg); color: var(--err); border: 1px solid var(--err); }
+  .notices { border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; background: var(--panel); color: var(--muted); border: 1px solid var(--line); font-size: 13px; white-space: pre-line; overflow-wrap: anywhere; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 16px; }
   .panel > .ph { padding: 12px 14px; border-bottom: 1px solid var(--line); }
   details.panel > summary { padding: 10px 14px; cursor: pointer; font-weight: 600; }
@@ -147,6 +148,7 @@
   </section>
 
   <div id="banner" class="banner" hidden></div>
+  <div id="notices" class="notices" hidden></div>
   <nav class="tabs" id="tabs" aria-label="데이터 종류"></nav>
   <div class="chips" id="summary"></div>
   <details class="panel" id="issues-panel" hidden>
@@ -227,9 +229,9 @@ const LABEL = {
           level_missing: "레벨 없는 단계", duplicate_purchase: "중복 구매", enhance_gap: "강화 단계 어긋남", weights_ignored: "가중치 무시",
           meta_income_differs: "메타 설정과 수입 다름", meta_order_differs: "메타 설정과 순서 다름", kill_not_in_stage: "전투 단계 밖 처치",
           stage_counts_mismatch: "단계 판 수 어긋남", unknown_reference: "지금 데이터에 없는 id",
-          unknown_role: "없는 역할", kills_differ: "처치 수 다름", kills_not_linked: "이어지지 않은 처치 수", enemy_unplaced: "조우에 없는 적", enemy_not_in_stage: "전투 단계 밖 적" },
+          unknown_role: "없는 역할", kills_differ: "처치 수 다름", kills_not_linked: "이어지지 않은 처치 수", enemy_unplaced: "조우에 없는 적", curve_unused_point: "곡선의 남는 값", enemy_not_in_stage: "전투 단계 밖 적" },
   unchecked: { nothing: "계산한 것 없음", value: "가치 비교(스탯 예산 없음)", meta: "메타 성장 설정 없음", drop_tables: "드랍 테이블 없음",
-               threat_budget: "위협도 예산 없음", stages: "조우 없는 단계", enemies: "적 데이터 없음", combat: "전투 계산 없음" },
+               threat_budget: "위협도 예산 없음", stages: "조우 없는 단계", scores: "위협도를 내지 못한 조우", enemies: "적 데이터 없음", combat: "전투 계산 없음" },
 };
 const KIND_LABEL = { concepts: "컨셉", items: "아이템", upgrades: "영구 강화", enemies: "적", combat: "전투 계산", growth: "판 안 성장",
                      budget: "스탯 예산", crafting: "강화·합성", economy: "재화 흐름", levels: "레벨 구성", playtests: "플레이 기록" };
@@ -1015,9 +1017,23 @@ function renderLevels(ds, idx) {
     el("tbody", {}, body.length ? body : [el("tr", {}, el("td", { colspan: String(heads.length), class: "muted", text: empty }))])));
   const num = (v) => (v === null || v === undefined ? dash() : fmt(v));
   const parts = (o) => (object(o) ? Object.entries(o).map(([k, v]) => `${k} ${fmt(v)}`).join(" · ") : "–");
+  const mix = (x) => {
+    const own = object(x.enemy_repeat) ? x.enemy_repeat : {};
+    return object(x.enemies) ? Object.entries(x.enemies).map(([k, v]) => `${k} ${fmt(v)}` + (k in own ? ` (판에 ${fmt(own[k])}회)` : "")).join(" · ") : "–";
+  };
   const badges = (issues) => (issues && issues.length ? el("div", { class: "badges" }, issues.map((x) => el("span", { class: "tag " + x.level, title: x.message, text: LABEL.code[x.code] || x.code }))) : null);
   const note = (x) => el("div", { class: "group-note", text: "⚠ " + x.message });
+  const hint = (text) => el("div", { class: "group-note", style: "color: var(--muted)", text: "참고: " + text });
   const known = new Set(list.map((e) => e.id));
+  const stages = (Array.isArray(r.stages) ? r.stages : []).filter(object);
+  const leftOut = (s) => (Array.isArray(s.kill_time_unknown) ? s.kill_time_unknown : []);
+  const atLeast = (s, text) => (leftOut(s).length ? `${text} 이상` : text);  // 처치 시간을 모르는 적을 뺀 값은 실제보다 작다
+  const stageRows = stages.map((s) => el("tr", {},
+    el("td", { class: "mono", text: s.id }), el("td", { class: "num" }, num(s.position)), el("td", { class: "num" }, num(s.threat)),
+    el("td", { class: "num" }, s.kill_time === null || s.kill_time === undefined ? dash() : atLeast(s, fmt(s.kill_time)) + (leftOut(s).length ? ` (${leftOut(s).join(", ")} 제외)` : "")),
+    el("td", { class: "num" }, s.duration === null || s.duration === undefined ? dash() : `${fmt(s.duration)}${s.time_unit || ""}`),
+    el("td", { class: "num" + (s.kill_ratio > 1 ? " off" : "") }, s.kill_ratio === null || s.kill_ratio === undefined ? dash() : atLeast(s, `${s.kill_ratio.toFixed(2)}배`)),
+    el("td", { class: "num" }, num(s.group_size))));
   const general = idx.all.filter((x) => !known.has(String(x.where).split(".")[0]));
   const curveText = curve.growth === "table" ? "단계별 표" : `${curve.growth || "linear"} · 시작 ${fmt(curve.base)} · 변화 ${fmt(curve.rate)}`;
   const out = [el("section", { class: "panel", id: "group-all" },
@@ -1026,7 +1042,10 @@ function renderLevels(ds, idx) {
     ...general.map(note),
     el("div", { class: "doc" }, Object.keys(cfg).length
       ? el("p", {}, `곡선: ${curveText} · 역할 배수: ${parts(cfg.roles)} · 허용 ±${Math.round((r.tolerance ?? cfg.tolerance ?? 0.2) * 100)}% `, sourcePill(cfg))
-      : el("p", { class: "muted", text: "threat_budget이 없어 예산과 비교하지 않습니다." })))];
+      : el("p", { class: "muted", text: "threat_budget이 없어 예산과 비교하지 않습니다." }),
+      r.run_threat === null || r.run_threat === undefined ? null : el("p", { text: `판 전체 위협도 ${fmt(r.run_threat)}` })),
+    ...(Array.isArray(r.notes) ? r.notes : []).map(hint),
+    stageRows.length ? small(["단계", "순서", "위협도 합", "단일 대상 처치 시간(초)", "길이", "처치 시간 ÷ 길이", "평범한 조우의 적 수"], stageRows, "") : null)];
   for (const lv of list.filter((e) => matches(ds, e, entryIssues(idx, e.id)))) {
     const info = (r.levels || []).find((x) => x.id === lv.id);
     const encounters = info ? info.encounters : (Array.isArray(lv.encounters) ? lv.encounters.filter(object) : []);
@@ -1037,18 +1056,20 @@ function renderLevels(ds, idx) {
       const off = x.flag === "over" || x.flag === "under";
       return el("tr", { "data-id": key, class: issues.some((i) => i.level === "err") ? "has-err" : issues.length ? "has-warn" : "" },
         el("td", { class: "name" }, el("div", {}, el("span", { class: "nm", text: x.name || x.id })), x.name ? el("div", { class: "mono muted", text: x.id }) : null, badges(issues)),
-        el("td", { class: "mono", text: x.role || "–" }), el("td", { class: "num" }, num(x.repeat ?? 1)), el("td", { text: parts(x.enemies) }),
+        el("td", { class: "mono", text: x.role || "–" }), el("td", { class: "num" }, num(x.repeat ?? 1)), el("td", { text: mix(x) }),
         el("td", { class: "num" + (off ? " off" : "") }, num(x.threat)),
+        el("td", { class: "num" }, x.vs_previous === null || x.vs_previous === undefined ? dash() : `×${fmt(Math.round(x.vs_previous * 100) / 100)}`),
+        el("td", { class: "num" }, num(x.kill_time)),
         el("td", { class: "num" }, x.expected === null || x.expected === undefined ? dash() : `${fmt(x.expected)} (${fmt(x.low)}~${fmt(x.high)})`));
     });
     const stray = Object.keys(idx.byEntry).filter((k) => k.startsWith(lv.id + ".") && !shown.has(k)).flatMap((k) => idx.byEntry[k]);
     out.push(el("section", { class: "panel", id: "group-" + lv.id },
       el("div", { class: "ph" }, el("h2", {}, (lv.name || lv.id) + " ", el("span", { class: "mono muted", text: lv.id }), " ", statusPill(lv), " ", sourcePill(lv)),
-        el("span", { class: "group-meta", text: info ? `전투 단계 ${info.stage} · 한 판 위협도 ${info.threat === null ? "–" : fmt(info.threat)} · 처치 ${parts(info.kills)}`
+        el("span", { class: "group-meta", text: info ? `전투 단계 ${info.stage} · 레벨 위협도 ${info.threat === null ? "–" : fmt(info.threat)} · 처치 ${parts(info.kills)}`
           : `전투 단계 ${lv.combat_stage || lv.id}` + (lv.status === "cut" ? " · 삭제해서 계산에서 뺍니다" : "") })),
       ...[...(idx.byEntry[lv.id] || []), ...stray].map(note),
       lv.intent ? el("div", { class: "group-note", style: "color: var(--muted)", text: "의도: " + lv.intent }) : null,
-      small(["조우", "역할", "횟수", "구성", "위협도", "예산(범위)"], body, "조우가 없습니다.")));
+      small(["조우", "역할", "횟수", "구성", "위협도", "앞 조우 대비", "처치 시간(초)", "예산(범위)"], body, "조우가 없습니다.")));
   }
   return out;
 }
@@ -1126,6 +1147,10 @@ function render() {
   const failed = state.snap.datasets.filter((d) => !d.ok);
   banner.hidden = failed.length === 0;
   banner.textContent = failed.map((d) => `${d.name}: ${d.error}`).join("\n");
+  const notices = document.getElementById("notices");
+  const said = Array.isArray(state.snap.notices) ? state.snap.notices : [];
+  notices.hidden = said.length === 0;
+  notices.textContent = said.map((text) => "참고: " + text).join("\n");
   if (!ds || !ds.ok) {
     for (const id of ["sections", "extras", "summary"]) document.getElementById(id).replaceChildren();
     document.getElementById("controls").hidden = true;
@@ -1143,7 +1168,7 @@ function render() {
 }
 
 function renderEmpty(snap) {
-  const files = [["design/concepts.json", "컨셉 탐색 기록"], ["data/items.json", "아이템"], ["data/upgrades.json", "영구 강화"], ["data/enemies.json", "적"], ["data/combat.json", "전투 계산"], ["data/budget.json", "스탯 예산"], ["data/growth.json", "판 안 성장"], ["data/crafting.json", "강화·합성"], ["data/economy.json", "재화 흐름"], ["data/playtests.json", "플레이 기록과 가설 판정"]];
+  const files = [["design/concepts.json", "컨셉 탐색 기록"], ["data/items.json", "아이템"], ["data/upgrades.json", "영구 강화"], ["data/enemies.json", "적"], ["data/combat.json", "전투 계산"], ["data/budget.json", "스탯 예산"], ["data/growth.json", "판 안 성장"], ["data/crafting.json", "강화·합성"], ["data/economy.json", "재화 흐름"], ["data/levels.json", "레벨 구성"], ["data/playtests.json", "플레이 기록과 가설 판정"]];
   return el("section", { class: "panel", id: "empty" },
     el("div", { class: "ph" }, el("h2", {}, "아직 데이터가 없습니다")),
     el("div", { class: "doc" },

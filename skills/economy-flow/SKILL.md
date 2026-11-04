@@ -83,5 +83,6 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table economy
 - 판 사이 재화의 판 수는 매 판을 끝까지 깬다고 본 최소값이다.
 - 합성 가격은 재화 비용만 센다. 재료 아이템을 사는 비용은 따로 구매로 적는다.
 - 드랍 판매 기대값은 희귀도 칸이면 그 희귀도 아이템 가격의 평균이다(천장은 반영하지 않는다).
+- 단계의 누적은 적은 순서대로 지난다고 본다. 스테이지를 골라서 하는 게임은 대표 경로 하나를 순서로 적는다.
 
 예시: `studio-data/assets/sample-project/data/economy.json` (실제 게임 수치가 아니다).

@@ -42,7 +42,7 @@ python3 .claude/skills/studio-data/scripts/studio.py calibrate .
 | `entered`, `cleared` | 예 | 그 단계에 들어간 판 수, 넘긴 판 수(정수). `cleared` ≤ `entered` ≤ 세션의 `runs` |
 | `level` | 아니오 | 그 단계에 들어설 때의 평균 레벨 |
 | `duration` | 아니오 | 그 단계를 넘긴 판의 평균 길이(재화 흐름의 `time_unit`) |
-| `kills` | 아니오 | `{적 id: 그 단계를 넘긴 판의 평균 처치 수}`. 적으면 그 단계의 처치를 다 적는다(빠진 적은 0으로 잰다) |
+| `kills` | 아니오 | `{적 id: 그 단계를 넘긴 판의 평균 처치 수}`. 처치 수를 보정하면 레벨 구성의 조우 `repeat`도 다시 본다. 적으면 그 단계의 처치를 다 적는다(빠진 적은 0으로 잰다) |
 | `income` | 아니오 | `{재화: 그 단계를 넘긴 판의 평균 수입}`. 적은 재화만 비교한다 |
 | `source`, `note` | 아니오 | 값을 읽은 로그 파일, 메모 |
 

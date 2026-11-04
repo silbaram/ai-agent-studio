@@ -361,13 +361,17 @@ def stage_foes(stage: dict, enemies: dict | None) -> set | None:
 
 
 def earlier_zone_hint(outside: list, stage: dict, enemies: dict | None) -> str:
-    """단계 밖의 적 중 앞 구역에서 처음 나온 적이 있으면 zone_rule 안내. 없으면 빈 문자열."""
+    """단계 밖의 적 중 앞 구역에서 처음 나온 적이 있으면 안내. 없으면 빈 문자열.
+    up_to는 앞 구역의 적을 모두 넣는다. 일부만 이어지는 게임이면 끝난 적까지 들어오므로 단계의 enemies 목록을 쓴다."""
     zone = stage.get("zone")
     earlier = [k for k in outside if c.is_number(zone) and c.is_number((enemies or {}).get(k, {}).get("zone")) and enemies[k]["zone"] < zone]
     if not earlier or stage.get("zone_rule") == "up_to":
         return ""
-    return (f" {', '.join(earlier)}는 앞 구역에서 처음 나온 적입니다. 앞 구역의 적이 계속 나오는 게임이면 전투 단계 {stage['id']}에 "
-            "zone_rule: \"up_to\"를 적습니다.")
+    names = ", ".join(earlier)
+    if isinstance(stage.get("enemies"), list):
+        return f" 앞 구역에서 처음 나온 적: {names}. 이 단계에도 나오면 전투 단계 {stage['id']}의 enemies 목록에 넣습니다."
+    return (f" 앞 구역에서 처음 나온 적: {names}. 앞 구역의 적이 모두 계속 나오면 전투 단계 {stage['id']}에 zone_rule: \"up_to\"를, "
+            "일부만 이어지면 enemies 목록을 적습니다.")
 
 
 def _role_names(settings: dict, stages: list[dict], refs: dict, warnings: list) -> dict:

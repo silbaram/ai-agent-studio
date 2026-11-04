@@ -99,7 +99,7 @@
 | `requirement_missing` | 경고 | 영구 강화를 선행 조건보다 먼저 사는 계획(형식 오류로 빠진 앞 구매도 계획에 있는 것으로 본다) |
 | `duplicate_purchase` | 경고 | 같은 영구 강화를 두 번 삼 |
 | `enhance_gap` | 경고 | 같은 강화의 구매가 앞 구매의 단계와 이어지지 않음(건너뜀·겹침) |
-| `kill_not_in_stage` | 경고 | `combat_stage`로 이은 전투 단계에 나오지 않는 적의 처치를 셈. 그 적이 앞 구역에서 처음 나온 적이면 전투 단계에 `zone_rule: "up_to"`를 안내한다 |
+| `kill_not_in_stage` | 경고 | `combat_stage`로 이은 전투 단계에 나오지 않는 적의 처치를 셈. 그 적이 앞 구역에서 처음 나온 적이면 전투 단계에 `zone_rule: "up_to"`(앞 구역의 적이 모두 이어질 때)나 `enemies` 목록(일부만 이어질 때)을 안내한다 |
 | `meta_income_differs`, `meta_order_differs` | 경고 | `meta_config`의 설정과 한 판 수입·영구 강화 구매 순서가 다름 |
 | `reward_missing` | 경고 | 처치를 센 적에 `reward`가 없어 0으로 셈 |
 | `cut_referenced` | 경고 | 삭제된 적의 처치를 셈(수입에서 뺀다), 삭제된 항목을 삼(계획에서 뺀다), 또는 삭제된 전투 단계에 이음 |

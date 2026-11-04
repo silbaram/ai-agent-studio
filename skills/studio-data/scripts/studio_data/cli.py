@@ -110,7 +110,8 @@ def cmd_check(args) -> int:
     if missing:
         print("경로를 찾을 수 없습니다: " + ", ".join(missing), file=sys.stderr)
         return 2
-    entries = datasets.collect([Path(p) for p in args.paths])
+    entries, skipped = datasets.scan_all([Path(p) for p in args.paths])
+    datasets.validate_all(entries)
     if not entries:
         print("컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터 파일을 찾지 못했습니다.", file=sys.stderr)
         return 2
@@ -134,6 +135,7 @@ def cmd_check(args) -> int:
         "unchecked": unchecked,
         "acknowledged": acknowledged,
         "unverified_configs": assumed_configs,
+        "skipped": skipped,
         "datasets": [{k: d.get(k) for k in ("path", "kind", "ok", "error", "report") if k in d} for d in entries],
     }
     if args.out:
@@ -166,6 +168,11 @@ def cmd_check(args) -> int:
                 _print_data_counts(d)
         for path in assumed_configs:
             print(f"gate: 시뮬레이터 설정의 출처가 가정이거나 비어 있거나 읽을 수 없음(보정했으면 provenance를 적습니다): {path}")
+        for path in skipped:
+            print("참고: " + datasets.skipped_note(path))
+        absent = sorted((table_kinds or set()) - {d["kind"] for d in entries if d["ok"]})
+        if args.table and absent:
+            print("표를 낼 데이터가 없습니다: " + ", ".join(c.KIND_LABELS[k] for k in absent))
         print(f"전체: 파일 {len(entries)}개 · 오류 {errors} · 경고 {warnings}"
               + (f" · 확인한 경고 {acknowledged}" if acknowledged else "")
               + (f" · 미확인 {unchecked}" if unchecked else "")
@@ -461,8 +468,8 @@ def build_parser() -> argparse.ArgumentParser:
     k.add_argument("--strict", action="store_true", help="경고도 실패로 처리합니다.")
     k.add_argument("--fail-on-assumed", action="store_true", help="삭제되지 않은 항목 중 출처가 가정이거나 비어 있는 것, 판정이 확정되지 않은 가설이 있으면 실패합니다 (확정 판정 전 게이트).")
     k.add_argument("--table", nargs="?", const="all", metavar="종류,...",
-                   help="컨셉 비교표, 전투 계산표, 빌드 비교표, 예산 비교표, 강화·합성 표, 재화 흐름 표(마크다운)를 출력합니다. "
-                        "종류를 쉼표로 고를 수 있습니다(예: --table combat,growth). 파일로 저장하지 않습니다.")
+                   help="컨셉 비교표, 전투 계산표, 빌드 비교표, 예산 비교표, 강화·합성 표, 재화 흐름 표, 조우 표(마크다운)를 출력합니다. "
+                        "종류를 쉼표로 고를 수 있습니다(예: --table combat,levels). 표만 고르고 검사 보고는 모두 나옵니다. 파일로 저장하지 않습니다.")
     k.add_argument("--ids", help="--table에 보일 컨셉 id만 쉼표로 고릅니다 (예: a,b,c). 적은 순서대로 보입니다.")
     k.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
     k.add_argument("--out", help="JSON 보고서를 이 경로에 저장합니다. 문서에서 [계산: 이 경로]로 인용합니다.")
