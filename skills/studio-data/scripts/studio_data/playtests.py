@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from .common import STATUSES, check_identity, did_you_mean, is_int, is_number
+from .common import STATUSES, check_identity, did_you_mean, is_int, is_number, unknown_keys_text
 from .common import add_issue as _err
 
 RESULTS = ("holds", "refuted", "unknown")
@@ -47,9 +47,9 @@ def _check_records(holder: dict, label: str, runs, where: str, errors: list, war
             _err(errors, "schema", where, f"{at}에 stage(전투 단계 id)와 정수 entered(들어간 판), cleared(넘긴 판)가 필요합니다.")
             ok = False
             continue
-        unknown = sorted(set(x) - STAGE_FIELDS)
+        unknown = unknown_keys_text(x, STAGE_FIELDS)
         if unknown:
-            _err(errors, "schema", where, f"{at}: 알 수 없는 키 {', '.join(unknown)}.{''.join(did_you_mean(k, STAGE_FIELDS) for k in unknown)}")
+            _err(errors, "schema", where, f"{at}: {unknown}")
             ok = False
         if x["stage"] in seen:
             _err(errors, "schema", where, f"{at}: 단계 {x['stage']}의 기록이 둘입니다. 묶음마다 단계 하나에 기록 하나입니다.")
@@ -105,9 +105,9 @@ def check_stage_stats(s: dict, errors: list, warnings: list) -> bool:
     totals: dict = {}
     for n, g in enumerate(groups):
         label = f"groups[{n}]."
-        unknown = sorted(set(g) - GROUP_FIELDS)
+        unknown = unknown_keys_text(g, GROUP_FIELDS)
         if unknown:
-            _err(errors, "schema", where, f"{label[:-1]}: 알 수 없는 키 {', '.join(unknown)}.{''.join(did_you_mean(k, GROUP_FIELDS) for k in unknown)}")
+            _err(errors, "schema", where, f"{label[:-1]}: {unknown}")
             ok = False
         if not _upgrade_list(g.get("upgrades")):
             _err(errors, "schema", where, f"{label}upgrades가 필요합니다(그 묶음의 판을 시작할 때 가진 영구 강화 id, 없으면 []).")

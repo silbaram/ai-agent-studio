@@ -30,6 +30,24 @@ def curve_value(curve: dict, at) -> float | None:
     return curve["base"] * (1 + curve["rate"]) ** (at - 1)
 
 
+def read_curve(curve, where: str, errors: list, by: bool = True) -> dict | None:
+    """곡선 형식을 검사하고 growth를 채워 돌려준다. 틀리면 오류를 남기고 None. by: 기준 필드(curve.by)가 필요한가."""
+    if not (isinstance(curve, dict) and (isinstance(curve.get("by"), str) or not by) and curve.get("growth", "linear") in GROWTHS):
+        _err(errors, "schema", where, f"curve에 {'by(기준 필드 이름)와 ' if by else ''}growth({', '.join(GROWTHS)})가 필요합니다.")
+        return None
+    curve = {"growth": "linear", **curve}
+    if curve["growth"] == "table":
+        vals = curve.get("values")
+        if not (isinstance(vals, dict) and vals and all(c.is_number(v) and v > 0 for v in vals.values())):
+            _err(errors, "schema", where, "table 곡선에는 {기준 값: 0보다 큰 예산} values가 필요합니다.")
+            return None
+    elif not (c.is_number(curve.get("base")) and curve["base"] > 0 and c.is_number(curve.get("rate"))
+              and (curve["growth"] == "linear" or curve["rate"] > -1)):
+        _err(errors, "schema", where, f"{curve['growth']} 곡선에는 수 base(> 0)와 rate가 필요합니다.")
+        return None
+    return curve
+
+
 def _multiplier(spec: dict | None, entry: dict) -> tuple[float | None, object]:
     """(배수, 그 항목의 배수 필드 값). 배수 표에 그 값이 없으면 (None, 값)."""
     if not spec:
@@ -87,21 +105,8 @@ def read_settings(data: dict, errors: list) -> dict | None:
         if not (isinstance(costs, dict) and costs and all(isinstance(k, str) and c.is_number(v) and v > 0 for k, v in costs.items())):
             _err(errors, "schema", where, "costs는 {스탯 이름: 0보다 큰 원가}여야 합니다.")
             ok = False
-        curve = spec.get("curve")
-        if not (isinstance(curve, dict) and isinstance(curve.get("by"), str) and curve.get("growth", "linear") in GROWTHS):
-            _err(errors, "schema", where, f"curve에 by(기준 필드 이름)와 growth({', '.join(GROWTHS)})가 필요합니다.")
-            ok = False
-        else:
-            curve = {"growth": "linear", **curve}
-            if curve["growth"] == "table":
-                vals = curve.get("values")
-                if not (isinstance(vals, dict) and vals and all(c.is_number(v) and v > 0 for v in vals.values())):
-                    _err(errors, "schema", where, "table 곡선에는 {기준 값: 0보다 큰 예산} values가 필요합니다.")
-                    ok = False
-            elif not (c.is_number(curve.get("base")) and curve["base"] > 0 and c.is_number(curve.get("rate"))
-                      and (curve["growth"] == "linear" or curve["rate"] > -1)):
-                _err(errors, "schema", where, f"{curve['growth']} 곡선에는 수 base(> 0)와 rate가 필요합니다.")
-                ok = False
+        curve = read_curve(spec.get("curve"), where, errors)
+        ok = ok and curve is not None
         mult = spec.get("multiplier")
         if mult is not None and not (isinstance(mult, dict) and isinstance(mult.get("field"), str) and isinstance(mult.get("values"), dict)
                                      and all(c.is_number(v) and v > 0 for v in mult["values"].values())):

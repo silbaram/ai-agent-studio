@@ -1,4 +1,4 @@
-"""게임 설계 데이터(컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·플레이 기록)의 읽기, 종류 판별, 공통 필드 검사. 표준 라이브러리만 사용한다."""
+"""게임 설계 데이터(컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록)의 읽기, 종류 판별, 공통 필드 검사. 표준 라이브러리만 사용한다."""
 from __future__ import annotations
 
 import csv
@@ -13,11 +13,12 @@ STATUSES = ("proposed", "approved", "cut")
 PROVENANCE_KINDS = {"assumed": "assumed", "computed": "computed", "measured": "measured",
                     "가정": "assumed", "계산": "computed", "측정": "measured"}
 TEXT_FIELDS = ("name", "effect", "intent")
-DATASET_KINDS = ("concepts", "items", "upgrades", "enemies", "combat", "growth", "budget", "crafting", "economy", "playtests")
+DATASET_KINDS = ("concepts", "items", "upgrades", "enemies", "combat", "growth", "budget", "crafting", "economy", "levels", "playtests")
 KIND_LABELS = {"concepts": "컨셉", "items": "아이템", "upgrades": "영구 강화", "enemies": "적", "combat": "전투 계산",
-               "growth": "판 안 성장", "budget": "스탯 예산", "crafting": "강화·합성", "economy": "재화 흐름", "playtests": "플레이 기록"}
+               "growth": "판 안 성장", "budget": "스탯 예산", "crafting": "강화·합성", "economy": "재화 흐름", "levels": "레벨 구성", "playtests": "플레이 기록"}
 LIST_KEYS = {"combat": ("stages",), "budget": ("archetypes",), "crafting": ("enhance", "recipes"), "economy": ("stages", "purchases"),
              "growth": ("choices", "builds")}  # 항목 배열의 키가 종류 이름과 다른 경우
+FOREIGN_NAMES = ("levels",)  # 게임이 자기 형식으로도 흔히 쓰는 파일 이름. 종류 키가 없으면 이 도구의 파일로 보지 않는다
 SUBFOLDERS = ("design", "data")
 STAT_PREFIX = "stat."
 
@@ -46,6 +47,14 @@ def did_you_mean(name: str, known) -> str:
     """오타 안내 문장. 비슷한 이름이 없으면 빈 문자열."""
     close = closest(name, known)
     return f" '{close}'의 오타인가요?" if close else ""
+
+
+def unknown_keys_text(entry: dict, known) -> str | None:
+    """모르는 키 안내 문장. 없으면 None. 모르는 키는 오타일 수 있고, 그대로 두면 값이 조용히 기본값이 된다. _로 시작하는 키는 메모로 둔다."""
+    unknown = sorted(k for k in entry if k not in known and not str(k).startswith("_"))
+    if not unknown:
+        return None
+    return f"알 수 없는 키 {', '.join(map(str, unknown))}.{''.join(did_you_mean(k, known) for k in unknown)}"
 
 
 _DIGIT_FINAL = "0136780"  # 영·일·삼·육·칠·팔·십(0)은 받침이 있다
@@ -118,7 +127,7 @@ def detect_kind(data, path: Path | None = None) -> str | None:
     for kind in DATASET_KINDS:
         if kind in data:
             return kind  # 형식이 틀려도 종류로 인정해야 검사기가 형식 오류를 보고한다
-    return None
+    return "levels" if "threat_budget" in data else None
 
 
 def kind_from_filename(path: Path) -> str | None:
@@ -261,6 +270,12 @@ def pick_weights(own, costs: dict | None, entries: list[dict], own_key: str, cos
 def provenance_kind(entry: dict) -> str:
     prov = entry.get("provenance")
     return prov["kind"] if isinstance(prov, dict) and "kind" in prov else "unspecified"
+
+
+def combat_link(stage: dict) -> str | None:
+    """재화 흐름 단계나 레벨이 이어지는 전투 단계 id: combat_stage, 없으면 자기 id. 문자열이 아니면 None(형식 오류는 그 파일의 검사가 보고한다)."""
+    link = stage.get("combat_stage") or stage.get("id")
+    return link if isinstance(link, str) else None
 
 
 def is_active(entry: dict) -> bool:

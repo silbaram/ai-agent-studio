@@ -74,7 +74,7 @@ run,player,upgrades,stage,cleared,level,duration,kills.slime,income.soul
 
 | 코드 | 수준 | 조건 |
 |---|---|---|
-| `schema` | 오류 | 형식 위반, 모르는 키, 판 수가 맞지 않음(`cleared` > `entered`, `entered` > `runs`), 한 묶음에 같은 단계 기록이 둘, `groups`와 세션의 `stage_stats`·`upgrades`를 함께 씀 |
+| `schema` | 오류 | 형식 위반, 모르는 키(`_`로 시작하는 키는 메모로 둔다), 판 수가 맞지 않음(`cleared` > `entered`, `entered` > `runs`), 한 묶음에 같은 단계 기록이 둘, `groups`와 세션의 `stage_stats`·`upgrades`를 함께 씀 |
 | `stage_counts_mismatch` | 경고 | 단계에 들어간 판이 앞 단계를 넘긴 판보다 많음(단계를 골라 시작하는 게임이면 그 세션의 `acknowledged`). `calibrate`는 그대로 계산하고 참고 줄로 알린다 |
 | `unknown_reference` | 경고 | 지금 데이터에 없는 단계·영구 강화·적·빌드·재화. 기록은 지난 빌드의 사실이라 고치지 않으므로 오류가 아니다. 오타면 고치고, 그 뒤에 바뀐 것이면 그대로 둔다. `calibrate`의 통과율 비교는 지금 데이터로 계산할 수 없는 기록(없는 강화·빌드의 세션, 없는 단계의 기록)을 빼고 이유를 적는다. 가정값 비교에는 남는다 |
 

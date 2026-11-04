@@ -231,8 +231,8 @@ def _economy_by_stage(entries: list) -> dict:
         if d["ok"] and d["kind"] == "economy":
             timeline = {st["id"]: st for st in d["report"]["stages"]}
             for s in d["data"].get("stages") or []:
-                if isinstance(s, dict) and s.get("id") in timeline:
-                    out.setdefault(s.get("combat_stage") or s["id"], []).append((s, timeline[s["id"]]))
+                if isinstance(s, dict) and isinstance(s.get("id"), str) and s["id"] in timeline and c.combat_link(s):
+                    out.setdefault(c.combat_link(s), []).append((s, timeline[s["id"]]))
     return out
 
 

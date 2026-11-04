@@ -299,16 +299,6 @@ def _currency_of(p: dict, settings: dict) -> str:
     return guess(settings["bad_prices"][source]) if source in settings["bad_prices"] else "*"
 
 
-def _combat_foes(stage: dict, enemies: dict | None) -> set | None:
-    """전투 계산이 그 단계에서 계산하는 적 id(전투 계산과 같은 규칙: 목록 또는 구역, 삭제·없는 적 제외). 알 수 없으면 None.
-    적 데이터가 없으면 목록에 적힌 id만 쓴다(구역은 알 수 없다)."""
-    if enemies is None:
-        ids = stage.get("enemies")
-        return {x for x in ids if isinstance(x, str)} if isinstance(ids, list) else None
-    found = cb.stage_enemies(stage, enemies, [], [])  # 목록 형식 오류·없는 적은 전투 계산 검사가 보고한다
-    return None if found is None else {e["id"] for e in found}
-
-
 # ---------- 시점 ----------
 def _stage_at(stages: list[dict], t: float) -> str:
     """판 안 시점 t가 속한 단계(경계는 다음 단계)."""
@@ -531,16 +521,13 @@ def _check_link(s: dict, combat: dict | None, combat_stages: dict, enemies: dict
     if not c.is_active(cs):
         _err(warnings, "cut_referenced", s["id"], f"삭제(cut)된 전투 단계 {link}에 이었습니다.", owner=s["id"])
         return
-    foes = _combat_foes(cs, enemies)
+    foes = cb.stage_foes(cs, enemies)
     kills = s.get("kills") if isinstance(s.get("kills"), dict) else {}
     outside = sorted(k for k in kills if foes is not None and k not in foes)
     if outside:
-        zone = cs.get("zone")
-        earlier = [k for k in outside if c.is_number(zone) and c.is_number((enemies or {}).get(k, {}).get("zone")) and enemies[k]["zone"] < zone]
-        hint = (f" {', '.join(earlier)}는 앞 구역에서 처음 나온 적입니다. 앞 구역의 적이 계속 나오는 게임이면 전투 단계 {link}에 "
-                "zone_rule: \"up_to\"를 적습니다.") if earlier and cs.get("zone_rule") != "up_to" else ""
         _err(warnings, "kill_not_in_stage", s["id"],
-             f"전투 단계 {link}에 나오지 않는 적의 처치를 셉니다: {', '.join(outside)}. 전투 계산과 재화 흐름이 다른 적을 보고 있습니다.{hint}", owner=s["id"])
+             f"전투 단계 {link}에 나오지 않는 적의 처치를 셉니다: {', '.join(outside)}. 전투 계산과 재화 흐름이 다른 적을 보고 있습니다."
+             f"{cb.earlier_zone_hint(outside, cs, enemies)}", owner=s["id"])
 
 
 def _check_meta(settings: dict, meta: dict | None, complete: bool, blocked: dict, per_run: dict, upgrade_order: dict,

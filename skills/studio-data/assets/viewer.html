@@ -226,12 +226,14 @@ const LABEL = {
           build_invalid: "빌드 스탯 오류", stat_not_in_combat: "전투에 안 쓰는 스탯", stat_not_found: "역할 스탯 이름 오타",
           level_missing: "레벨 없는 단계", duplicate_purchase: "중복 구매", enhance_gap: "강화 단계 어긋남", weights_ignored: "가중치 무시",
           meta_income_differs: "메타 설정과 수입 다름", meta_order_differs: "메타 설정과 순서 다름", kill_not_in_stage: "전투 단계 밖 처치",
-          stage_counts_mismatch: "단계 판 수 어긋남", unknown_reference: "지금 데이터에 없는 id" },
-  unchecked: { nothing: "계산한 것 없음", value: "가치 비교(스탯 예산 없음)", meta: "메타 성장 설정 없음", drop_tables: "드랍 테이블 없음" },
+          stage_counts_mismatch: "단계 판 수 어긋남", unknown_reference: "지금 데이터에 없는 id",
+          unknown_role: "없는 역할", kills_differ: "처치 수 다름", kills_not_linked: "이어지지 않은 처치 수", enemy_unplaced: "조우에 없는 적", enemy_not_in_stage: "전투 단계 밖 적" },
+  unchecked: { nothing: "계산한 것 없음", value: "가치 비교(스탯 예산 없음)", meta: "메타 성장 설정 없음", drop_tables: "드랍 테이블 없음",
+               threat_budget: "위협도 예산 없음", stages: "조우 없는 단계", enemies: "적 데이터 없음", combat: "전투 계산 없음" },
 };
 const KIND_LABEL = { concepts: "컨셉", items: "아이템", upgrades: "영구 강화", enemies: "적", combat: "전투 계산", growth: "판 안 성장",
-                     budget: "스탯 예산", crafting: "강화·합성", economy: "재화 흐름", playtests: "플레이 기록" };
-const KIND_ORDER = ["concepts", "items", "upgrades", "enemies", "combat", "growth", "budget", "crafting", "economy", "playtests"];
+                     budget: "스탯 예산", crafting: "강화·합성", economy: "재화 흐름", levels: "레벨 구성", playtests: "플레이 기록" };
+const KIND_ORDER = ["concepts", "items", "upgrades", "enemies", "combat", "growth", "budget", "crafting", "economy", "levels", "playtests"];
 const OBJECT_KINDS = ["combat", "growth", "budget", "crafting", "economy"];  // 최상위가 배열이 아니라 객체인 종류
 const DEFAULT_SEARCH = ["id", "name", "effect", "intent"];
 const statusLabels = (ds) => KINDS[ds.kind].statusLabels || LABEL.status;
@@ -293,6 +295,12 @@ const KINDS = {
   economy: {
     listKey: "purchases", groupName: "", custom: (ds, idx) => renderEconomy(ds, idx),
     searchFields: ["id", "name", "intent"],
+    groupOf: () => "all", groupLabel: () => "", defaultSort: { key: "id", desc: false },
+    columns: () => [], tieBreak: () => () => 0, groupMeta: () => null, extras: () => null,
+  },
+  levels: {
+    listKey: "levels", groupName: "", custom: (ds, idx) => renderLevels(ds, idx),
+    searchFields: ["id", "name", "intent", "combat_stage"],
     groupOf: () => "all", groupLabel: () => "", defaultSort: { key: "id", desc: false },
     columns: () => [], tieBreak: () => () => 0, groupMeta: () => null, extras: () => null,
   },
@@ -393,10 +401,9 @@ function statColumns(ds, statKeys) {
 }
 function tailColumns() {
   return [
-    { label: "상태", cell: (e) => { const s = e.status || "unspecified"; return el("span", { class: "pill st-" + s, text: LABEL.status[s] || s }); } },
+    { label: "상태", cell: statusPill },
     { label: "출처", cell: (e) => {
-      const p = (e.provenance && e.provenance.kind) || "unspecified";
-      return [el("span", { class: "pill pv-" + p, title: e.provenance ? [e.provenance.source, e.provenance.note].filter(Boolean).join(" · ") : "", text: LABEL.prov[p] || p }),
+      return [sourcePill(e),
               e.provenance && e.provenance.source ? el("div", { class: "mono muted", text: e.provenance.source }) : null];
     } },
     { label: "효과 · 의도", tdClass: "text", cell: (e) => (e.effect || e.intent)
@@ -494,6 +501,21 @@ function focusTarget(where) {
   target.scrollIntoView({ behavior: "smooth", block: "center" });
   target.classList.add("flash");
   setTimeout(() => target.classList.remove("flash"), 1200);
+}
+
+function statusPill(e) {
+  const s = e.status || "unspecified";
+  return el("span", { class: "pill st-" + s, text: LABEL.status[s] || s });
+}
+
+function sourcePill(e) {
+  const p = (e.provenance && e.provenance.kind) || "unspecified";
+  return el("span", { class: "pill pv-" + p, title: e.provenance ? [e.provenance.source, e.provenance.note].filter(Boolean).join(" · ") : "", text: LABEL.prov[p] || p });
+}
+
+// 항목과 그 안의 행(항목.행)에 걸린 경고. 전투 단계의 적, 레벨의 조우처럼 경고가 행에 걸린 탭의 "문제만 보기"가 쓴다
+function entryIssues(idx, id) {
+  return Object.keys(idx.byEntry).filter((k) => k === id || k.startsWith(id + ".")).flatMap((k) => idx.byEntry[k]);
 }
 
 function matches(ds, e, issues) {
@@ -733,7 +755,7 @@ function renderCombat(ds, idx) {
             Object.entries((ds.report || {})[key] || {}).map(([sideKey, list]) => el("div", { class: "muted", style: "font-size:12px",
               text: `${title} · ${sideKey === "player" ? "플레이어" : "적"}: ${list.map(name).join(", ")}` })))),
         el("div", {}, el("h3", { text: "등급별 목표 범위" }), small(["등급", "지표", "범위"], targetRows, "목표 범위 없음")))))];
-  for (const st of stages.filter((e) => matches(ds, e, idx.byEntry[e.id]))) {
+  for (const st of stages.filter((e) => matches(ds, e, entryIssues(idx, e.id)))) {
     const info = ds.report && ds.report.stages ? ds.report.stages[st.id] : null;
     const stats = info ? info.player : ((st.player || {}).base || {});
     const mine = rows.filter((r) => r.stage === st.id);
@@ -983,6 +1005,54 @@ function renderEconomy(ds, idx) {
   ];
 }
 
+function renderLevels(ds, idx) {
+  const r = ds.report || {};
+  const object = (x) => x && typeof x === "object" && !Array.isArray(x);
+  const list = (Array.isArray(ds.data.levels) ? ds.data.levels : []).filter(object);
+  const cfg = object(ds.data.threat_budget) ? ds.data.threat_budget : {};
+  const curve = object(cfg.curve) ? cfg.curve : {};
+  const small = (heads, body, empty) => el("div", { class: "tw" }, el("table", {}, el("thead", {}, el("tr", {}, ...heads.map((h) => el("th", {}, h)))),
+    el("tbody", {}, body.length ? body : [el("tr", {}, el("td", { colspan: String(heads.length), class: "muted", text: empty }))])));
+  const num = (v) => (v === null || v === undefined ? dash() : fmt(v));
+  const parts = (o) => (object(o) ? Object.entries(o).map(([k, v]) => `${k} ${fmt(v)}`).join(" · ") : "–");
+  const badges = (issues) => (issues && issues.length ? el("div", { class: "badges" }, issues.map((x) => el("span", { class: "tag " + x.level, title: x.message, text: LABEL.code[x.code] || x.code }))) : null);
+  const note = (x) => el("div", { class: "group-note", text: "⚠ " + x.message });
+  const known = new Set(list.map((e) => e.id));
+  const general = idx.all.filter((x) => !known.has(String(x.where).split(".")[0]));
+  const curveText = curve.growth === "table" ? "단계별 표" : `${curve.growth || "linear"} · 시작 ${fmt(curve.base)} · 변화 ${fmt(curve.rate)}`;
+  const out = [el("section", { class: "panel", id: "group-all" },
+    el("div", { class: "ph" }, el("h2", {}, "위협도 예산"),
+      el("span", { class: "group-meta", text: "위협도는 스탯으로 낸 설계 가정입니다. 실제 난이도나 재미를 판정하지 않습니다." })),
+    ...general.map(note),
+    el("div", { class: "doc" }, Object.keys(cfg).length
+      ? el("p", {}, `곡선: ${curveText} · 역할 배수: ${parts(cfg.roles)} · 허용 ±${Math.round((r.tolerance ?? cfg.tolerance ?? 0.2) * 100)}% `, sourcePill(cfg))
+      : el("p", { class: "muted", text: "threat_budget이 없어 예산과 비교하지 않습니다." })))];
+  for (const lv of list.filter((e) => matches(ds, e, entryIssues(idx, e.id)))) {
+    const info = (r.levels || []).find((x) => x.id === lv.id);
+    const encounters = info ? info.encounters : (Array.isArray(lv.encounters) ? lv.encounters.filter(object) : []);
+    const shown = new Set(encounters.map((x) => `${lv.id}.${x.id}`));
+    const body = encounters.map((x) => {
+      const key = `${lv.id}.${x.id}`;
+      const issues = idx.byEntry[key] || [];
+      const off = x.flag === "over" || x.flag === "under";
+      return el("tr", { "data-id": key, class: issues.some((i) => i.level === "err") ? "has-err" : issues.length ? "has-warn" : "" },
+        el("td", { class: "name" }, el("div", {}, el("span", { class: "nm", text: x.name || x.id })), x.name ? el("div", { class: "mono muted", text: x.id }) : null, badges(issues)),
+        el("td", { class: "mono", text: x.role || "–" }), el("td", { class: "num" }, num(x.repeat ?? 1)), el("td", { text: parts(x.enemies) }),
+        el("td", { class: "num" + (off ? " off" : "") }, num(x.threat)),
+        el("td", { class: "num" }, x.expected === null || x.expected === undefined ? dash() : `${fmt(x.expected)} (${fmt(x.low)}~${fmt(x.high)})`));
+    });
+    const stray = Object.keys(idx.byEntry).filter((k) => k.startsWith(lv.id + ".") && !shown.has(k)).flatMap((k) => idx.byEntry[k]);
+    out.push(el("section", { class: "panel", id: "group-" + lv.id },
+      el("div", { class: "ph" }, el("h2", {}, (lv.name || lv.id) + " ", el("span", { class: "mono muted", text: lv.id }), " ", statusPill(lv), " ", sourcePill(lv)),
+        el("span", { class: "group-meta", text: info ? `전투 단계 ${info.stage} · 한 판 위협도 ${info.threat === null ? "–" : fmt(info.threat)} · 처치 ${parts(info.kills)}`
+          : `전투 단계 ${lv.combat_stage || lv.id}` + (lv.status === "cut" ? " · 삭제해서 계산에서 뺍니다" : "") })),
+      ...[...(idx.byEntry[lv.id] || []), ...stray].map(note),
+      lv.intent ? el("div", { class: "group-note", style: "color: var(--muted)", text: "의도: " + lv.intent }) : null,
+      small(["조우", "역할", "횟수", "구성", "위협도", "예산(범위)"], body, "조우가 없습니다.")));
+  }
+  return out;
+}
+
 function renderPlaytests(ds, idx) {
   const sessions = (Array.isArray(ds.data.playtests) ? ds.data.playtests : []).filter((e) => e && typeof e === "object");
   const verdicts = (Array.isArray(ds.data.verdicts) ? ds.data.verdicts : []).filter((v) => v && typeof v === "object");
@@ -1124,7 +1194,8 @@ async function pollServer() {
 function detectKind(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   if ("rooms" in data && "difficulty" in data) return null;
-  return KIND_ORDER.find((k) => Array.isArray(data[k]) || (OBJECT_KINDS.includes(k) && data[k] && typeof data[k] === "object" && !Array.isArray(data[k]))) || null;
+  return KIND_ORDER.find((k) => Array.isArray(data[k]) || (OBJECT_KINDS.includes(k) && data[k] && typeof data[k] === "object" && !Array.isArray(data[k])))
+    || ("threat_budget" in data ? "levels" : null);
 }
 
 async function loadFileTexts(named) {
@@ -1133,7 +1204,7 @@ async function loadFileTexts(named) {
     if (!name.toLowerCase().endsWith(".json")) { ds.error = "파일 모드에서는 JSON만 읽습니다. CSV는 서버 모드로 보세요."; return ds; }
     try {
       const data = JSON.parse(text), kind = detectKind(data);
-      if (!kind) ds.error = "컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·플레이 기록 데이터가 아닙니다 (최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat / growth / budget / crafting / economy 객체가 필요합니다).";
+      if (!kind) ds.error = "컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터가 아닙니다 (최상위에 concepts / items / upgrades / enemies / levels / playtests 배열이나 combat / growth / budget / crafting / economy 객체가 필요합니다).";
       else Object.assign(ds, { ok: true, kind, data });
     } catch (e) { ds.error = "JSON 형식 오류: " + e.message; }
     return ds;

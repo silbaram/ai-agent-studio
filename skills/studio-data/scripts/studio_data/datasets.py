@@ -6,13 +6,19 @@ import json
 from pathlib import Path
 
 from . import common as c
-from . import budget, combat, concepts, crafting, economy, enemies, growth, items, meta_sim, playtests, upgrades
+from . import budget, combat, concepts, crafting, economy, enemies, growth, items, levels, meta_sim, playtests, upgrades
 
 VALIDATORS = {"concepts": concepts, "items": items, "upgrades": upgrades, "enemies": enemies, "combat": combat,
-              "growth": growth, "budget": budget, "crafting": crafting, "economy": economy, "playtests": playtests}
-NOT_DATA = ("컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·플레이 기록 데이터가 아닙니다 "
-            "(최상위에 concepts / items / upgrades / enemies / playtests 배열이나 combat / growth / budget / crafting / economy 객체가 필요합니다).")
-CONFIG_KEY = b'"max_runs"'  # 시뮬레이터 설정의 필수 키. 파일이 깨져 읽지 못해도 설정임을 알아보는 표시다
+              "growth": growth, "budget": budget, "crafting": crafting, "economy": economy, "levels": levels, "playtests": playtests}
+NOT_DATA = ("컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터가 아닙니다 "
+            "(최상위에 concepts / items / upgrades / enemies / levels / playtests 배열이나 combat / growth / budget / crafting / economy 객체가 필요합니다).")
+CONFIG_KEYS = (b'"seed"', b'"trials"', b'"max_runs"')  # 시뮬레이터 설정의 필수 키. 하나만으로는 게임 설정과 나눌 수 없어 모두 있을 때만 센다
+
+
+def _broken_levels(path: Path, raw: bytes) -> bool:
+    """읽지 못한 JSON이 레벨 구성으로 보이는가. 이름만으로는 게임 자체의 levels.json과 나눌 수 없어 키로 본다.
+    encounters 하나는 게임 파일에도 흔한 키라 levels와 함께 있을 때만 센다."""
+    return path.suffix.lower() == ".json" and (b'"threat_budget"' in raw or (b'"levels"' in raw and b'"encounters"' in raw))
 
 
 def read(path: Path) -> dict:
@@ -29,9 +35,9 @@ def read(path: Path) -> dict:
     try:
         kind, data = c.load_dataset(path)
     except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        entry["kind"] = c.kind_from_filename(path)
+        entry["kind"] = c.kind_from_filename(path) or ("levels" if _broken_levels(path, raw) else None)
         entry["error"] = f"파일 형식 오류: {exc}"
-        if CONFIG_KEY in raw:
+        if path.suffix.lower() == ".json" and all(k in raw for k in CONFIG_KEYS):
             entry["config"] = None
         return entry
     if kind not in c.DATASET_KINDS:
@@ -39,7 +45,7 @@ def read(path: Path) -> dict:
         if entry["meta"]:
             entry["config"] = data
         named = path.stem.lower()
-        if kind is None and named in c.DATASET_KINDS:
+        if kind is None and named in c.DATASET_KINDS and named not in c.FOREIGN_NAMES:
             # 이름이 concepts.json 같은데 최상위 키가 없으면 건너뛰지 않고 이유를 알린다(예: 제약만 적은 직후).
             entry["kind"] = named
             entry["error"] = (f"최상위에 \"{named}\" 배열이 없어 {c.KIND_LABELS[named]} 파일로 읽지 못했습니다. "
@@ -205,6 +211,18 @@ def _stage_refs(combat_data: dict | None, growth_data: dict | None, economy_data
             "currencies": set(currencies) if isinstance(currencies, dict) else None}
 
 
+def _threat_scores(entries: list[dict]) -> dict | None:
+    """적 검사가 낸 위협도 {id: 값}(적 색인과 같이 첫 항목을 쓴다). 적이 없거나 검사를 마치지 못한 적 파일이 있으면 None."""
+    found = [d for d in entries if d.get("kind") == "enemies"]
+    if not found or any("report" not in d for d in found):
+        return None
+    out: dict = {}
+    for d in found:
+        for k, v in d["report"]["scores"].items():
+            out.setdefault(k, v)
+    return out
+
+
 def validate_all(entries: list[dict]) -> list[dict]:
     """읽은 항목들에 검사 결과(report)를 붙인다. 적의 드랍 테이블은 함께 읽은 아이템 데이터로,
     플레이 기록의 컨셉·가설 참조는 함께 읽은 컨셉 데이터로, 전투 계산은 함께 읽은 아이템·영구 강화·적 데이터로 확인한다.
@@ -214,6 +232,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
     재화 흐름은 적 보상·드랍 테이블·아이템 가격·영구 강화 비용·강화·합성 비용을 함께 읽은 데이터에서 가져오고,
     전투 단계 연결(combat_stage)과 메타 성장 설정(meta_config)을 맞춰 본다.
     판 안 성장은 전투 계산 파일과 그 참조 데이터로 빌드마다 전투 계산을 다시 한다.
+    레벨 구성은 적의 위협도와 전투 단계로 조우를 재고, 재화 흐름의 처치 수와 맞춰 본다.
     검사기가 예상하지 못한 예외를 내면 그 파일만 오류로 표시하고 나머지는 계속 검사한다."""
     loaded_items = [d for d in entries if d["ok"] and d["kind"] == "items"]
     broken_items = [d for d in entries if not d["ok"] and d.get("kind") == "items"]
@@ -250,7 +269,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
             hypotheses.setdefault(cid, info)
     economy_data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "economy"), None)
     stage_refs = _stage_refs(combat_data, growth_data, economy_data, by_id)
-    for d in entries:
+    for d in sorted(entries, key=lambda x: x.get("kind") == "levels"):  # 레벨 구성은 적 검사의 위협도를 쓰므로 마지막에 검사한다
         if not d["ok"]:
             continue
         try:
@@ -271,6 +290,11 @@ def validate_all(entries: list[dict]) -> list[dict]:
                 d["report"] = economy.validate(d["data"], enemies=by_id["enemies"], items=by_id["items"], drop_tables=drop_tables,
                                                upgrades=by_id["upgrades"], crafting=crafting_data, combat=combat_data,
                                                meta=_meta_configs(d))
+            elif d["kind"] == "levels":
+                d["report"] = levels.validate(d["data"], enemies=by_id["enemies"], threat=_threat_scores(entries), combat=combat_data, economy=economy_data)
+                first = next(x for x in entries if x["ok"] and x["kind"] == "levels")
+                if d is not first:  # 단계 범위와 처치 수는 파일을 넘어 세지 않는다. 일부만 세어 틀린 결과를 내지 않게 한 파일로 둔다
+                    c.add_issue(d["report"]["errors"], "schema", "levels", f"레벨 구성 파일은 하나만 씁니다. {first['name']}에 합칩니다.")
             elif d["kind"] == "playtests":
                 d["report"] = playtests.validate(d["data"], hypotheses, concepts_unreadable=bool(broken_concepts), refs=stage_refs)
             else:
