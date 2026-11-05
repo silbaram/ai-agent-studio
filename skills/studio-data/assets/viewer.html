@@ -233,7 +233,7 @@ const LABEL = {
           long_stretch: "쉬는 곳 사이가 김", reward_drought: "보상 사이가 김", strong_run: "강한 조우 연속", time_gap: "비는 시간", time_outside_stage: "단계 밖 시각",
           purchase_off_span: "시각이 어긋난 구매", unknown_purchase: "없는 구매", greybox_failed: "그레이박스 실패", unknown_encounter: "없는 조우",
           pillar_unserved: "맡는 시스템 없는 필러", mvp_unserved: "맡는 시스템 없는 MVP", scope_mismatch: "브리프와 다른 범위", scope_dependency: "범위를 넘는 의존", dependency_cycle: "의존 순환",
-          system_without_pillar: "필러 없는 시스템", system_without_rules: "규칙 없는 시스템", unknown_pillar: "없는 필러", unknown_mvp: "없는 MVP 항목", unknown_out_of_scope: "없는 범위 밖 항목", unknown_system: "없는 시스템" },
+          concept_not_approved: "승인되지 않은 컨셉", foundation_unused: "아무도 기대지 않는 기반", out_of_scope_claimed: "범위 밖 항목을 맡음", system_without_pillar: "필러 없는 시스템", system_without_rules: "규칙 없는 시스템", unknown_pillar: "없는 필러", unknown_mvp: "없는 MVP 항목", unknown_out_of_scope: "없는 범위 밖 항목", unknown_system: "없는 시스템" },
   unchecked: { concepts_unreadable: "컨셉 파일을 읽지 못함", nothing: "계산한 것 없음", value: "가치 비교(스탯 예산 없음)", meta: "메타 성장 설정 없음", drop_tables: "드랍 테이블 없음",
                threat_budget: "위협도 예산 없음", stages: "조우 없는 단계", scores: "위협도를 내지 못한 조우", enemies: "적 데이터 없음", combat: "전투 계산 없음", economy: "재화 흐름 없음" },
 };
@@ -1135,7 +1135,7 @@ function renderSystems(ds, idx) {
       el("td", { class: "num" }, x.order === null || x.order === undefined ? dash() : String(x.order)),
       el("td", { class: "name" }, el("div", { class: "nm", text: x.name || x.id }), x.name ? el("div", { class: "mono muted", text: x.id }) : null,
         entry.intent ? el("div", { class: "muted", text: entry.intent }) : null, ...issues.map(note)),
-      el("td", { text: scopes[x.scope] || String(x.scope) }), el("td", { text: text(x.pillars) }), el("td", { text: text(x.mvp) }),
+      el("td", { text: (scopes[x.scope] || String(x.scope)) + (x.foundation === true ? "(기반)" : "") }), el("td", { text: text(x.pillars) }), el("td", { text: text(x.mvp) }),
       el("td", { class: "mono", text: text(x.depends_on) }),
       el("td", {}, Array.isArray(entry.rules) && entry.rules.length ? el("ul", {}, entry.rules.filter((u) => u && typeof u === "object").map((u) => el("li", { text: u.text || u.id || "?" }))) : dash()));
   });
