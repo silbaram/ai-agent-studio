@@ -7,13 +7,14 @@ import re
 from pathlib import Path
 
 from . import common as c
-from . import budget, combat, concepts, crafting, economy, enemies, growth, items, levels, meta_sim, playtests, upgrades
+from . import budget, combat, concepts, crafting, economy, enemies, growth, items, levels, meta_sim, playtests, systems, upgrades
 
-VALIDATORS = {"concepts": concepts, "items": items, "upgrades": upgrades, "enemies": enemies, "combat": combat,
+VALIDATORS = {"concepts": concepts, "systems": systems, "items": items, "upgrades": upgrades, "enemies": enemies, "combat": combat,
               "growth": growth, "budget": budget, "crafting": crafting, "economy": economy, "levels": levels, "playtests": playtests}
-NOT_DATA = ("컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터가 아닙니다 "
-            "(최상위에 concepts / items / upgrades / enemies / levels / playtests 배열이나 combat / growth / budget / crafting / economy 객체가 필요합니다).")
+NOT_DATA = ("컨셉·시스템 설계·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터가 아닙니다 "
+            "(최상위에 concepts / systems / items / upgrades / enemies / levels / playtests 배열이나 combat / growth / budget / crafting / economy 객체가 필요합니다).")
 CONFIG_KEYS = (b'"seed"', b'"trials"', b'"max_runs"')  # 시뮬레이터 설정의 필수 키. 하나만으로는 게임 설정과 나눌 수 없어 모두 있을 때만 센다
+FOREIGN_KEYS = {"levels": {"levels", "threat_budget"}, "systems": {"systems"}}  # c.FOREIGN_NAMES의 파일이 이 도구의 파일이면 있는 최상위 키
 JSON_PIECE = re.compile(rb'("(?:[^"\\]|\\.)*")|//[^\n]*|/\*.*?\*/', re.S)  # 문자열은 그대로 두고 주석을 고른다. 문자열 안의 //(URL)는 주석이 아니다
 
 
@@ -28,8 +29,8 @@ def _uncommented(raw: bytes):
         return None
 
 
-def _game_format(raw: bytes) -> bool:
-    """읽지 못한 levels.json이 게임 자기 형식으로 보이는가: 내용이 있는 최상위 배열, 또는 주석을 지우면 읽히고 내용이 있으며 이 형식의 키가 없는 값."""
+def _game_format(raw: bytes, keys: set) -> bool:
+    """읽지 못한 파일이 게임 자기 형식으로 보이는가: 내용이 있는 최상위 배열, 또는 주석을 지우면 읽히고 내용이 있으며 이 형식의 키가 없는 값."""
     data = _uncommented(raw)
     if data is None:
         try:
@@ -37,16 +38,19 @@ def _game_format(raw: bytes) -> bool:
         except ValueError:
             return False
     if isinstance(data, dict):
-        return bool(data) and not {"levels", "threat_budget"} & set(data)
+        return bool(data) and not keys & set(data)
     return isinstance(data, list) and bool(data)
 
 
-def _broken_levels(path: Path, raw: bytes) -> bool:
-    """읽지 못한 JSON이 레벨 구성으로 보이는가. 다른 이름의 파일은 키로 본다. encounters 하나는 게임 파일에도 흔한 키라 levels와 함께 있을 때만 센다.
-    levels.json은 게임 형식으로 보이는 것만 건너뛴다. 문법이 깨졌거나 내용이 없으면 어느 쪽 파일이든 고쳐야 하므로 읽기 실패로 알린다."""
+def _broken_foreign(path: Path, raw: bytes) -> str | None:
+    """읽지 못한 JSON이 레벨 구성이나 시스템 설계로 보이면 그 종류. 다른 이름의 파일은 레벨 구성의 키로 본다. encounters 하나는 게임 파일에도 흔한 키라 levels와 함께 있을 때만 센다.
+    levels.json과 systems.json은 게임 형식으로 보이는 것만 건너뛴다. 문법이 깨졌거나 내용이 없으면 어느 쪽 파일이든 고쳐야 하므로 읽기 실패로 알린다."""
     if path.suffix.lower() != ".json":
-        return False
-    return b'"threat_budget"' in raw or (b'"levels"' in raw and b'"encounters"' in raw) or (path.stem.lower() == "levels" and not _game_format(raw))
+        return None
+    if b'"threat_budget"' in raw or (b'"levels"' in raw and b'"encounters"' in raw):
+        return "levels"
+    stem = path.stem.lower()
+    return stem if stem in FOREIGN_KEYS and not _game_format(raw, FOREIGN_KEYS[stem]) else None
 
 
 def _kind_by_name(path: Path) -> str | None:
@@ -69,7 +73,7 @@ def read(path: Path) -> dict:
     try:
         kind, data = c.load_dataset(path)
     except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        entry["kind"] = c.kind_from_filename(path) or _kind_by_name(path) or ("levels" if _broken_levels(path, raw) else None)
+        entry["kind"] = c.kind_from_filename(path) or _kind_by_name(path) or _broken_foreign(path, raw)
         entry["error"] = f"파일 형식 오류: {exc}"
         if path.suffix.lower() == ".json" and _uncommented(raw) is not None:
             entry["error"] += " JSON에는 주석을 쓸 수 없습니다."
@@ -140,7 +144,8 @@ def scan(targets: list[Path]) -> list[dict]:
 
 def skipped_note(path: str) -> str:
     """건너뛴 파일을 알리는 문장. check와 뷰어가 같은 문장을 쓴다."""
-    return f"{path}: 레벨 구성 형식이 아니라 건너뛰었습니다(최상위에 levels나 threat_budget이 없거나, 주석이 있는 JSON입니다). 게임 자체 파일이 아니면 고칩니다."
+    label, keys = ("시스템 설계", "객체 배열 systems") if Path(path).stem.lower() == "systems" else ("레벨 구성", "levels나 threat_budget")
+    return f"{path}: {label} 형식이 아니라 건너뛰었습니다(최상위에 {keys} 키가 없거나, 주석이 있는 JSON입니다). 게임 자체 파일이 아니면 고칩니다."
 
 
 def _config_sourced(config: dict | None) -> bool:
@@ -393,6 +398,9 @@ def validate_all(entries: list[dict]) -> list[dict]:
                 first = next(x for x in entries if x["ok"] and x["kind"] == "levels")
                 if d is not first:  # 단계 범위와 처치 수는 파일을 넘어 세지 않는다. 일부만 세어 틀린 결과를 내지 않게 한 파일로 둔다
                     c.add_issue(d["report"]["errors"], "schema", "levels", f"레벨 구성 파일은 하나만 씁니다. {first['name']}에 합칩니다.")
+            elif d["kind"] == "systems":
+                raw_concepts = [x for e in loaded_concepts for x in e["data"]["concepts"] if isinstance(x, dict)] if not broken_concepts and loaded_concepts else None
+                d["report"] = systems.validate(d["data"], raw_concepts, concepts_unreadable=bool(broken_concepts))
             elif d["kind"] == "playtests":
                 d["report"] = playtests.validate(d["data"], hypotheses, concepts_unreadable=bool(broken_concepts), refs=stage_refs)
             else:

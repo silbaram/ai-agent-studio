@@ -19,6 +19,7 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 | --- | --- |
 | [studio-data](skills/studio-data/SKILL.md) | **공용 도구.** 실행 파일 `studio.py` 하나로 검사(check)·뷰어(view)·시뮬레이션(simulate)·플레이 기록 보정(calibrate)·수치 출처 검사(provenance)·Claude Code 연결(setup). 다른 스킬과 함께 설치 |
 | [concept-exploration](skills/concept-exploration/SKILL.md) | 막연한 방향을 구조가 다른 게임 가설로 펼치고, 단순 전략으로 반증하고, 고른 안을 필러·가설·최소 프로토타입이 있는 브리프로 정리 |
+| [system-design](skills/system-design/SKILL.md) | 게임의 시스템과 규칙, 의존 관계를 적어 브리프의 필러·MVP·범위 밖에 잇고, 맡는 시스템이 없는 것과 범위 이탈, 의존 순환, 만드는 순서를 찾음 |
 | [numeric-provenance](skills/numeric-provenance/SKILL.md) | 기획 수치를 `[가정]` / `[계산: 출처]` / `[측정: 출처]`로 표시하고, 확정 판정 전에 스크립트로 검사 |
 | [progression-economy](skills/progression-economy/SKILL.md) | 아이템·영구 강화·적 데이터의 단일 원본 관리와 뷰어, 티어 역전·완전 열위·드랍 천장·강화 사슬·적 위협도 진행 검사, 로그라이크 메타 성장 시뮬레이션 |
 | [run-growth](skills/run-growth/SKILL.md) | 레벨업 선택지와 빌드 정책(우선순위·고르게)으로 단계별로 얻는 스탯을 시뮬레이션해 전투 계산에 더하고, 빌드끼리 처치·버팀을 비교해 모든 곳에서 밀리는 빌드를 찾음 |
@@ -172,7 +173,7 @@ python3 skills/studio-data/scripts/studio.py calibrate skills/studio-data/assets
 python3 skills/studio-data/scripts/studio.py provenance design/
 ```
 
-`view`는 프로젝트의 `design/`·`data/`에 있는 컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록을 브라우저에서 탭으로 보여 주는 읽기 전용 뷰어다. 문서를 따로 생성하지 않으므로 동기화할 것이 없고, 원본을 고치면 화면이 자동으로 갱신된다. Python 없이 `skills/studio-data/assets/viewer.html`을 직접 열어 '불러오기'로 볼 수도 있지만, 그때는 검사·계산 없이 원본 값만 보인다.
+`view`는 프로젝트의 `design/`·`data/`에 있는 컨셉·시스템 설계·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록을 브라우저에서 탭으로 보여 주는 읽기 전용 뷰어다. 문서를 따로 생성하지 않으므로 동기화할 것이 없고, 원본을 고치면 화면이 자동으로 갱신된다. Python 없이 `skills/studio-data/assets/viewer.html`을 직접 열어 '불러오기'로 볼 수도 있지만, 그때는 검사·계산 없이 원본 값만 보인다.
 
 확정 판정 직전에는 `check`와 `provenance`에 `--fail-on-assumed`를 붙인다. 가정인 수치가 하나라도 남으면 실패한다.
 시뮬레이터는 추상 모델(`meta.json`)과 전투 계산 모델(`meta_combat.json`: 전투 계산·판 안 성장·재화 흐름 데이터로 판을 돌린다)이 있다. 어느 쪽이든 결과는 가정 아래의 계산값이며 실제 난이도나 재미 판정이 아니다.

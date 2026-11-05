@@ -1,0 +1,4 @@
+interface:
+  display_name: "시스템 설계"
+  short_description: "시스템의 규칙과 의존 관계를 적고 브리프의 필러·MVP·범위 밖에 이어 빠진 것과 만들 순서를 봄"
+  default_prompt: "Use $system-design to list this game's systems with their rules and dependencies, tie them to the brief's pillars and MVP, and report what is unserved, out of scope or unbuildable."

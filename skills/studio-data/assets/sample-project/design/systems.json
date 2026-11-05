@@ -1,0 +1,77 @@
+{
+  "_note": "예시 데이터다. 실제 게임 시스템이 아니다. 형식: system-design/references/systems-format.md",
+  "concept": "parry_tempo",
+  "systems": [
+    {
+      "id": "combat_input",
+      "name": "패링·회피·공격 조작",
+      "intent": "다른 시스템이 모두 기대는 기본 조작",
+      "scope": "mvp",
+      "pillars": ["읽히는 위험"],
+      "mvp": ["패링·회피·공격 조작"],
+      "rules": [
+        { "id": "parry_window", "text": "패링은 입력 뒤 짧은 시간만 받아들인다" },
+        { "id": "dodge_cost", "text": "회피는 쓴 뒤 잠시 다시 쓰지 못한다" }
+      ],
+      "status": "approved"
+    },
+    {
+      "id": "enemy_cues",
+      "name": "공격 예고와 적",
+      "scope": "mvp",
+      "pillars": ["읽히는 위험"],
+      "mvp": ["공격 예고 3종", "적 3종", "보스 1명"],
+      "rules": [
+        { "id": "cue_kinds", "text": "적의 공격은 세 가지 예고 중 하나로 시작한다" }
+      ],
+      "depends_on": ["combat_input"],
+      "status": "approved"
+    },
+    {
+      "id": "tempo",
+      "name": "템포",
+      "intent": "패링 성공이 판의 속도를 올린다",
+      "scope": "mvp",
+      "pillars": ["용기에 대한 보상", "짧고 진한 판"],
+      "mvp": ["템포 3단계"],
+      "rules": [
+        { "id": "tempo_up", "text": "패링에 성공하면 템포가 한 단계 오른다" },
+        { "id": "tempo_down", "text": "맞으면 템포가 한 단계 내려간다" }
+      ],
+      "depends_on": ["combat_input", "enemy_cues"],
+      "status": "approved"
+    },
+    {
+      "id": "room_flow",
+      "name": "방 연결",
+      "scope": "mvp",
+      "pillars": ["짧고 진한 판"],
+      "mvp": ["방 연결 구조"],
+      "rules": [
+        { "id": "room_clear", "text": "방의 적을 모두 잡으면 다음 방이 열린다" }
+      ],
+      "depends_on": ["enemy_cues"],
+      "status": "approved"
+    },
+    {
+      "id": "meta_unlocks",
+      "name": "메타 해금",
+      "scope": "mvp",
+      "pillars": ["용기에 대한 보상"],
+      "mvp": ["메타 해금 2종"],
+      "rules": [
+        { "id": "unlock_soul", "text": "판이 끝나면 영혼을 받아 해금에 쓴다" }
+      ],
+      "depends_on": ["room_flow"],
+      "status": "approved"
+    },
+    {
+      "id": "codex",
+      "name": "도감",
+      "intent": "브리프가 뺀 것을 빼 둔 채로 기록한다",
+      "scope": "out",
+      "out_of_scope": ["도감"],
+      "status": "approved"
+    }
+  ]
+}
