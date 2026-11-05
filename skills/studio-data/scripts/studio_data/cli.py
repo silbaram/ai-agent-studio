@@ -28,7 +28,7 @@ TABLE_PRINTERS = {"concepts": concepts.table, "combat": combat.table, "budget": 
 COUNT_PRINTERS = {"concepts": concepts.print_counts, "combat": combat.print_counts, "budget": budget.print_counts,
                   "crafting": crafting.print_counts, "economy": economy.print_counts, "growth": growth.print_counts,
                   "levels": levels.print_counts, "playtests": playtests.print_counts}
-GATE_LABELS = {"playtests": "판정이 확정되지 않은 가설(버팀·틀림 확정이 아님): "}
+GATE_LABELS = {"playtests": "판정이 확정되지 않은 가설(버팀·틀림 확정이 아님): ", "levels": "출처가 가정이거나 비어 있는 항목과 통과하지 않은 그레이박스 확인: "}
 
 
 def _missing(paths: list[str]) -> list[str]:

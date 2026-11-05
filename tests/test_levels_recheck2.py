@@ -440,6 +440,7 @@ class HookDetails(Project):
 
     def test_the_note_is_not_counted_as_a_warning_and_uses_a_project_path(self):
         self.write("data/levels.json", '{"level": []}')
+        self.edit("data/playtests.json", lambda d: d["playtests"][-1].pop("greybox"))   # 레벨 구성을 못 읽으면 그레이박스 기록은 미확인이다
         code, text = self.hook("data/levels.json")
         self.assertEqual(code, 0)
         self.assertIn("경고 0개", text)

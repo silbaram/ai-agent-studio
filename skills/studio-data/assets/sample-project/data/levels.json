@@ -91,7 +91,19 @@
       "status": "approved",
       "provenance": {
         "kind": "assumed"
-      }
+      },
+      "greybox": [
+        {
+          "id": "crypt_forge_buy",
+          "check": "대장간에 닿을 때까지 걸린 시간(초)",
+          "encounter": "crypt_forge",
+          "expect": [
+            270,
+            330
+          ],
+          "note": "구역 길이 300초 ±10%"
+        }
+      ]
     },
     {
       "id": "citadel",
@@ -147,7 +159,14 @@
       "status": "approved",
       "provenance": {
         "kind": "assumed"
-      }
+      },
+      "greybox": [
+        {
+          "id": "citadel_gate_rest",
+          "check": "성문 모닥불에서 체력이 다 차는가",
+          "encounter": "citadel_gate"
+        }
+      ]
     },
     {
       "id": "altar",

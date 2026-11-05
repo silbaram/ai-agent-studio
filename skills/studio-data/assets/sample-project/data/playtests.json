@@ -67,6 +67,10 @@
       "growth_build": "balanced",
       "upgrades": ["weapon_1", "vitality_1"],
       "logs": ["playtests/pt_20261119_1/runs.csv"],
+      "greybox": [
+        { "check": "crypt_forge_buy", "value": 285, "n": 30 },
+        { "check": "citadel_gate_rest", "passed": true, "n": 26 }
+      ],
       "stage_stats": [
         { "stage": "zone_1", "entered": 30, "cleared": 26, "level": 1, "duration": 270 },
         { "stage": "zone_2", "entered": 26, "cleared": 19, "level": 5, "duration": 330 },
