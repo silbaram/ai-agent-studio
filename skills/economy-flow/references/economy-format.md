@@ -24,6 +24,8 @@
 }
 ```
 
+파일 최상위, `economy`, `stages`, `purchases`의 모르는 키는 오류다. `_`로 시작하는 키와 `note`는 메모로 둔다.
+
 ## `economy`
 
 | 키 | 필수 | 뜻 |
@@ -91,7 +93,7 @@
 
 | 코드 | 수준 | 조건 |
 |---|---|---|
-| `schema`, `duplicate_id` | 오류 | 형식 위반(재화·단계·처치·드랍·수입·가격·목표), id 중복, 없는 재화, 가격 출처의 재화가 정해지지 않음, 강화 단계 범위 밖 |
+| `schema`, `duplicate_id` | 오류 | 모르는 키, 형식 위반(재화·단계·처치·드랍·수입·가격·목표), id 중복, 없는 재화, 가격 출처의 재화가 정해지지 않음, 강화 단계 범위 밖 |
 | `unknown_enemy`, `unknown_drop_table`, `unknown_item`, `unknown_upgrade`, `unknown_enhance`, `unknown_recipe` | 오류 | 원본에 없는 id |
 | `price_missing` | 오류 | 가격 출처에 가격(`price`·`cost`)이 없음 |
 | `rarity_empty` | 오류 | 드랍 테이블의 희귀도 칸에 해당하는 활성 아이템이 없음 |
