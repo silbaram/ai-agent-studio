@@ -99,6 +99,16 @@ def _check_links(s: dict, items: dict, errors: list) -> None:
                 _err(errors, "out_of_scope_claimed", s["id"], f"브리프가 범위 밖이라고 한 항목을 맡습니다: {x}. 브리프를 바꾸거나 범위를 out으로 둡니다.")
 
 
+def _check_text(s: dict, items: dict, errors: list) -> None:
+    """브리프가 뺀 것을 시스템의 글로 옮겨 넣지 않았는가. 범위 밖 시스템은 그 항목을 이름으로 쓴다."""
+    if s["scope"] == "out":
+        return
+    texts = [c.fold_text(x) for x in (s.get("name"), s.get("intent"), *(r["text"] for r in s.get("rules", []))) if isinstance(x, str)]
+    for item in items["out_of_scope"]:
+        if item.strip() and any(c.phrase_pattern(item).search(x) for x in texts):
+            _err(errors, "out_of_scope_claimed", s["id"], f"브리프가 범위 밖이라고 한 항목이 시스템의 글에 있습니다: {item}. 글에서 빼거나, 브리프를 바꿀지 사용자에게 묻습니다.")
+
+
 def _check_scope(s: dict, warnings: list) -> None:
     """시스템의 범위가 브리프와 맞는가."""
     scope, sid, base = s["scope"], s["id"], s.get("foundation", False)
@@ -206,6 +216,7 @@ def validate(data: dict, concepts: list | None = None, concepts_unreadable: bool
     for s in live.values():
         if items is not None:
             _check_links(s, items, errors)
+            _check_text(s, items, errors)
         _check_scope(s, warnings)
     lost = {s.get("id") for s in raw if isinstance(s, dict)} - set(live) - cut
     _check_dependencies(live, cut, known, lost, errors, warnings)

@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import re
+import unicodedata
 from pathlib import Path
 
 ID_PATTERN = re.compile(r"^[a-z0-9_]+$")
@@ -47,6 +48,17 @@ def closest(name: str, known) -> str | None:
     """가장 비슷한 이름(오타 추정). 없으면 None."""
     close = difflib.get_close_matches(str(name), [str(k) for k in known], n=1, cutoff=0.6)
     return close[0] if close else None
+
+
+def fold_text(text: str) -> str:
+    """글자 모양을 맞춘 글. 같아 보이는 문구를 같게 찾으려고 쓴다."""
+    return unicodedata.normalize("NFC", text).casefold()
+
+
+def phrase_pattern(item: str) -> re.Pattern:
+    """fold_text한 글에서 문구를 찾는 식. 다른 낱말의 일부면 안 된다. 뒤에는 조사가 붙으므로 영문·숫자로 끝날 때만 뒤를 본다."""
+    key = fold_text(item.strip())
+    return re.compile(r"(?<!\w)" + re.escape(key) + (r"(?![a-z0-9])" if key[-1].isascii() and key[-1].isalnum() else ""))
 
 
 def did_you_mean(name: str, known) -> str:

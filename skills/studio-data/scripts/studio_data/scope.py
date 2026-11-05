@@ -23,7 +23,7 @@ PAIR = re.compile(r"^([a-z0-9_]+): ([0-9a-f]{8})$")
 SKIP_SPECS = re.compile(r"^skip_specs:\s*true\s*$", re.MULTILINE)
 SYSTEMS_FILE = Path("design/systems.json")
 CHANGES = Path("openspec/changes")
-RELINK = "명세를 지금 규칙에 맞춘 뒤 studio.py scope --link로 다시 잇습니다."
+MEASURED = ("proposal.md", "tasks.md")  # 무엇을 만들지 적는 문서. design.md는 Non-Goals에 범위 밖을 적는 자리라 재지 않는다
 
 
 def missing(root: Path) -> str | None:
@@ -33,10 +33,6 @@ def missing(root: Path) -> str | None:
     if not (root / SYSTEMS_FILE).is_file():
         return f"{SYSTEMS_FILE.as_posix()}이 없습니다. system-design으로 시스템을 먼저 적습니다."
     return None
-
-
-def _norm(text: str) -> str:
-    return unicodedata.normalize("NFC", text).casefold()
 
 
 def stamp(system: dict) -> str:
@@ -63,11 +59,12 @@ def _design(root: Path) -> dict:
     if found is None:
         _err(design["errors"], "design_unreadable", SYSTEMS_FILE.name, "시스템 설계 파일을 읽지 못해 범위를 잴 수 없습니다.")
         return design
-    report = found["report"]
-    if report["errors"]:
-        first = report["errors"][0]
-        _err(design["errors"], "design_invalid", found["name"], f"시스템 설계에 오류 {len(report['errors'])}개가 있어 범위를 믿을 수 없습니다. 첫 오류: [{first['code']}] {first['message']} studio.py check로 고칩니다.")
+    problems = [(d["name"], e) for d in entries if d["ok"] for e in d["report"]["errors"]]
+    if problems:
+        name, first = problems[0]
+        _err(design["errors"], "design_invalid", name, f"설계에 오류 {len(problems)}개가 있어 범위를 믿을 수 없습니다. 첫 오류: [{first['code']}] {first['message']} studio.py check로 고칩니다.")
         return design
+    report = found["report"]
     if report["brief_out_of_scope"] is None:
         _err(design["errors"], "design_unreadable", found["name"], "브리프를 읽지 못해 범위를 잴 수 없습니다. concept-exploration으로 브리프를 씁니다.")
         return design
@@ -93,21 +90,26 @@ def _changes(root: Path) -> list[Path]:
     return sorted(p for p in folder.iterdir() if p.is_dir() and p.name != "archive") if folder.is_dir() else []
 
 
-def _phrase(item: str) -> re.Pattern:
-    """범위 밖 문구를 찾는 식. 다른 낱말의 일부면 안 된다. 뒤에는 조사가 붙으므로 영문·숫자로 끝날 때만 뒤를 본다."""
-    key = _norm(item.strip())
-    return re.compile(r"(?<!\w)" + re.escape(key) + (r"(?![a-z0-9])" if key[-1].isascii() and key[-1].isalnum() else ""))
+def _measured_lines(text: str):
+    """잴 줄 (번호, 글). REMOVED 절은 범위 밖 요구사항을 빼는 일이라 재지 않는다."""
+    removed = False
+    for number, line in enumerate(text.splitlines(), 1):
+        if line.startswith("## "):
+            removed = line[3:].strip().lower().startswith("removed")
+        if not removed:
+            yield number, line
 
 
-def _check_specs(change: Path, specs: list[Path], items: list, errors: list) -> None:
-    wanted = [(x, _phrase(x)) for x in items if x.strip()]
-    for path in specs:
-        for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
-            text = _norm(line)
-            for item, phrase in wanted:
-                if phrase.search(text):
-                    where = f"{change.name}/{path.relative_to(change).as_posix()}:{number}"
-                    _err(errors, "out_of_scope_in_spec", where, f"브리프가 범위 밖이라고 한 항목이 명세에 있습니다: {item}. 명세에서 빼거나, 브리프를 바꿀지 사용자에게 묻습니다.")
+def _found_items(text: str, items: list) -> list[tuple[int, str]]:
+    wanted = [(x, c.phrase_pattern(x)) for x in items if x.strip()]
+    return [(number, item) for number, line in _measured_lines(text) for item, phrase in wanted if phrase.search(c.fold_text(line))]
+
+
+def _check_texts(change: Path, paths: list[Path], items: list, errors: list) -> None:
+    for path in paths:
+        for number, item in _found_items(path.read_text(encoding="utf-8", errors="replace"), items):
+            where = f"{change.name}/{path.relative_to(change).as_posix()}:{number}"
+            _err(errors, "out_of_scope_in_spec", where, f"브리프가 범위 밖이라고 한 항목이 변경에 있습니다: {item}. 변경에서 빼거나, 브리프를 바꿀지 사용자에게 묻습니다.")
 
 
 def _check_change(change: Path, design: dict, errors: list) -> None:
@@ -128,8 +130,8 @@ def _check_change(change: Path, design: dict, errors: list) -> None:
         elif not _buildable(s):
             _err(errors, "system_not_in_mvp", change.name, f"이번에 만들 시스템이 아닙니다: {sid}(범위 {s['scope']}, 상태 {s.get('status', '없음')}). 범위를 바꿀지 사용자에게 묻습니다.")
         elif stamp(s) != mark:
-            _err(errors, "design_changed", change.name, f"명세를 쓴 뒤 규칙이 바뀌었습니다: {sid}. {RELINK}")
-    _check_specs(change, specs, design["out_of_scope"], errors)
+            _err(errors, "design_changed", change.name, f"명세를 쓴 뒤 규칙이 바뀌었습니다: {sid}. 명세를 지금 규칙에 맞춘 뒤 studio.py scope --link {change.name} {' '.join(sorted(declared))}로 다시 잇습니다.")
+    _check_texts(change, [change / n for n in MEASURED if (change / n).is_file()] + specs, design["out_of_scope"], errors)
 
 
 def check(root: Path) -> dict:
@@ -146,7 +148,8 @@ def check(root: Path) -> dict:
 def print_report(report: dict) -> None:
     for e in report["errors"]:
         print(f"error [{e['code']}] {e['where']}: {e['message']}")
-    print(f"전체: 변경 {len(report['changes'])}개 · 오류 {len(report['errors'])} → {'FAIL' if report['errors'] else 'PASS'}")
+    verdict = "FAIL" if report["errors"] else "PASS" if report["changes"] else "잴 변경 없음"
+    print(f"전체: 변경 {len(report['changes'])}개 · 오류 {len(report['errors'])} → {verdict}")
 
 
 def link(root: Path, change: str, ids: list[str]) -> tuple[int, list[str]]:
@@ -171,12 +174,14 @@ def link(root: Path, change: str, ids: list[str]) -> tuple[int, list[str]]:
         text = meta.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return 2, [f"변경의 메타데이터가 UTF-8이 아닙니다: {change}. 파일을 고친 뒤 다시 잇습니다."]
+    before = _declared(text)
     if LINE.search(text):
         text = LINE.sub(lambda _: line, text, count=1)
     else:
         text += ("" if not text or text.endswith("\n") else "\n") + line + "\n"
     meta.write_text(text, encoding="utf-8")
-    return 0, [f"{change}: {pairs}"]
+    dropped = sorted(set(before or {}) - set(ids))
+    return 0, [f"{change}: {pairs}"] + ([f"뺀 시스템: {', '.join(dropped)}"] if dropped else [])
 
 
 # ---------- 범위를 넓히는 편집 ----------
@@ -204,15 +209,26 @@ def _texts(brief, key: str) -> set:
     return {x for x in value if isinstance(x, str)} if isinstance(value, list) else set()
 
 
+def _approved(data: dict) -> set:
+    return set(_standing_briefs(data, None))
+
+
+def added_out_of_scope(root: Path, before: str, after: str) -> list[str]:
+    """글에 새로 들어온 범위 밖 항목. 이미 있던 줄은 그 뒤의 편집을 막지 않는다."""
+    old, lines = set(before.splitlines()), after.splitlines()
+    return sorted({item for number, item in _found_items(after, _design(root)["out_of_scope"]) if lines[number - 1] not in old})
+
+
 def widened(name: str, before: dict, after: dict, in_use=None) -> list[str]:
-    """before에서 after로 가며 범위가 넓어진 것. name은 systems 또는 concepts다. 줄어든 것은 묻지 않는다."""
+    """before에서 after로 가며 범위가 넓어진 것. name은 systems 또는 concepts다. 줄어든 것은 묻지 않는다.
+    승인을 내리는 것은 묻는다. 내린 동안의 편집은 묻지 않으므로 넓히는 길이 된다."""
     if name == "systems":
         found = [f"MVP 시스템 추가 {x}" for x in sorted(_mvp_systems(after) - _mvp_systems(before))]
         if "concept" in after and after["concept"] != before.get("concept"):
             found.append(f"이을 컨셉을 {after['concept']}(으)로 바꿈")
         return found
     old = _standing_briefs(before, in_use)
-    found = []
+    found = [f"컨셉 승인을 내림 {x}" for x in sorted(_approved(before) - _approved(after))]
     for cid, brief in sorted(_standing_briefs(after, in_use).items()):
         if cid not in old:
             found.append(f"승인된 컨셉 추가 {cid}")

@@ -32,6 +32,7 @@ PLANNING = ("design", "data", "docs", "reports")  # 무엇을 만들지 적는 �
 ARCHIVE = re.compile(r"openspec[^\s;&|]*(?:\s+-\S+)*\s+archive\b"  # openspec archive. npx와 판 지정, 앞의 옵션을 포함한다
                      r"|\b(?:mv|move|Move-Item)\s[^;&|\n]*(?:openspec[/\\]+changes[/\\]|archive[/\\])")  # /opsx:archive는 CLI 대신 폴더를 옮긴다
 GUARDED = "|".join(WRITE_TOOLS + ("Bash",))
+SELF = (".claude/settings.json", ".claude/settings.local.json", ".claude/skills/studio-data", ".claude/skills/scope-guard")  # 고치면 범위 훅이 꺼진다
 HOOKS = (("PostToolUse", "Write|Edit|MultiEdit", "post-edit"), ("PreToolUse", GUARDED, "judge-guard"), ("PreToolUse", GUARDED, "scope-guard"))
 
 
@@ -196,20 +197,54 @@ def _sets_scope(rel: Path) -> bool:
     return (name == "systems.json" and parent == "design") or (name == "concepts.json" and parent in (".", *c.SUBFOLDERS))
 
 
+def _ask(reason: str) -> tuple[int, str, str]:
+    return 0, json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask", "permissionDecisionReason": reason}}), ""
+
+
+def _json_object(text: str) -> dict | None:
+    try:
+        data = json.loads(text.lstrip("\ufeff"))
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def _ask_if_widened(project: Path, path: Path, tool: str, tool_input: dict) -> tuple[int, str, str]:
-    """범위를 정하는 파일의 편집. 처음 쓰는 파일은 읽히지 않고, 넓힐 것도 없다."""
+    """범위를 정하는 파일의 편집. 처음 쓰는 파일은 넓힐 것이 없다. 읽지 못하는 내용은 넓혔는지 모르므로 묻는다.
+    넘기면 깨뜨렸다가 넓히는 두 번의 편집이 묻지 않고 지나간다."""
+    unreadable = f"범위를 정하는 파일을 읽을 수 없는 내용으로 다룹니다. 넓히는지 알 수 없어 사용자가 정합니다: {path.name}"
     try:
         after_text = _edited_text(path, tool, tool_input)
-        if after_text is None:
-            return 0, "", ""
-        before, after = json.loads(path.read_text(encoding="utf-8-sig")), json.loads(after_text)
+        before_text = path.read_text(encoding="utf-8-sig")
+    except OSError:
+        return 0, "", ""
+    except ValueError:
+        return _ask(unreadable)
+    if after_text is None:
+        return 0, "", ""
+    before, after = _json_object(before_text), _json_object(after_text)
+    if before is None or after is None:
+        return _ask(unreadable)
+    found = scope.widened(path.stem.lower(), before, after, scope.concept_in_use(project))
+    return _ask("범위를 넓히는 편집입니다. 사용자가 정할 일입니다: " + "; ".join(found)) if found else (0, "", "")
+
+
+def _guards_itself(rel: Path) -> bool:
+    text = rel.as_posix()
+    return any(text == x or text.startswith(x + "/") for x in SELF)
+
+
+def _check_main_spec(project: Path, path: Path, tool: str, tool_input: dict) -> tuple[int, str, str]:
+    """메인 스펙에 새로 들어오는 줄을 잰다. 있던 줄을 재면 범위를 줄인 뒤 그 요구사항을 빼는 변경까지 막힌다."""
+    try:
+        after = _edited_text(path, tool, tool_input)
+        before = path.read_text(encoding="utf-8-sig") if path.is_file() else ""
     except (OSError, ValueError):
         return 0, "", ""
-    found = scope.widened(path.stem.lower(), before, after, scope.concept_in_use(project)) if isinstance(before, dict) and isinstance(after, dict) else []
+    found = scope.added_out_of_scope(project, before, after) if after is not None else []
     if not found:
         return 0, "", ""
-    reason = "범위를 넓히는 편집입니다. 사용자가 정할 일입니다: " + "; ".join(found)
-    return 0, json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask", "permissionDecisionReason": reason}}), ""
+    return 2, "", f"[out_of_scope_in_spec] {path.name}: 브리프가 범위 밖이라고 한 항목을 메인 스펙에 넣습니다: {', '.join(found)}. 빼거나, 브리프를 바꿀지 사용자에게 묻습니다.\n"
 
 
 def scope_guard(payload_text: str, project: Path | None = None) -> tuple[int, str, str]:
@@ -230,7 +265,12 @@ def scope_guard(payload_text: str, project: Path | None = None) -> tuple[int, st
     path, rel = target
     if _sets_scope(rel):
         return _ask_if_widened(project, path, tool, tool_input)
-    return _gate(project) if _builds_game(rel) else (0, "", "")
+    if _guards_itself(rel):
+        return _ask(f"범위 훅과 검사 도구를 바꾸는 편집입니다. 사용자가 정할 일입니다: {rel.as_posix()}")
+    if not _builds_game(rel):
+        return 0, "", ""
+    result = _gate(project)
+    return _check_main_spec(project, path, tool, tool_input) if result[0] == 0 and rel.parts[:2] == ("openspec", "specs") else result
 
 
 # ---------- hook: post-edit ----------

@@ -195,6 +195,13 @@ class Stamp(Project):
         self.save(data)
         self.assertEqual(self.codes(), [])
 
+    def test_the_message_gives_the_whole_command(self):
+        self.linked("add-tempo", "tempo", "room_flow")
+        data = self.design()
+        self.system(data, "tempo")["rules"][0]["text"] = "완전히 다른 규칙"
+        self.save(data)
+        self.assertIn("--link add-tempo room_flow tempo", self.report()["errors"][0]["message"])
+
     def test_linking_again_settles_it(self):
         self.linked()
         data = self.design()
@@ -258,16 +265,38 @@ class OutOfScopeText(Project):
         (self.root / "design/concepts.json").rename(self.root / "data/concepts.json")
         self.assertEqual(self.codes(), ["out_of_scope_in_spec"])
 
-    def test_a_proposal_may_discuss_it(self):
-        self.linked(proposal="## Why\n멀티플레이는 하지 않는다.\n")
+    def test_a_task_naming_an_out_of_scope_item_is_an_error(self):
+        folder = self.change()
+        (folder / "tasks.md").write_text("- [ ] 1.1 멀티플레이 서버를 붙인다\n", encoding="utf-8")
+        run_cli("scope", self.root, "--link", "add-tempo", "tempo")
+        found = self.report()["errors"]
+        self.assertEqual([e["code"] for e in found], ["out_of_scope_in_spec"])
+        self.assertIn("tasks.md:1", found[0]["where"])
+
+    def test_a_proposal_naming_an_out_of_scope_item_is_an_error(self):
+        self.linked(proposal="## What Changes\n- 멀티플레이를 넣는다\n")
+        self.assertEqual(self.codes(), ["out_of_scope_in_spec"])
+
+    def test_a_design_note_may_list_non_goals(self):
+        folder = self.change()
+        (folder / "design.md").write_text("## Non-Goals\n- 멀티플레이\n", encoding="utf-8")
+        run_cli("scope", self.root, "--link", "add-tempo", "tempo")
         self.assertEqual(self.codes(), [])
 
-    def test_a_blank_item_matches_nothing(self):
-        data = self.design("design/concepts.json")
-        data["concepts"][0]["brief"]["out_of_scope"].append(" ")
-        self.save(data, "design/concepts.json")
-        self.linked(spec="패링에 성공하면 템포가 오른다\n")
+    def test_skip_specs_changes_are_measured_too(self):
+        folder = self.change(meta="skip_specs: true\n")
+        (folder / "tasks.md").write_text("- [ ] 멀티플레이 서버\n", encoding="utf-8")
+        self.assertEqual(self.codes(), ["out_of_scope_in_spec"])
+
+    def test_removing_an_out_of_scope_requirement_is_the_point(self):
+        text = "## REMOVED Requirements\n\n### Requirement: 멀티플레이\n**Reason**: 범위 밖\n\n## ADDED Requirements\n\n### Requirement: 혼자\n혼자 한다\n"
+        self.linked(spec=text)
         self.assertEqual(self.codes(), [])
+        self.linked(spec=text.replace("혼자 한다", "멀티플레이를 한다"))
+        self.assertEqual(self.codes(), ["out_of_scope_in_spec"])
+
+    def test_a_blank_item_matches_nothing(self):
+        self.assertEqual(scope._found_items("패링\n", [" ", ""]), [])
 
     def test_a_clean_spec_passes(self):
         self.linked(spec="패링에 성공하면 템포가 오른다\n")
@@ -301,6 +330,14 @@ class BrokenDesign(Project):
             (self.root / "design/systems.json").write_text(body, encoding="utf-8")
             self.assertEqual(self.codes(), ["design_invalid"], body)
 
+    def test_a_brief_with_errors_is_an_error(self):
+        self.linked()
+        data = self.design("design/concepts.json")
+        data["concepts"][0]["brief"]["out_of_scope"].append(" ")
+        self.save(data, "design/concepts.json")
+        found = self.report()["errors"]
+        self.assertEqual([(e["code"], e["where"]) for e in found], [("design_invalid", "concepts.json")])
+
     def test_broken_concepts_are_an_error(self):
         self.linked()
         (self.root / "design/concepts.json").write_text("{", encoding="utf-8")
@@ -319,6 +356,12 @@ class Command(Project):
         self.assertEqual(code, 1, out)
         self.assertIn("[change_without_system]", out)
         self.assertIn("→ FAIL", out)
+
+    def test_nothing_to_measure_is_not_a_pass(self):
+        code, out = run_cli("scope", self.root)
+        self.assertEqual(code, 0, out)
+        self.assertIn("잴 변경 없음", out)
+        self.assertNotIn("PASS", out)
 
     def test_json(self):
         self.change()
@@ -354,6 +397,13 @@ class Command(Project):
         self.assertEqual(text.count("x-studio-systems"), 1)
         self.assertIn("room_flow", text)
         self.assertNotIn("tempo:", text)
+
+    def test_link_says_what_it_dropped(self):
+        self.change()
+        run_cli("scope", self.root, "--link", "add-tempo", "tempo", "room_flow")
+        code, out = run_cli("scope", self.root, "--link", "add-tempo", "tempo")
+        self.assertEqual(code, 0)
+        self.assertIn("뺀 시스템: room_flow", out)
 
     def test_link_replaces_a_hand_written_list(self):
         folder = self.change(meta="x-studio-systems:\n  - tempo\n  - room_flow\ngoal: 템포\n")
@@ -456,8 +506,46 @@ class Hook(HookCase):
 
     def test_planning_files_stay_open_so_the_change_can_be_fixed(self):
         self.change()
-        for rel in ("openspec/changes/add-tempo/proposal.md", "openspec/config.yaml", "data/items.json", "docs/a.txt", "reports/a.txt", ".claude/settings.json", "notes.md", "game/notes.md"):
+        for rel in ("openspec/changes/add-tempo/proposal.md", "openspec/config.yaml", "data/items.json", "docs/a.txt", "reports/a.txt", ".claude/notes.txt", ".claude/skills/other/SKILL.md", "notes.md", "game/notes.md"):
             self.assert_silent(self.write(rel))
+
+    def test_turning_the_guard_off_asks(self):
+        self.change()
+        for rel in (".claude/settings.json", ".claude/settings.local.json", ".claude/skills/studio-data/scripts/studio.py", ".claude/skills/scope-guard/SKILL.md"):
+            code, out, err = self.write(rel)
+            self.assertEqual((code, err), (0, ""), rel)
+            self.assertEqual(json.loads(out)["hookSpecificOutput"]["permissionDecision"], "ask", rel)
+
+    def test_a_new_main_spec_cannot_name_an_out_of_scope_item(self):
+        self.assert_blocked(self.write("openspec/specs/rank/spec.md", "멀티플레이를 넣는다\n"), "멀티플레이")
+
+    def test_an_edit_of_a_main_spec_cannot_add_one(self):
+        path = self.root / "openspec/specs/tempo/spec.md"
+        path.parent.mkdir()
+        path.write_text("보석 수확\n", encoding="utf-8")
+        self.assert_blocked(self.run_hook("Edit", file_path=str(path), old_string="보석 수확", new_string="멀티플레이"), "멀티플레이")
+
+    def test_an_old_line_of_a_main_spec_does_not_block_other_edits(self):
+        path = self.root / "openspec/specs/tempo/spec.md"
+        path.parent.mkdir()
+        path.write_text("멀티플레이\n보석 수확\n", encoding="utf-8")
+        self.assert_silent(self.run_hook("Edit", file_path=str(path), old_string="보석 수확", new_string="보석 줍기"))
+
+    def test_the_content_of_a_game_file_is_not_read(self):
+        self.linked()
+        self.assert_silent(self.write("game/modes.gd", "# 멀티플레이는 없다\n"))
+
+    def test_an_odd_edit_of_a_main_spec_is_left_to_the_tool(self):
+        path = self.root / "openspec/specs/tempo/spec.md"
+        self.assert_silent(self.run_hook("Edit", file_path=str(path), old_string="a", new_string="b"))
+        path.parent.mkdir()
+        path.write_bytes(b"\xff\n")
+        self.assert_silent(self.run_hook("Edit", file_path=str(path), old_string="a", new_string="b"))
+        path.write_text("보석\n", encoding="utf-8")
+        self.assert_silent(self.run_hook("Edit", file_path=str(path)))
+
+    def test_a_clean_main_spec_passes(self):
+        self.assert_silent(self.write("openspec/specs/rank/spec.md", "패링을 넣는다\n"))
 
     def test_a_game_file_with_a_design_name_is_a_game_file(self):
         self.change()
@@ -672,17 +760,32 @@ class Widening(HookCase):
         self.assert_silent(self.run_hook("MultiEdit", file_path=path, edits=[5]))
         self.assert_silent(self.run_hook("Write", file_path=path, content=5))
 
-    def test_a_broken_result_is_left_to_the_check_hook(self):
-        self.assert_silent(self.write("design/systems.json", "{"))
+    def test_a_byte_order_mark_does_not_hide_it(self):
+        data = self.design()
+        self.system(data, "codex")["scope"] = "mvp"
+        self.assert_asks(self.write("design/systems.json", "\ufeff" + json.dumps(data, ensure_ascii=False)), "codex")
 
-    def test_a_broken_file_is_left_to_the_check_hook(self):
+    def test_content_it_cannot_read_asks(self):
+        for text in ("{", "[]"):
+            self.assert_asks(self.write("design/systems.json", text), "읽을 수 없")
+
+    def test_a_broken_file_cannot_be_a_stepping_stone(self):
         (self.root / "design/systems.json").write_text("{", encoding="utf-8")
-        self.assert_silent(self.write("design/systems.json", "{}"))
+        self.assert_asks(self.write("design/systems.json", "{}"), "읽을 수 없")
+
+    def test_undecodable_bytes_ask(self):
+        (self.root / "design/systems.json").write_bytes(b"\xff{")
+        self.assert_asks(self.run_hook("Edit", file_path=str(self.root / "design/systems.json"), old_string="a", new_string="b"), "읽을 수 없")
+
+    def test_taking_back_approval_asks(self):
+        data = self.design("design/concepts.json")
+        data["concepts"][0]["status"] = "proposed"
+        self.assert_asks(self.rewrite(data, "design/concepts.json"), "parry_tempo")
 
     def test_shapes_that_are_not_a_design_do_not_crash(self):
-        for text in ("[]", '{"systems": 5}', '{"systems": [5]}', '{"concepts": [5]}', '{"concepts": [{"status": "approved", "brief": 5}]}', '{"concepts": [{"status": "approved", "brief": {"mvp": 5}}]}'):
-            self.assert_silent(self.write("design/systems.json", text))
-            self.assert_silent(self.write("design/concepts.json", text))
+        for text in ('{"systems": 5}', '{"systems": [5]}', '{"concepts": [5]}', '{"concepts": [{"status": "approved", "brief": 5}]}', '{"concepts": [{"status": "approved", "brief": {"mvp": 5}}]}'):
+            self.assertEqual(self.write("design/systems.json", text)[0], 0, text)
+            self.assertEqual(self.write("design/concepts.json", text)[0], 0, text)
 
     def test_the_first_brief_does_not_ask(self):
         (self.root / "design/concepts.json").unlink()

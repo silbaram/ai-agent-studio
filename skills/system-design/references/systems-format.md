@@ -67,7 +67,7 @@
 | `cut_referenced` | 경고 | 삭제된 시스템에 의존함, 삭제된 컨셉에 이음 |
 | `pillar_unserved` | 경고 | 범위가 `mvp`인 시스템이 맡지 않는 필러. 일부러 미룬 것이면 어느 시스템에서든 `{"pillar_unserved": {필러 이름: 이유}}`로 확인한다 |
 | `mvp_unserved` | 경고 | 범위가 `mvp`인 시스템이 맡지 않는 MVP 항목. 확인은 `pillar_unserved`와 같다 |
-| `out_of_scope_claimed` | 오류 | `out`이 아닌 시스템이 브리프의 범위 밖 항목을 맡음. 확인으로 끄지 못한다 |
+| `out_of_scope_claimed` | 오류 | `out`이 아닌 시스템이 브리프의 범위 밖 항목을 맡거나, 이름·의도·규칙 글에 그 문구가 있음. 확인으로 끄지 못한다 |
 | `scope_dependency` | 오류 | `mvp`가 `later`나 `out`에, `later`가 `out`에 의존함. 그대로면 만들 수 없다 |
 | `dependency_cycle` | 오류 | 시스템이 서로 의존함. 순환을 이루는 시스템을 말한다 |
 | `concept_not_approved` | 경고 | 승인되지 않은 컨셉에 이음 |
