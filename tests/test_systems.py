@@ -252,6 +252,35 @@ class Dependencies(unittest.TestCase):
         self.assertEqual([x["id"] for x in r["rows"]], ["b", "a"])
 
 
+class RuleText(unittest.TestCase):
+    """브리프가 뺀 것을 시스템의 글로 옮겨 넣으면 재는 파일을 피해 간다."""
+
+    def test_a_rule_naming_an_out_of_scope_item_is_an_error(self):
+        r = run(system(rules=[{"id": "a", "text": "멀티플레이로 겨룬다"}]))
+        self.assertEqual(error(r, "out_of_scope_claimed")["where"], "ripening")
+
+    def test_the_name_and_intent_count(self):
+        self.assertIn("out_of_scope_claimed", codes(run(system(name="멀티플레이 대전"))["errors"]))
+        self.assertIn("out_of_scope_claimed", codes(run(system(intent="멀티플레이로 겨룬다"))["errors"]))
+
+    def test_a_note_is_free(self):
+        self.assertEqual(run(system(note="멀티플레이는 뺐다"))["errors"], [])
+
+    def test_a_system_out_of_scope_may_say_so(self):
+        out = system("online", scope="out", pillars=[], mvp=[], out_of_scope=["멀티플레이"], name="멀티플레이")
+        self.assertEqual(run(system(), out)["errors"], [])
+
+    def test_a_part_of_another_word_is_free(self):
+        self.assertEqual(run(system(rules=[{"id": "a", "text": "개멀티플레이어 없이"}]))["errors"], [])
+
+    def test_a_blank_item_matches_nothing(self):
+        concepts = [{"id": "gems", "status": "approved", "brief": {**BRIEF, "out_of_scope": [" "]}}]
+        self.assertEqual(run(system(), concepts=concepts)["errors"], [])
+
+    def test_without_a_brief_it_cannot_be_measured(self):
+        self.assertEqual(run(system(rules=[{"id": "a", "text": "멀티플레이"}]), concepts=None)["errors"], [])
+
+
 class Foundations(unittest.TestCase):
     """기반 시스템: 브리프의 항목을 직접 맡지 않지만 MVP 시스템이 기댄다."""
 

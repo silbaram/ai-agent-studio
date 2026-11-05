@@ -44,7 +44,7 @@ Claude Code를 다시 시작하면 적용된다.
 ## OpenSpec의 함정
 
 - `validate`를 통과해도 `archive`가 실패할 수 있다. 없는 요구사항의 `MODIFIED`는 `validate`가 INFO로만 알린다.
-- `archive --yes`는 미완료 태스크가 있어도 병합한다. `--yes`를 쓰지 않는다.
+- `archive --yes`는 미완료 태스크가 있어도 병합한다. 터미널이 없는 에이전트 실행에서는 `--yes` 없이 멈추므로 CLI 대신 `/opsx:archive`로 닫는다.
 - `SHALL`은 글자 검사다. 한국어 문장 끝에 `(SHALL)`을 붙이면 통과한다.
 - 변경 삭제 명령이 없다. 폴더를 지운다.
 - 보관한 변경은 `openspec show`로 읽지 못한다. `openspec/changes/archive/`의 파일을 읽는다.
