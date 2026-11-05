@@ -43,6 +43,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 - 날짜, 플레이한 사람, 빌드(커밋 해시), 판 수
 - 가설별 관찰값(`observations`): 가설의 `failure_signal`을 판단하는 데 필요한 값. 로그에서 읽었으면 `source`에 파일을 적는다
+- 레벨의 그레이박스 확인 기록(`greybox`): `levels.json`의 항목 id마다 잰 값이나 판정. 항목은 `… check . --table levels` 끝의 확인 표에 있다
 - 그 밖의 관찰과 선호(`notes`)
 
 사용자에게 묻지 않고 채운 값이 있으면 그 사실을 보고한다. 로그 파일이 있으면 `logs`에 경로를 적는다. 기록 파일을 지우지 않는다.

@@ -18,7 +18,8 @@ NOTE_KINDS = ("observation", "preference")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 STAGE_FIELDS = {"stage", "entered", "cleared", "level", "duration", "kills", "income", "source", "note"}
 GROUP_FIELDS = {"upgrades", "growth_build", "stage_stats"}
-REF_LABEL = {"stages": "전투 단계", "upgrades": "영구 강화", "enemies": "적", "builds": "판 안 성장 빌드", "currencies": "재화"}
+GREYBOX_FIELDS = {"check", "value", "passed", "n", "source", "note"}
+REF_LABEL = {"stages": "전투 단계", "upgrades": "영구 강화", "enemies": "적", "builds": "판 안 성장 빌드", "currencies": "재화", "greybox": "그레이박스 확인"}
 UNCHECKED_REASON = {
     "no_concepts": "컨셉 데이터를 함께 검사하지 않음 — 프로젝트 폴더나 design/concepts.json을 같이 넘기세요",
     "concepts_unreadable": "컨셉 파일을 읽지 못함 — 컨셉 파일의 오류를 먼저 고치세요",
@@ -136,7 +137,7 @@ def _holders(s: dict) -> list:
 
 
 def _used_refs(s: dict) -> dict:
-    out: dict = {"stages": [], "upgrades": [], "enemies": [], "builds": [], "currencies": []}
+    out: dict = {"stages": [], "upgrades": [], "enemies": [], "builds": [], "currencies": [], "greybox": [x["check"] for x in s.get("greybox", [])]}
     for h in _holders(s):
         stats = h.get("stage_stats", [])
         if not stats:
@@ -162,9 +163,38 @@ def check_refs(s: dict, refs: dict | None, warnings: list, missing: set) -> None
             continue
         for x in dict.fromkeys(ids):
             if x not in known:
-                _err(warnings, "unknown_reference", s["id"],
-                     f"{REF_LABEL[kind]} 데이터에 없는 id입니다: {x}.{did_you_mean(x, known)} 그 뒤에 바뀐 것이면 기록은 그대로 둡니다"
-                     "(calibrate의 통과율 비교는 지금 데이터로 계산할 수 없는 기록을 뺍니다).")
+                advice = (" levels.json의 greybox에 있는 항목 id를 적습니다. 그 뒤에 항목을 지웠으면 기록은 그대로 둡니다." if kind == "greybox" else
+                          " 그 뒤에 바뀐 것이면 기록은 그대로 둡니다(calibrate의 통과율 비교는 지금 데이터로 계산할 수 없는 기록을 뺍니다).")
+                _err(warnings, "unknown_reference", s["id"], f"{REF_LABEL[kind]} 데이터에 없는 id입니다: {x}.{did_you_mean(x, known)}{advice}")
+
+
+def _check_greybox(s: dict, where: str, errors: list) -> bool:
+    """세션의 그레이박스 확인 기록. 수(value)나 판정(passed) 중 하나는 있어야 기록이다."""
+    rows = s.get("greybox", [])
+    if not isinstance(rows, list):
+        _err(errors, "schema", where, "greybox는 확인 기록 {check, value, passed, n} 배열입니다.")
+        return False
+    ok = True
+    for n, x in enumerate(rows):
+        at = f"greybox[{n}]"
+        if not (isinstance(x, dict) and _text(x.get("check")) and ("value" in x or "passed" in x)):
+            _err(errors, "schema", where, f"{at}에 check(확인 항목 id)와 value(값)나 passed(판정)가 필요합니다.")
+            ok = False
+            continue
+        unknown = unknown_keys_text(x, GREYBOX_FIELDS)
+        if unknown:
+            _err(errors, "schema", where, f"{at}: {unknown}")
+            ok = False
+        if "value" in x and not is_number(x["value"]):
+            _err(errors, "schema", where, f"{at}.value는 수입니다. 수로 잴 수 없으면 passed(true나 false)를 적습니다.")
+            ok = False
+        if "passed" in x and not isinstance(x["passed"], bool):
+            _err(errors, "schema", where, f"{at}.passed는 true나 false입니다.")
+            ok = False
+        if "n" in x and not is_int(x["n"], 1):
+            _err(errors, "schema", where, f"{at}.n(해 본 판 수)은 1 이상의 정수여야 합니다. 해 보지 않았으면 기록을 적지 않습니다.")
+            ok = False
+    return ok
 
 
 def check_session(s: dict, errors: list, warnings: list) -> bool:
@@ -204,7 +234,8 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
         _err(errors, "schema", where, "logs는 기록 파일 경로(문자열) 배열이어야 합니다.")
         ok = False
     ok = check_stage_stats(s, errors, warnings) and ok
-    if ok and not obs and not s.get("stage_stats") and not s.get("groups"):
+    ok = _check_greybox(s, where, errors) and ok
+    if ok and not obs and not s.get("stage_stats") and not s.get("groups") and not s.get("greybox"):
         warnings.append({"code": "session_without_observations", "where": where,
                          "message": "가설에 대한 관찰값이 없습니다. 이 세션은 어떤 가설의 증거도 되지 못합니다."})
     return ok
@@ -353,7 +384,7 @@ def print_extra(result: dict) -> None:
     if result["unchecked_reason"]:
         print(f"컨셉·가설 참조 미확인({UNCHECKED_REASON.get(result['unchecked_reason'], '')}): {result['unchecked'] - len(result['unchecked_refs'])}건")
     if result["unchecked_refs"]:
-        print("단계 기록 참조 미확인(그 데이터를 함께 검사하지 않음): " + ", ".join(REF_LABEL[k] for k in result["unchecked_refs"]))
+        print("기록의 참조 미확인(그 데이터를 함께 검사하지 않음): " + ", ".join(REF_LABEL[k] for k in result["unchecked_refs"]))
 
 
 def print_counts(result: dict) -> None:

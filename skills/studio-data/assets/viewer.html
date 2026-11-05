@@ -231,7 +231,7 @@ const LABEL = {
           stage_counts_mismatch: "단계 판 수 어긋남", unknown_reference: "지금 데이터에 없는 id",
           gear_before_purchase: "구매보다 앞선 기준 장비", unknown_role: "없는 역할", kills_differ: "처치 수 다름", kills_not_linked: "이어지지 않은 처치 수", enemy_unplaced: "조우에 없는 적", curve_unused_point: "곡선의 남는 값", enemy_not_in_stage: "전투 단계 밖 적",
           long_stretch: "쉬는 곳 사이가 김", reward_drought: "보상 사이가 김", strong_run: "강한 조우 연속", time_gap: "비는 시간", time_outside_stage: "단계 밖 시각",
-          purchase_off_span: "시각이 어긋난 구매", unknown_purchase: "없는 구매" },
+          purchase_off_span: "시각이 어긋난 구매", unknown_purchase: "없는 구매", greybox_failed: "그레이박스 실패", unknown_encounter: "없는 조우" },
   unchecked: { nothing: "계산한 것 없음", value: "가치 비교(스탯 예산 없음)", meta: "메타 성장 설정 없음", drop_tables: "드랍 테이블 없음",
                threat_budget: "위협도 예산 없음", stages: "조우 없는 단계", scores: "위협도를 내지 못한 조우", enemies: "적 데이터 없음", combat: "전투 계산 없음", economy: "재화 흐름 없음" },
 };
@@ -1102,7 +1102,12 @@ function renderLevels(ds, idx) {
           : `전투 단계 ${lv.combat_stage || lv.id}` + (lv.status === "cut" ? " · 삭제해서 계산에서 뺍니다" : "") })),
       ...[...(idx.byEntry[lv.id] || []), ...stray].map(note),
       lv.intent ? el("div", { class: "group-note", style: "color: var(--muted)", text: "의도: " + lv.intent }) : null,
-      small(["조우", "역할", "횟수", "구성", "위협도", "앞 조우 대비", byHits ? "처치 타수" : "처치 시간(초)", "예산(범위)", ...(pacing.used ? ["시각", "세기", "길이당 부담", "표시"] : [])], body, "조우가 없습니다.")));
+      small(["조우", "역할", "횟수", "구성", "위협도", "앞 조우 대비", byHits ? "처치 타수" : "처치 시간(초)", "예산(범위)", ...(pacing.used ? ["시각", "세기", "길이당 부담", "표시"] : [])], body, "조우가 없습니다."),
+      info && Array.isArray(info.greybox) && info.greybox.length ? small(["그레이박스 확인", "조우", "기대", "기록", "판정"], info.greybox.map((x) => el("tr", {},
+        el("td", { class: "text", text: `${x.id}: ${x.check}` }), el("td", { class: "mono", text: x.encounter || "–" }),
+        el("td", { class: "num" }, Array.isArray(x.expect) ? `${x.expect[0] ?? ""}~${x.expect[1] ?? ""}` : dash()),
+        el("td", {}, x.session ? (given(x.value) ? `${fmt(x.value)} (${x.session})` : x.session) : dash()),
+        el("td", { class: x.status === "failed" ? "off" : "", text: { passed: "통과", failed: "실패", open: "판정 없음", none: "기록 없음" }[x.status] || x.status }))), "") : null));
   }
   return out;
 }
@@ -1143,7 +1148,9 @@ function renderPlaytests(ds, idx) {
         `${x && x.cleared}/${x && x.entered}판 통과` + (x && x.level !== undefined ? ` · 레벨 ${fmt(x.level)}` : "") + (x && x.duration !== undefined ? ` · 길이 ${fmt(x.duration)}` : "")));
       const groupItems = (Array.isArray(e.groups) ? e.groups : []).filter((g) => g && typeof g === "object").flatMap((g) => [
         el("li", { class: "muted", text: "강화: " + (Array.isArray(g.upgrades) && g.upgrades.length ? g.upgrades.join(", ") : "없음") }), ...stageItems(g.stage_stats)]);
-      const stageList = [...stageItems(e.stage_stats), ...groupItems];
+      const greyItems = (Array.isArray(e.greybox) ? e.greybox : []).filter((x) => x && typeof x === "object").map((x) => el("li", {}, el("span", { class: "mono", text: `그레이박스 ${x.check}: ` }),
+        (x.value !== undefined ? fmt(x.value) : x.passed === true ? "통과" : x.passed === false ? "실패" : "?") + (x.n !== undefined ? ` (n=${x.n})` : "")));
+      const stageList = [...stageItems(e.stage_stats), ...groupItems, ...greyItems];
       const stageStats = stageList.length ? el("ul", {}, stageList) : null;
       const notes = Array.isArray(e.notes) && e.notes.length
         ? el("ul", {}, e.notes.map((n) => el("li", {}, el("span", { class: "tag info", text: LABEL.note[n && n.kind] || (n && n.kind) || "?" }), (n && n.text) || ""))) : dash();

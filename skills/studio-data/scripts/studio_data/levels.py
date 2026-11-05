@@ -20,7 +20,9 @@ from .common import add_issue as _err, did_you_mean
 
 DEFAULT_TOLERANCE = bg.DEFAULT_TOLERANCE
 ENCOUNTER_FIELDS = {"id", "name", "role", "enemies", "repeat", "enemy_repeat", "intent", "provenance", "note", "at", "duration", "rest", "reward", "hazard", "purchases", "open_for"}
-LEVEL_FIELDS = {"id", "name", "combat_stage", "encounters", "intent", "status", "provenance", "acknowledged", "note"}
+LEVEL_FIELDS = {"id", "name", "combat_stage", "encounters", "intent", "status", "provenance", "acknowledged", "note", "greybox"}
+GREYBOX_FIELDS = {"id", "check", "encounter", "expect", "note"}
+GREYBOX_LABEL = {"passed": "통과", "failed": "실패", "open": "판정 없음", "none": "기록 없음"}
 BUDGET_FIELDS = {"curve", "roles", "tolerance", "kills_tolerance", "provenance", "note"}
 CURVE_FIELDS = {"growth", "base", "rate", "values", "note"}  # 곡선의 기준은 전투 단계의 순서로 정해져 있어 by를 쓰지 않는다
 TOP_FIELDS = {"threat_budget", "pacing", "levels", "note"}
@@ -867,6 +869,66 @@ def _beat_rate(beat: list):
     return round(sum(x["load"] for x in beat) / length, 3) if length else None
 
 
+def _judge(item: dict, record: dict | None) -> str:
+    """기록 하나의 판정. 수와 기대 범위가 있으면 수로 정하고, 없으면 기록에 적은 판정을 따른다."""
+    if record is None:
+        return "none"
+    if item.get("expect") is not None and "value" in record:
+        return "failed" if c.out_of_range(record["value"], item["expect"]) else "passed"
+    if "passed" in record:
+        return "passed" if record["passed"] else "failed"
+    return "open"
+
+
+def _greybox_rows(lv: dict, log: dict | None, seen: set, errors: list, warnings: list) -> list:
+    """레벨의 그레이박스 확인 항목과 판정. log: 플레이 기록 {항목 id: 날짜순 기록}. 마지막 기록이 지금의 판정이다."""
+    written = lv.get("encounters")
+    spots = [x["id"] for x in written if isinstance(x, dict) and isinstance(x.get("id"), str)] if isinstance(written, list) else []
+    rows = []
+    for _, item in c.check_identity(lv.get("greybox", []), f"{lv['id']}.greybox", errors):
+        at = f"{lv['id']}.{item['id']}"
+        ok = _known_keys(item, GREYBOX_FIELDS, at, errors)
+        if item["id"] in seen:
+            _err(errors, "duplicate_id", at, f"그레이박스 확인 id가 겹칩니다: {item['id']}. 플레이 기록이 이 id로 가리키므로 파일 전체에서 하나입니다.")
+            ok = False
+        seen.add(item["id"])
+        if not (isinstance(item.get("check"), str) and item["check"].strip()):
+            _err(errors, "schema", at, "check(그래픽 없이 확인할 것)는 비어 있지 않은 글입니다.")
+            ok = False
+        if "expect" in item and not c.valid_range(item["expect"]):
+            _err(errors, "schema", at, f"expect는 기대 범위 [최소, 최대]이고 한쪽은 null로 비울 수 있습니다: {_shown(item['expect'])}")
+            ok = False
+        if "encounter" in item and item["encounter"] not in spots:
+            _err(errors, "unknown_encounter", at, f"이 레벨에 없는 조우입니다: {item['encounter']}.{did_you_mean(str(item['encounter']), spots)}")
+            ok = False
+        if not ok:
+            continue
+        record = ((log or {}).get(item["id"]) or [None])[-1]
+        status = _judge(item, record)
+        got = record or {}
+        rows.append({"id": item["id"], "check": item["check"], "encounter": item.get("encounter"), "expect": item.get("expect"), "status": status,
+                     "value": got.get("value"), "session": got.get("session"), "date": got.get("date"), "n": got.get("n")})
+        if status == "failed":
+            told = f"값 {_fmt(got['value'])}" if "value" in got else "실패로 기록"
+            aim = f", 기대 {c.range_text(item['expect'])}" if item.get("expect") is not None else ""
+            _err(warnings, "greybox_failed", at, f"그레이박스 확인 {item['id']}: {item['check']} → {told}{aim} (세션 {got['session']}). 레벨이나 기대 범위를 고칩니다.",
+                 owner=lv["id"], part=item["id"], value=told)
+    return rows
+
+
+def _greybox_note(rows: list, log: dict | None) -> list:
+    """확인 목록을 어디까지 해 봤는가. 목록을 쓰지 않는 게임에는 말하지 않는다."""
+    items = [x for lv in rows for x in lv["greybox"]]
+    if not items:
+        return []
+    counts = {k: sum(x["status"] == k for x in items) for k in GREYBOX_LABEL}
+    text = f"그레이박스 확인: {len(items)}개 · " + " · ".join(f"{GREYBOX_LABEL[k]} {n}" for k, n in counts.items() if n)
+    bare = [lv["id"] for lv in rows if not lv["greybox"]]
+    if bare:
+        text += f" · 항목이 없는 레벨: {', '.join(bare)}"
+    return [text + (" · 플레이 기록을 함께 읽지 않았습니다" if log is None else "")]
+
+
 def _pace_used(data: dict, ordered: list) -> bool:
     """페이싱 표를 낼 게임인가. 페이싱 기준이나 표시를 하나도 적지 않은 게임의 표는 그대로 둔다."""
     return "pacing" in data or any(_has_time(x) or x["rest"] or x["reward"] or x["hazard"] or x["purchases"] or not x["enemies"] for _, x in _walk(ordered))
@@ -893,10 +955,11 @@ def _notes(budget, cfg, rows: list, kill_check: str | None, gaps: list) -> list:
 
 
 def validate(data: dict, enemies: dict | None = None, threat: dict | None = None, combat: dict | None = None, economy: dict | None = None,
-             kill_times: dict | None = None, kill_hits: dict | None = None, enemy_curve: dict | None = None, purchases: dict | None = None) -> dict:
+             kill_times: dict | None = None, kill_hits: dict | None = None, enemy_curve: dict | None = None, purchases: dict | None = None,
+             greybox_log: dict | None = None) -> dict:
     """enemies: 함께 읽은 적의 {id: 항목}, threat: 적의 위협도 {id: 값}(적 검사와 같은 값), combat·economy: 전투 계산·재화 흐름 파일 내용.
     kill_times·kill_hits: 전투 계산의 처치 시간과 타수 {단계: {적: 값}}, enemy_curve: 스탯 예산의 적 곡선. 참고 값이라 없어도 미확인이 아니다.
-    purchases: 재화 흐름이 계산한 구매 {id: 행}.
+    purchases: 재화 흐름이 계산한 구매 {id: 행}, greybox_log: 플레이 기록의 그레이박스 확인 {항목 id: 날짜순 기록}.
     적이나 전투 계산이 없으면 미확인으로 센다. 재화 흐름은 조우가 구매를 가리킬 때만 미확인이고, 그 밖에는 있을 때만 맞춰 본다."""
     errors: list = []
     warnings: list = []
@@ -921,7 +984,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
     order = [k for k, x in stages.items() if c.is_active(x)] if stages is not None else None
     missing = {k for k, gap in (("enemies", enemies is None or threat is None), ("combat", stages is None),
                                 ("threat_budget", data.get("threat_budget") is None)) if gap}
-    rows, seen, computed, unscored, sourced = [], set(), 0, [], []
+    rows, seen, computed, unscored, sourced, checks = [], set(), 0, [], [], set()
     by_stage: dict = {}   # 전투 단계 → {"levels": [...], "group": [...], "kills": {...}, "whole": 조우를 모두 셌는가, "threat": 합, "base": 곡선 값}
     active = [e for e in entries if c.is_active(e)]
     linked = {c.combat_link(e) for e in active}
@@ -979,7 +1042,8 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
             computed += 1
         info["threat"] = None if total is None or info["threat"] is None else round(info["threat"] + total, 4)
         rows.append({"id": lv["id"], "name": lv.get("name"), "stage": sid, "encounters": mine, "kills": {k: round(v, 4) for k, v in kills.items()},
-                     "kills_partial": not complete, "threat": None if total is None else round(total, 4)})
+                     "kills_partial": not complete, "threat": None if total is None else round(total, 4),
+                     "greybox": _greybox_rows(lv, greybox_log, checks, errors, warnings)})
     kills_tol = cfg["kills_tolerance"] if cfg else DEFAULT_TOLERANCE
 
     def counted(sid: str) -> bool:
@@ -1023,6 +1087,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
     budget = data.get("threat_budget")
     if isinstance(budget, dict) and c.provenance_kind(budget) in ("assumed", "unspecified"):
         summary["unverified"] = ["threat_budget(위협도 예산)"] + summary["unverified"]
+    summary["unverified"] += [f"그레이박스 {lv['id']}.{x['id']}({GREYBOX_LABEL[x['status']]})" for lv in rows for x in lv["greybox"] if x["status"] != "passed"]
     if _limits_assumed(data):
         summary["unverified"] = ["pacing(페이싱 기준)"] + summary["unverified"]
         walk_notes = ["페이싱 기준의 출처가 가정입니다. 경고가 없어도 리듬이 좋다는 뜻이 아닙니다.", *walk_notes]
@@ -1038,7 +1103,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
         "kill_measure": "hits" if any(s["kill_hits"] is not None for s in stage_rows) and all(s["kill_time"] is None for s in stage_rows) else "time",
         "run_threat": round(sum(threats), 4) if threats and None not in threats and not dropped and not empty else None,
         "notes": _notes(budget, cfg, stage_rows, _kill_check_note(listed, by_stage, links, economy, counted, dropped, astray),
-                        _gap_notes(stage_rows, economy, unit, enemy_curve)) + pace_notes + walk_notes,
+                        _gap_notes(stage_rows, economy, unit, enemy_curve)) + pace_notes + walk_notes + _greybox_note(rows, greybox_log),
         "pacing": {"used": _pace_used(data, ordered), "time_unit": unit, "carry_levels": settings["carry_levels"], "strong_at": round(settings["strong_at"], 4),
                    "order": [lv["id"] for lv in ordered], **pacing},
         "encounters": computed,
@@ -1175,6 +1240,17 @@ def _marks(x: dict, unit: str) -> str:
     return " · ".join(parts) or "–"
 
 
+def _greybox_table(result: dict) -> list:
+    """레벨마다 그래픽 없이 확인할 항목과 기록. 플레이 기록에 옮길 때 보는 표다."""
+    rows = []
+    for lv in result["levels"]:
+        for x in lv["greybox"]:
+            aim = "–" if x["expect"] is None else c.range_text(x["expect"])
+            got = "–" if x["session"] is None else (_fmt(x["value"]) + f" ({x['session']})" if x["value"] is not None else x["session"])
+            rows.append("| " + " | ".join((lv["id"], f"{x['id']}: {c.table_cell(x['check'])}", x["encounter"] or "–", aim, got, GREYBOX_LABEL[x["status"]])) + " |")
+    return ["", "| 레벨 | 확인 | 조우 | 기대 | 기록 | 판정 |", "|---|---|---|---|---|---|", *rows] if rows else []
+
+
 def _pace_table(result: dict) -> list:
     """조우의 리듬과 구간. 페이싱을 쓰지 않는 게임은 강한 조우의 연속만 낸다."""
     pacing, unit, rows = result["pacing"], result["pacing"]["time_unit"], []
@@ -1209,7 +1285,7 @@ def table(data: dict, result: dict, ids: list[str] | None = None) -> str:
     for s in result["stages"]:
         length = "–" if s["duration"] is None else f"{_fmt(s['duration'])}{s['time_unit']}"
         rows.append("| " + " | ".join((s["id"], _fmt(s["position"]), _fmt(s["threat"]), _vs(s), _stage_time(s), length, _ratio(s), _fmt(s["group_size"]))) + " |")
-    rows += _pace_table(result)
+    rows += _pace_table(result) + _greybox_table(result)
     counted = [s for s in result["stages"] if s["kills"]]
     if counted:
         rows += ["", "재화 흐름 kills로 옮길 값(조우로 센 처치 수, 단계는 전투 단계 id, 파일에 쓰지 않음):"]

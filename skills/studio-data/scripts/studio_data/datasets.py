@@ -261,6 +261,34 @@ def _stage_refs(combat_data: dict | None, growth_data: dict | None, economy_data
             "currencies": set(currencies) if isinstance(currencies, dict) else None}
 
 
+def _greybox_ids(entries: list[dict]) -> set | None:
+    """레벨 구성의 그레이박스 확인 id. 레벨 구성이 없으면 None(미확인)."""
+    data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "levels"), None)
+    if data is None:
+        return None
+    raw = data.get("levels")
+    rows = [x for lv in raw if isinstance(lv, dict) and isinstance(lv.get("greybox"), list) for x in lv["greybox"]] if isinstance(raw, list) else []
+    return {x["id"] for x in rows if isinstance(x, dict) and isinstance(x.get("id"), str)}
+
+
+def _greybox_log(entries: list[dict]) -> dict | None:
+    """플레이 기록의 그레이박스 확인 {항목 id: 날짜순 기록}. 기록 파일이 없으면 None. 형식이 틀린 기록은 플레이 기록 검사가 알리므로 읽지 않는다."""
+    data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "playtests"), None)
+    if data is None:
+        return None
+    raw = data.get("playtests")
+    sessions = [s for s in raw if isinstance(s, dict) and isinstance(s.get("greybox"), list)] if isinstance(raw, list) else []
+    out: dict = {}
+    for s in sorted(sessions, key=lambda x: str(x.get("date"))):
+        for x in s["greybox"]:
+            if not (isinstance(x, dict) and isinstance(x.get("check"), str)):
+                continue
+            kept = {k: x[k] for k, valid in (("value", c.is_number), ("passed", lambda v: isinstance(v, bool)), ("n", c.is_number)) if valid(x.get(k))}
+            if "value" in kept or "passed" in kept:
+                out.setdefault(x["check"], []).append({**kept, "session": s.get("id"), "date": s.get("date")})
+    return out
+
+
 def _threat_scores(entries: list[dict]) -> dict | None:
     """적 검사가 낸 위협도 {id: 값}(적 색인과 같이 첫 항목을 쓴다). 적이 없거나 검사를 마치지 못한 적 파일이 있으면 None."""
     found = [d for d in entries if d.get("kind") == "enemies"]
@@ -329,7 +357,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
         for cid, info in index.items():
             hypotheses.setdefault(cid, info)
     economy_data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "economy"), None)
-    stage_refs = _stage_refs(combat_data, growth_data, economy_data, by_id)
+    stage_refs = {**_stage_refs(combat_data, growth_data, economy_data, by_id), "greybox": _greybox_ids(entries)}
     for d in sorted(entries, key=lambda x: x.get("kind") == "levels"):  # 레벨 구성은 적 검사의 위협도를 쓰므로 마지막에 검사한다
         if not d["ok"]:
             continue
@@ -355,7 +383,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
                 enemy_side = (budget_settings or {}).get("sides", {}).get("enemies") or {}
                 d["report"] = levels.validate(d["data"], enemies=by_id["enemies"], threat=_threat_scores(entries), combat=combat_data, economy=economy_data,
                                               kill_times=_kill_costs(entries, "time_to_kill"), kill_hits=_kill_costs(entries, "hits_to_kill"),
-                                              enemy_curve=enemy_side.get("curve"), purchases=_purchase_plan(entries))
+                                              enemy_curve=enemy_side.get("curve"), purchases=_purchase_plan(entries), greybox_log=_greybox_log(entries))
                 first = next(x for x in entries if x["ok"] and x["kind"] == "levels")
                 if d is not first:  # 단계 범위와 처치 수는 파일을 넘어 세지 않는다. 일부만 세어 틀린 결과를 내지 않게 한 파일로 둔다
                     c.add_issue(d["report"]["errors"], "schema", "levels", f"레벨 구성 파일은 하나만 씁니다. {first['name']}에 합칩니다.")

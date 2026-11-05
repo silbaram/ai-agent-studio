@@ -1,6 +1,6 @@
 ---
 name: level-design
-description: "Lays out each level as an ordered list of encounters (rooms, waves, packs, time spans), scores every encounter's threat from the same enemy stats used by combat and stat budgets, compares it with a threat budget curve per stage and role, shows single-target kill time against stage length, and cross-checks placed enemies against combat stages and kill counts against the economy. Also lays out pacing: enemy-less stretches, encounter times against economy stage lengths and purchases, accumulated load between rest points and rewards, and runs of strong encounters. Use when composing levels, waves or rooms, sizing encounters, placing rests and rewards, or checking that a level agrees with combat and economy assumptions, in any genre and engine."
+description: "Lays out each level as an ordered list of encounters (rooms, waves, packs, time spans), scores every encounter's threat from the same enemy stats used by combat and stat budgets, compares it with a threat budget curve per stage and role, shows single-target kill time against stage length, and cross-checks placed enemies against combat stages and kill counts against the economy. Also lays out pacing: enemy-less stretches, encounter times against economy stage lengths and purchases, accumulated load between rest points and rewards, and runs of strong encounters, and keeps a per-level greybox checklist tied to play records. Use when composing levels, waves or rooms, sizing encounters, placing rests and rewards, planning a greybox test, or checking that a level agrees with combat and economy assumptions, in any genre and engine."
 ---
 
 # 레벨 구성
@@ -18,8 +18,8 @@ description: "Lays out each level as an ordered list of encounters (rooms, waves
 | 명령 | 하는 일 |
 |---|---|
 | `python3 .claude/skills/studio-data/scripts/studio.py check .` | 형식·참조 검사, 조우의 위협도와 예산, 전투 단계의 적, 재화 흐름의 처치 수, 단계별 처치 시간 |
-| `… check . --table levels` | 조우 표, 단계 표, 페이싱을 적었으면 리듬 표와 구간 표, 재화 흐름에 옮길 처치 수(마크다운). 검사 보고는 그대로 나온다 |
-| `… view .` | 레벨 구성 탭: 단계 표, 페이싱 구간, 레벨별 조우, 위협도와 예산 범위 |
+| `… check . --table levels` | 조우 표, 단계 표, 페이싱을 적었으면 리듬 표와 구간 표, 그레이박스 확인 표, 재화 흐름에 옮길 처치 수(마크다운). 검사 보고는 그대로 나온다 |
+| `… view .` | 레벨 구성 탭: 단계 표, 페이싱 구간, 레벨별 조우, 위협도와 예산 범위, 그레이박스 확인 |
 
 데이터는 `data/levels.json` 한 파일이다. 형식은 [references/levels-format.md](references/levels-format.md). 적은 [progression-economy](../progression-economy/SKILL.md)의 원본에서, 위협도의 가중치는 [stat-budget](../stat-budget/SKILL.md)의 적 원가에서(없으면 `threat_weights`), 단계는 [combat-balance](../combat-balance/SKILL.md)에서 가져온다. 프로젝트 폴더(`check .`)로 검사해야 참조를 확인한다. 적이나 전투 계산을 함께 넘기지 않으면 `INCOMPLETE`다.
 
@@ -121,6 +121,20 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table levels
 - `purchase_off_span`: 재화 흐름의 구매가 그 조우의 시각 밖에 일어난다. 상점이 열리기 전에 돈이 모이면 재화 흐름 구매의 `after`에 그 시각을 수로 적는다. 구매가 늦으면 메시지가 까닭(돈, `after`, 앞 구매, 단계 끝)을 말한다. 그때도 열려 있는 시설이면 `open_for`를 적는다.
 - 참고 줄의 "쓰이지 않은 확인": `acknowledged`가 어떤 경고도 덮지 않았다. 코드나 대상의 오타, 이미 사라진 경고, 잘못된 자리다. 자리가 틀렸으면 줄이 적을 곳을 말한다. 재화 흐름 구매에 적은 `purchase_off_span`처럼 레벨 구성이 내는 경고는 레벨에 적는다.
 
+### 6. 그레이박스로 확인할 것을 적는다
+
+그래픽을 입히기 전에 회색 박스로 만든 레벨에서 무엇을 확인할지 레벨마다 `greybox`에 적는다. 계산이 말해 주지 못하는 것, 곧 지형, 동선, 실제 시간을 본다. 이 목록이 있어야 플레이가 끝난 뒤 "해 봤다"가 아니라 항목별로 기록이 남는다.
+
+- 레벨의 `intent`, 쉬는 곳과 상점, 가장 긴 구간과 강한 조우 연속마다 한 줄씩 검토한다. 모두 적지 않는다. 틀리면 설계를 바꿀 것만 적는다.
+- `check`는 플레이하는 사람이 재거나 답할 수 있는 관찰로 쓴다. "재미있는가"가 아니라 "대장간에 닿을 때까지 걸린 시간(초)"이다. 선호는 플레이 기록의 `notes`에 남긴다.
+- 수로 잴 수 있으면 `expect`에 기대 범위를 적는다. 범위는 표의 값(단계 길이, 구매 시각)에서 가져오고 어떤 값에서 왔는지 `note`에 적는다. 플레이한 뒤에 범위를 넓혀 통과시키지 않는다.
+- 수로 재지 못하면 `expect`를 두지 않고 플레이 기록에 `passed`로 적는다.
+
+플레이가 끝나면 세션의 `greybox`에 항목 id로 기록한다([playtest-verdict](../playtest-verdict/SKILL.md)). `check .`가 항목마다 마지막 기록으로 판정하고, `--table levels` 끝의 확인 표에 기대와 기록이 나란히 나온다.
+
+- `greybox_failed`: 레벨을 고치거나, 기대가 틀렸다면 근거와 함께 범위를 고친다. 다음 빌드에서 고치기로 했으면 레벨의 `acknowledged`에 항목 id로 적는다.
+- 통과하지 않은 항목은 `--fail-on-assumed`에서 걸린다. 확인하지 않은 레벨을 확정하지 않기 위해서다.
+
 ### 같은 사실의 원본
 
 한 사실을 여러 파일에 적으므로 어느 쪽이 원본인지 정해 둔다.
@@ -145,6 +159,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table levels
 - 전투 단계·재화 흐름과 어긋난 적과 처치 수, 처치 수 대조가 몇 단계까지 됐는가
 - 페이싱을 적었으면: 구간 표, 가장 긴 구간, 강한 조우 연속, 시각과 구매 대조가 어디까지 됐는가. 기준의 출처가 가정이면 "경고 없음"을 근거로 쓰지 않는다
 - 오류·경고 수, `INCOMPLETE` 여부
+- 그레이박스 확인 표: 판정별 수, 실패한 항목, 항목이 없는 레벨
 - 사용자가 정해야 할 것: 곡선, 역할 배수, 조우의 구성과 횟수, 시간 구간이면 무리가 다시 차는 주기, 조건부로 나오는 적, 페이싱 기준, 체력이 레벨 사이에 이어지는가
 
 ## 한계
