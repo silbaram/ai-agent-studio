@@ -960,6 +960,7 @@ function renderGrowth(ds, idx) {
 
 function renderEconomy(ds, idx) {
   const r = ds.report || {};
+  const ackNotes = (Array.isArray(r.ack_notes) ? r.ack_notes : []).map((text) => el("div", { class: "group-note", style: "color: var(--muted)", text: "참고: " + text }));
   const unit = r.time_unit || "초";
   const small = (heads, body, empty) => el("div", { class: "tw" }, el("table", {}, el("thead", {}, el("tr", {}, ...heads.map((h) => el("th", {}, h)))),
     el("tbody", {}, body.length ? body : [el("tr", {}, el("td", { colspan: String(heads.length), class: "muted", text: empty }))])));
@@ -995,7 +996,7 @@ function renderEconomy(ds, idx) {
   const left = Object.entries(r.leftover || {}).map(([k, v]) => el("tr", {}, el("td", { class: "mono", text: k }), el("td", { class: "num" }, num(v.amount)),
     el("td", { class: "num" + ((r.warnings || []).some((w) => w.code === "currency_piles_up" && w.where.endsWith("." + k)) ? " off" : "") }, Math.round(v.share * 100) + "%")));
   return [
-    ...(general.length ? [el("section", { class: "panel" }, el("div", { class: "ph" }, el("h2", {}, "전체")), ...general)] : []),
+    ...(general.length || ackNotes.length ? [el("section", { class: "panel" }, el("div", { class: "ph" }, el("h2", {}, "전체")), ...general, ...ackNotes)] : []),
     el("section", { class: "panel", id: "group-all" },
       el("div", { class: "ph" }, el("h2", {}, "단계별 수입"),
         el("span", { class: "group-meta", text: `길이 단위: ${unit}. 처치 수·드랍 횟수는 기획 가정입니다. 기대값 계산이며 실제 체감이나 재미를 판정하지 않습니다.` })),
@@ -1046,9 +1047,11 @@ function renderLevels(ds, idx) {
   const pacing = object(r.pacing) ? r.pacing : { spans: [], strong_runs: [] };  // 페이싱을 쓰지 않는 게임의 표는 그대로 둔다
   const unit = pacing.time_unit || "";
   const when = (x) => (!given(x.start) ? null : x.start === x.end ? `${fmt(x.start)}${unit}` : `${fmt(x.start)}~${fmt(x.end)}${unit}`);
-  const marks = (x) => [x.rest ? "쉬는 곳" : "", x.reward ? `보상: ${x.reward}` : "", Array.isArray(x.purchases) && x.purchases.length ? `구매 ${x.purchases.join(", ")}` : "", x.strong ? "강함" : ""].filter(Boolean).join(" · ");
+  const bought = (x, k) => (object(x.bought) && k in x.bought ? `${k} ${fmt(x.bought[k])}${unit}` : k);
+  const marks = (x) => [x.rest ? "쉬는 곳" : "", x.reward ? `보상: ${x.reward}` : "", Array.isArray(x.purchases) && x.purchases.length ? `구매 ${x.purchases.map((k) => bought(x, k)).join(", ")}` : "",
+    x.open_for && given(x.start) ? `${fmt(x.start)}~${fmt(Math.max(x.end, x.start + x.open_for))}${unit} 열림` : "", x.strong ? "강함" : ""].filter(Boolean).join(" · ");
   const spanName = (s) => (s.from === s.to ? s.from : `${s.from}~${s.to}`) + (s.to_level && s.to_level !== s.level ? ` (${s.level}~${s.to_level})` : "");
-  const spanRows = (pacing.used ? pacing.spans : []).filter(object).map((s) => el("tr", {},
+  const spanRows = (pacing.used ? pacing.spans : []).filter(object).filter((s) => (pacing.kinds || []).includes(s.kind)).map((s) => el("tr", {},
     el("td", { text: s.kind === "rest" ? "쉬는 곳 사이" : "보상 사이" }), el("td", { class: "mono", text: spanName(s) }), el("td", { class: "mono", text: s.closed_by || "–" }),
     el("td", { class: "num" + (s.over ? " off" : "") }, num(s.load)), el("td", { class: "num" }, given(s.length) ? `${fmt(s.length)}${unit}` : dash()), el("td", { class: "num" }, num(s.limit))));
   const runRows = pacing.strong_runs.filter(object).map((s) => el("tr", {},
@@ -1064,7 +1067,7 @@ function renderLevels(ds, idx) {
       ? el("p", {}, `곡선: ${curveText} · 역할 배수: ${parts(cfg.roles)} · 허용 ±${Math.round((r.tolerance ?? cfg.tolerance ?? 0.2) * 100)}% `, sourcePill(cfg))
       : el("p", { class: "muted", text: "threat_budget이 없어 예산과 비교하지 않습니다." }),
       r.run_threat === null || r.run_threat === undefined ? null : el("p", { text: `판 전체 위협도 ${fmt(r.run_threat)}` })),
-    ...(Array.isArray(r.notes) ? r.notes : []).map(hint),
+    ...[...(Array.isArray(r.notes) ? r.notes : []), ...(Array.isArray(r.ack_notes) ? r.ack_notes : [])].map(hint),
     stageRows.length ? small(["단계", "순서", "위협도 합", "앞 단계 대비", byHits ? "단일 대상 처치 타수" : "단일 대상 처치 시간(초)", "길이", byHits ? "타수 ÷ 길이" : "처치 시간 ÷ 길이", "평범한 조우의 적 수"], stageRows, "") : null)];
   if (spanRows.length || runRows.length) {
     out.push(el("section", { class: "panel" },
@@ -1086,7 +1089,7 @@ function renderLevels(ds, idx) {
         el("td", { class: "num" }, x.vs_previous === null || x.vs_previous === undefined ? dash() : `×${fmt(Math.round(x.vs_previous * 100) / 100)}`),
         el("td", { class: "num" }, cost(x) === null ? dash() : cost(x)),
         el("td", { class: "num" }, x.expected === null || x.expected === undefined ? dash() : `${fmt(x.expected)} (${fmt(x.low)}~${fmt(x.high)})`),
-        ...(pacing.used ? [el("td", { class: "num" }, when(x) === null ? dash() : when(x)), el("td", { class: "num" }, num(x.intensity)), el("td", { text: marks(x) || "–" })] : []));
+        ...(pacing.used ? [el("td", { class: "num" }, when(x) === null ? dash() : when(x)), el("td", { class: "num" }, num(x.intensity)), el("td", { class: "num" }, num(x.rate)), el("td", { text: marks(x) || "–" })] : []));
     });
     const stray = Object.keys(idx.byEntry).filter((k) => k.startsWith(lv.id + ".") && !shown.has(k)).flatMap((k) => idx.byEntry[k]);
     out.push(el("section", { class: "panel", id: "group-" + lv.id },
@@ -1095,7 +1098,7 @@ function renderLevels(ds, idx) {
           : `전투 단계 ${lv.combat_stage || lv.id}` + (lv.status === "cut" ? " · 삭제해서 계산에서 뺍니다" : "") })),
       ...[...(idx.byEntry[lv.id] || []), ...stray].map(note),
       lv.intent ? el("div", { class: "group-note", style: "color: var(--muted)", text: "의도: " + lv.intent }) : null,
-      small(["조우", "역할", "횟수", "구성", "위협도", "앞 조우 대비", byHits ? "처치 타수" : "처치 시간(초)", "예산(범위)", ...(pacing.used ? ["시각", "세기", "표시"] : [])], body, "조우가 없습니다.")));
+      small(["조우", "역할", "횟수", "구성", "위협도", "앞 조우 대비", byHits ? "처치 타수" : "처치 시간(초)", "예산(범위)", ...(pacing.used ? ["시각", "세기", "길이당 부담", "표시"] : [])], body, "조우가 없습니다.")));
   }
   return out;
 }

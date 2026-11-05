@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import difflib
+import hashlib
 import json
 import math
 import re
@@ -18,6 +19,7 @@ KIND_LABELS = {"concepts": "컨셉", "items": "아이템", "upgrades": "영구 �
                "growth": "판 안 성장", "budget": "스탯 예산", "crafting": "강화·합성", "economy": "재화 흐름", "levels": "레벨 구성", "playtests": "플레이 기록"}
 LIST_KEYS = {"combat": ("stages",), "budget": ("archetypes",), "crafting": ("enhance", "recipes"), "economy": ("stages", "purchases"),
              "growth": ("choices", "builds")}  # 항목 배열의 키가 종류 이름과 다른 경우
+ACK_CHECKED = ("levels", "economy")  # 확인이 그 파일 안에서만 쓰이는 종류. 아이템·적의 확인은 다른 파일의 검사가 읽는다
 FOREIGN_NAMES = ("levels",)  # 게임이 자기 형식으로도 흔히 쓰는 파일 이름. 종류 키가 없으면 이 도구의 파일로 보지 않는다
 SUBFOLDERS = ("design", "data")
 STAT_PREFIX = "stat."
@@ -99,6 +101,15 @@ def out_of_range(v, rng) -> bool:
 def table_cell(v) -> str:
     """자유 글을 마크다운 표의 한 칸에 넣는다. 비었으면 –."""
     return str(v).replace("|", "\\|").replace("\n", " ") if v else "–"
+
+
+def fingerprint() -> str:
+    """설치본의 판. 도구 코드와 뷰어의 내용으로 내므로 손으로 올릴 번호가 없다. 두 설치본의 값이 같으면 같은 판이다."""
+    here = Path(__file__).resolve().parent
+    digest = hashlib.sha256()
+    for path in [*sorted(here.glob("*.py")), here.parent.parent / "assets" / "viewer.html"]:
+        digest.update(path.name.encode("utf-8") + path.read_bytes())
+    return digest.hexdigest()[:12]
 
 
 def range_text(rng) -> str:
@@ -321,12 +332,32 @@ def ack_reason(entry: dict, code: str, part: str | None = None) -> str | None:
     return reason.strip() if reason else None
 
 
+def _unused_acks(acks: dict, used: set, seen: list) -> list:
+    """어떤 경고도 덮지 않은 확인을 말하는 문장. acks: {항목 id: 항목}, used: 덮은 (항목, 코드, 대상), seen: 이번 경고 전부."""
+    out = []
+    for eid, entry in acks.items():
+        if not is_active(entry):
+            continue   # 삭제한 항목은 계산에서 빠지므로 경고가 없는 것이 맞다
+        for code, reason in entry["acknowledged"].items():
+            same = [w for w in seen if w["code"] == code]
+            if isinstance(reason, dict):
+                for target in reason:
+                    if (eid, code, target) not in used:
+                        hint = did_you_mean(target, [w["part"] for w in same if w.get("part")]) if same else did_you_mean(code, {w["code"] for w in seen})
+                        out.append(f"쓰이지 않은 확인: {eid}의 {code}({target}). 그런 경고가 없습니다.{hint}")
+            elif not any(k[:2] == (eid, code) for k in used):
+                out.append(f"쓰이지 않은 확인: {eid}의 {code}. 그런 경고가 없습니다.{did_you_mean(code, {w['code'] for w in seen})}")
+    return out
+
+
 def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
     """항목의 acknowledged({경고 코드: 확인한 이유})에 적힌 경고를 report["acknowledged"]로 옮긴다.
     확인한 경고는 경고 수와 --strict에서 빠지지만 지워지지 않고 이유와 함께 남는다. 오류는 옮기지 않는다.
     경고에 owner가 있으면 그 항목의 확인으로 본다(예: 전투 계산의 '단계.적' 경고는 단계가 주인).
-    경고에 part(대상)가 있으면 {코드: {대상: 이유}} 확인은 그 대상의 경고만 덮는다."""
+    경고에 part(대상)가 있으면 {코드: {대상: 이유}} 확인은 그 대상의 경고만 덮는다.
+    ACK_CHECKED의 파일은 쓰이지 않은 확인을 report["ack_notes"]로 알린다. 미확인이나 오류가 남은 검사는 나오지 못한 경고가 있어 말하지 않는다."""
     report.setdefault("acknowledged", [])
+    report.setdefault("ack_notes", [])
     lists = [data.get(k) for k in LIST_KEYS.get(kind, (kind,))]
     entries = [e for lst in lists if isinstance(lst, list) for e in lst]
     if not entries:
@@ -338,18 +369,22 @@ def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
         ack = e["acknowledged"]
         if not valid_acknowledged(ack):
             report["errors"].append({"code": "schema", "where": e["id"],
-                                     "message": "acknowledged는 {경고 코드: 확인한 이유} 객체여야 합니다. 이유를 비워 두지 않습니다."})
+                                     "message": "acknowledged는 {경고 코드: 확인한 이유}나 {경고 코드: {대상: 이유}} 객체여야 합니다. 이유를 비워 두지 않습니다."})
             continue
         acks.setdefault(e["id"], e)  # 검사기와 같이 첫 항목을 쓴다
-    kept = []
+    kept, used, seen = [], set(), list(report["warnings"])
     for w in report["warnings"]:
-        owner = acks.get(w.get("owner", w["where"]))
+        eid = w.get("owner", w["where"])
+        owner = acks.get(eid)
         reason = ack_reason(owner, w["code"], w.get("part")) if owner else None
         if reason:
             report["acknowledged"].append({**w, "reason": reason})
+            used.add((eid, w["code"], w.get("part")))
         else:
             kept.append(w)
     report["warnings"] = kept
+    if kind in ACK_CHECKED and not report.get("unchecked") and not report["errors"]:
+        report["ack_notes"] = _unused_acks(acks, used, seen)
 
 
 def summary_counts(entries: list[dict]) -> dict:

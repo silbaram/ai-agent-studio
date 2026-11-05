@@ -519,7 +519,7 @@ class RestSpans(unittest.TestCase):
     def test_over_the_limit_is_a_warning_on_the_first_encounter(self):
         r = paced(level("s1", enc(repeat=3), quiet(rest=True)), level("s2", enc("e2", {"c": 6})), pacing={"max_rest_load": 2})
         w = warning(r, "long_stretch")
-        self.assertEqual((w["part"], w["owner"]), ("e1", "s1"))
+        self.assertEqual((w["part"], w["owner"]), ("e1~q", "s1"))
         self.assertIn("3", w["message"])
         self.assertIn("2", w["message"])
         self.assertTrue(spans(r)[0]["over"])
@@ -559,7 +559,7 @@ class RestSpans(unittest.TestCase):
 
     def test_the_span_knows_its_length(self):
         r = run(both(level("s1", enc(duration=20), quiet(duration=10, rest=True), enc("e3", duration=30))), economy=ECONOMY)
-        self.assertEqual([s["length"] for s in spans(r) if s["level"] == "s1"], [30, 30])
+        self.assertEqual([s["length"] for s in spans(r) if s["level"] == "s1"], [20, 30])
 
     def test_a_list_out_of_time_order_keeps_the_whole_length(self):
         r = run(both(level("s1", enc(at=50, duration=10), enc("e3", at=0, duration=10))), economy=ECONOMY)
@@ -586,7 +586,7 @@ class RewardSpans(unittest.TestCase):
 
     def test_rewards_cut_their_own_spans(self):
         r = run(both(level("s1", enc(), enc("e3", reward="상자"), quiet(rest=True), enc("e4"))))
-        self.assertEqual([s["load"] for s in spans(r, "reward") if s["level"] == "s1"], [2, 1])
+        self.assertEqual([s["load"] for s in spans(r, "reward") if s["level"] == "s1"], [2, 2])   # 보상 구간은 레벨을 넘는다
         self.assertEqual([s["load"] for s in spans(r) if s["level"] == "s1"], [2, 1])
 
     def test_rest_and_reward_are_independent(self):
@@ -595,14 +595,14 @@ class RewardSpans(unittest.TestCase):
 
     def test_the_tail_after_the_last_reward_counts(self):
         r = paced(*both(level("s1", enc(reward="상자"), enc("e3", repeat=3))), pacing={"max_reward_load": 2})
-        self.assertEqual(warning(r, "reward_drought")["part"], "e3")
+        self.assertEqual(warning(r, "reward_drought")["part"], "e3~e2")
 
     def test_within_the_limit_is_fine(self):
         self.assertNotIn("reward_drought", warn_codes(paced(*both(level("s1", enc(repeat=2, reward="상자"))), pacing={"max_reward_load": 2})))
 
     def test_a_reward_that_may_not_come_does_not_cut(self):
         r = run(both(level("s1", enc(), quiet(reward="상자", repeat=0.5), enc("e3"))))
-        self.assertEqual(spans(r, "reward")[0]["load"], 2)
+        self.assertEqual(spans(r, "reward")[0]["load"], 3)   # 레벨을 넘어 s2의 조우까지 잇는다
 
     def test_the_reward_text_reaches_the_row(self):
         self.assertEqual(row(run(both(level("s1", enc(reward="상자")))))["reward"], "상자")
@@ -662,14 +662,14 @@ class StrongRuns(unittest.TestCase):
 
     def test_too_long_a_run_is_a_warning(self):
         r = paced(*both(level("s1", strong(), strong("h2"), strong("h3"))), pacing={"max_strong_run": 2})
-        self.assertEqual(warning(r, "strong_run")["part"], "hard")
+        self.assertEqual(warning(r, "strong_run")["part"], "hard~h3")
 
     def test_a_run_at_the_limit_is_fine(self):
         self.assertNotIn("strong_run", warn_codes(paced(*both(level("s1", strong(), strong("h2"))), pacing={"max_strong_run": 2})))
 
     def test_strong_at_moves_the_line(self):
         r = paced(*both(level("s1", enc(), enc("e3"))), pacing={"strong_at": 1, "max_strong_run": 1})
-        self.assertEqual(warning(r, "strong_run")["part"], "e1")
+        self.assertEqual(warning(r, "strong_run")["part"], "e1~e3")
 
     def test_without_a_curve_nothing_is_strong(self):
         r = run(both(level("s1", enc(role="x"))), budget=None)
@@ -769,7 +769,7 @@ class Output(Project):
 
     def test_a_pipe_in_a_reward_stays_in_its_cell(self):
         line = next(x for x in lv.table({}, run(both(level("s1", enc(reward="상자 | 열쇠\n둘"))))).splitlines() if "상자" in x)
-        self.assertEqual(line.count("|") - line.count("\\|"), 7)
+        self.assertEqual(line.count("|") - line.count("\\|"), 8)
         self.assertTrue(line.endswith("열쇠 둘 |"), line)
 
     def test_strong_runs_are_in_the_table(self):
