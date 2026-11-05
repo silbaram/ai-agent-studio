@@ -1,4 +1,4 @@
-"""studio.py의 하위 명령: view / check / simulate / calibrate / runlog / provenance / draft / setup / hook.
+"""studio.py의 하위 명령: view / check / simulate / calibrate / runlog / provenance / draft / scope / setup / hook.
 
 종료 코드
   0  통과. check는 미확인 참조가 있으면 최종 줄이 INCOMPLETE다(종료 코드는 0, --strict·--fail-on-assumed면 1).
@@ -17,7 +17,7 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from . import budget, calibrate, claude, combat, concepts, crafting, datasets, economy, enemies, growth, items, levels, meta_sim, playtests, provenance, systems, upgrades, viewer
+from . import budget, calibrate, claude, combat, concepts, crafting, datasets, economy, enemies, growth, items, levels, meta_sim, playtests, provenance, scope, systems, upgrades, viewer
 from . import common as c
 
 EXTRA_PRINTERS = {"items": items.print_extra, "upgrades": upgrades.print_extra, "enemies": enemies.print_extra,
@@ -431,6 +431,26 @@ def cmd_draft(args) -> int:
 
 
 # ---------- setup / hook (Claude Code) ----------
+def cmd_scope(args) -> int:
+    project = Path(args.project)
+    reason = "게임 프로젝트 폴더를 찾을 수 없습니다: " + str(project) if not project.is_dir() else scope.missing(project)
+    if reason:
+        print(reason, file=sys.stderr)
+        return 2
+    project = project.resolve()
+    if args.link is not None:
+        code, lines = scope.link(project, args.link[0], args.link[1:])
+        for line in lines:
+            print(line, file=sys.stderr if code else sys.stdout)
+        return code
+    report = scope.check(project)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        scope.print_report(report)
+    return 1 if report["errors"] else 0
+
+
 def cmd_setup(args) -> int:
     project = Path(args.project)
     if not project.is_dir():
@@ -447,6 +467,8 @@ def cmd_hook(args) -> int:
     if args.event == "judge-guard":
         code, message = claude.judge_guard(payload)
         out, err = "", message
+    elif args.event == "scope-guard":
+        code, out, err = claude.scope_guard(payload)
     else:
         code, out, err = claude.post_edit(payload)
     if out:
@@ -531,6 +553,12 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--set", action="append", metavar="필드=값", help="초안에 넣을 필드. 배수 필드(예: rank=elite)도 여기서 정합니다. 여러 번 쓸 수 있습니다.")
     d.set_defaults(func=cmd_draft)
 
+    g = sub.add_parser("scope", help="OpenSpec 변경을 브리프와 시스템 설계에 대어 범위 이탈을 찾습니다.")
+    g.add_argument("project", nargs="?", default=".", help="게임 프로젝트 폴더 (기본: 현재 폴더)")
+    g.add_argument("--link", nargs="+", metavar=("변경", "시스템"), help="변경이 다루는 시스템과 지금 규칙의 지문을 .openspec.yaml에 적습니다.")
+    g.add_argument("--json", action="store_true", help="JSON으로 출력합니다.")
+    g.set_defaults(func=cmd_scope)
+
     u = sub.add_parser("setup", help="게임 프로젝트에 판정 에이전트와 훅을 설치합니다 (Claude Code).")
     u.add_argument("host", choices=("claude",), help="연결할 호스트. 지금은 claude(Claude Code)만 지원합니다.")
     u.add_argument("project", nargs="?", default=".", help="게임 프로젝트 폴더 (기본: 현재 폴더)")
@@ -538,7 +566,7 @@ def build_parser() -> argparse.ArgumentParser:
     u.set_defaults(func=cmd_setup)
 
     h = sub.add_parser("hook", help="Claude Code 훅 처리기. setup이 settings.json에 등록하며 직접 실행하지 않습니다.")
-    h.add_argument("event", choices=("post-edit", "judge-guard"))
+    h.add_argument("event", choices=("post-edit", "judge-guard", "scope-guard"))
     h.set_defaults(func=cmd_hook)
     return ap
 

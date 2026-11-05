@@ -9,7 +9,7 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 
 | 층 | 담당 |
 | --- | --- |
-| 수명주기 뼈대 (기획 → 설계 → 태스크 → 구현 → 검증) | 검증된 외부 도구를 시험 후 채택 (spec-kit 또는 OpenSpec 후보) |
+| 수명주기 뼈대 (기획 → 설계 → 태스크 → 구현 → 검증) | [OpenSpec](https://github.com/Fission-AI/OpenSpec). `scope-guard`로 설계 층에 잇는다 |
 | 게임 설계 (컨셉·시스템·레벨·아이템·경제·밸런스 기획·재미 검증) | **이 저장소** |
 | 그래픽 (도트·메시·VFX) | [game-art-skills](https://github.com/silbaram/game-art-skills) |
 
@@ -20,6 +20,7 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 | [studio-data](skills/studio-data/SKILL.md) | **공용 도구.** 실행 파일 `studio.py` 하나로 검사(check)·뷰어(view)·시뮬레이션(simulate)·플레이 기록 보정(calibrate)·수치 출처 검사(provenance)·Claude Code 연결(setup). 다른 스킬과 함께 설치 |
 | [concept-exploration](skills/concept-exploration/SKILL.md) | 막연한 방향을 구조가 다른 게임 가설로 펼치고, 단순 전략으로 반증하고, 고른 안을 필러·가설·최소 프로토타입이 있는 브리프로 정리 |
 | [system-design](skills/system-design/SKILL.md) | 게임의 시스템과 규칙, 의존 관계를 적어 브리프의 필러·MVP·범위 밖에 잇고, 맡는 시스템이 없는 것과 범위 이탈, 의존 순환, 만드는 순서를 찾음 |
+| [scope-guard](skills/scope-guard/SKILL.md) | OpenSpec 변경을 브리프와 시스템 설계에 잇고, MVP 밖의 일과 낡은 명세를 찾아 훅으로 막으며, 범위를 넓히는 편집은 사용자에게 묻기 |
 | [numeric-provenance](skills/numeric-provenance/SKILL.md) | 기획 수치를 `[가정]` / `[계산: 출처]` / `[측정: 출처]`로 표시하고, 확정 판정 전에 스크립트로 검사 |
 | [progression-economy](skills/progression-economy/SKILL.md) | 아이템·영구 강화·적 데이터의 단일 원본 관리와 뷰어, 티어 역전·완전 열위·드랍 천장·강화 사슬·적 위협도 진행 검사, 로그라이크 메타 성장 시뮬레이션 |
 | [run-growth](skills/run-growth/SKILL.md) | 레벨업 선택지와 빌드 정책(우선순위·고르게)으로 단계별로 얻는 스탯을 시뮬레이션해 전투 계산에 더하고, 빌드끼리 처치·버팀을 비교해 모든 곳에서 밀리는 빌드를 찾음 |
@@ -34,7 +35,7 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 
 ## 설치
 
-**스킬을 사용할 게임 프로젝트 폴더에서** 실행한다. 열한 스킬을 모두 설치한다. `studio-data`가 빠지면 다른 스킬의 검사와 뷰어가 동작하지 않는다.
+**스킬을 사용할 게임 프로젝트 폴더에서** 실행한다. 열세 스킬을 모두 설치한다. `studio-data`가 빠지면 다른 스킬의 검사와 뷰어가 동작하지 않는다.
 
 필요한 것:
 
@@ -63,7 +64,7 @@ npx skills add silbaram/ai-agent-studio --skill '*' --agent codex --copy
 - `--copy`는 독립 사본을 만든다. 이 저장소가 갱신돼도 설치본은 자동으로 바뀌지 않는다.
 - **갱신하려면 같은 명령을 다시 실행한다.** 기존 설치본을 덮어쓰므로, 설치본을 직접 고쳤다면 그 내용은 사라진다. 고칠 것이 있으면 설치본이 아니라 이 저장소를 고친다.
 - 받아 둔 이 저장소의 로컬 사본(작업 중인 브랜치 등)으로 설치하려면 `silbaram/ai-agent-studio` 대신 그 폴더 경로를 쓴다.
-- Node.js 없이 설치하려면 이 저장소의 `skills/` 안 열한 폴더를 위 표의 설치 위치로 그대로 복사한다.
+- Node.js 없이 설치하려면 이 저장소의 `skills/` 안 열세 폴더를 위 표의 설치 위치로 그대로 복사한다.
 
 Claude Code는 설치한 뒤 한 번 더 실행한다. `npx skills`는 스킬만 설치하므로, 판정 에이전트와 훅은 이 명령이 게임 프로젝트의 `.claude/agents/`와 `.claude/settings.json`에 넣는다. 스킬을 다시 설치한 뒤에도 다시 실행한다. 자세한 내용은 [studio-data의 Claude Code 연결](skills/studio-data/SKILL.md#claude-code-연결).
 

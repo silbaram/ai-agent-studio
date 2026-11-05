@@ -30,6 +30,7 @@ description: "Shared tooling for the game-design skills: one entry script (studi
 | `python3 .claude/skills/studio-data/scripts/studio.py runlog runs.csv` | 판별 로그(CSV)를 세션의 단계 기록으로 모아 출력한다. 파일에 쓰지 않는다 |
 | `python3 .claude/skills/studio-data/scripts/studio.py provenance design/` | 기획 문서(md)의 수치 출처 태그를 검사한다 |
 | `python3 .claude/skills/studio-data/scripts/studio.py draft . --archetype <원형> --at <기준 값>` | 스탯 예산의 곡선과 원형으로 아이템·적 초안을 JSON으로 출력한다 (파일에 쓰지 않음) |
+| `python3 .claude/skills/studio-data/scripts/studio.py scope` | OpenSpec 변경을 브리프와 시스템 설계에 대어 범위 이탈을 찾는다. 절차는 [scope-guard](../scope-guard/SKILL.md) |
 | `python3 .claude/skills/studio-data/scripts/studio.py setup claude .` | 판정 에이전트와 훅을 게임 프로젝트에 설치한다 (Claude Code, [아래](#claude-code-연결)) |
 
 옵션은 `studio.py <명령> --help`로 본다. 종료 코드는 0 통과, 1 오류(또는 `--strict` 경고, `--fail-on-assumed` 가정), 2 사용법 오류(경로 없음, 읽을 수 없는 파일, `check`할 데이터 없음, `provenance`할 md 없음, `calibrate`로 비교할 기록 없음, 설정 오류)다. `check --fail-on-assumed`는 출처가 가정이거나 비어 있거나 읽을 수 없는 시뮬레이터 설정도 실패시킨다.
@@ -85,10 +86,13 @@ python3 .claude/skills/studio-data/scripts/studio.py setup claude .
 
 - **PostToolUse(Write·Edit)**: `design/`·`data/` 아래 파일을 고치면 데이터는 `check`, md는 `provenance`를 돌린다. 오류는 에이전트에게 바로 보이고(종료 코드 2), 경고는 참고 정보로 붙는다. 편집을 되돌리지는 않는다.
 - **PreToolUse**: 판정 에이전트(`studio-judge`)가 파일을 쓰거나(Write·Edit·MultiEdit·NotebookEdit) `studio.py check`·`provenance` 밖의 명령을 실행하면 막는다. `--out`(파일 쓰기)과 셸 연결(`;`, `&&`, `|`, `>`, `$` 등)도 막는다. 다른 에이전트에는 관여하지 않는다.
+- **PreToolUse(범위)**: OpenSpec과 시스템 설계가 다 있는 프로젝트에서 `scope`에 오류가 있으면 게임을 만드는 파일의 편집, 메인 스펙 편집, `openspec archive`를 막는다. 범위를 넓히는 설계 편집은 사용자에게 묻는다. 자세한 내용은 [scope-guard](../scope-guard/SKILL.md).
 
 다시 실행하면 이 도구가 넣은 훅만 바꾼다. `settings.json`이 JSON이 아니거나, `studio-judge.md`가 이미 있는데 setup이 만든 파일이 아니면 아무것도 바꾸지 않고 종료 코드 2로 끝난다. 훅이 쓸 파이썬은 `--python`으로 바꾼다(기본: Windows `py`, 그 밖 `python3`).
 
 확인 범위: Claude Code 2.1.316, WSL(Linux)에서 실제 세션으로 확인했다. 판정 에이전트의 `check`는 통과하고 셸 리다이렉트 쓰기는 막혔으며, 메인 에이전트의 데이터 오류 편집은 오류로 되돌아왔고 메인 에이전트는 막히지 않았다. Windows에서의 훅 명령 실행은 아직 확인하지 않았다. Codex에는 같은 장치가 없다.
+
+범위 훅의 확인 범위: Claude Code 2.1.318, WSL(Linux), OpenSpec 1.16.0의 `claude -p` 세션에서 게임 파일 쓰기와 `openspec archive`가 막히고, 고친 뒤 통과하며, 범위를 넓히는 편집이 거부되는 것을 확인했다. 대화형 세션의 묻는 창과 Windows는 확인하지 못했다.
 
 ## 코드 구조
 
@@ -102,6 +106,7 @@ python3 .claude/skills/studio-data/scripts/studio.py setup claude .
 | `meta_sim` | 메타 성장 시뮬레이터 |
 | `provenance` | md 수치 출처 태그 검사 |
 | `viewer` | 뷰어 서버 (내용이 바뀔 때만 다시 검사) |
+| `scope` | OpenSpec 변경의 범위 검사. OpenSpec의 폴더 구조를 아는 유일한 곳 |
 | `claude` | Claude Code 연결: `setup`과 `hook` 처리기 |
 | `cli` | `studio.py`의 하위 명령 |
 

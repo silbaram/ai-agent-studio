@@ -15,7 +15,7 @@
 
 ```
 [수명주기 뼈대]  기획 → 설계 → 태스크 → 구현 → 검증
-                 spec-kit 또는 OpenSpec + superpowers식 실행 규율 (외부 도구, 시험 후 결정)
+                 OpenSpec + superpowers식 실행 규율 (외부 도구)
 
 [게임 설계 층]   컨셉 탐색·반증, 시스템 설계, 레벨,
                  아이템·경제·밸런스 기획(스탯·전투 계산, 예산 곡선, 강화·합성, 재화 흐름),
@@ -50,8 +50,8 @@
 | 2+ | 공용 도구 `studio-data`: 파이썬 코드와 뷰어를 한 곳으로, 실행 파일 `studio.py` 하나 | 완료 |
 | 2++ | 재미 검증 게이트의 기록 쪽: 플레이 기록·가설 판정 (`playtest-verdict`), 읽기 전용 판정 에이전트와 데이터 검사 훅 (`studio.py setup claude`) | 1차 완료 (Claude Code + WSL 실제 세션 확인, Windows 미확인) |
 | 3 | **밸런스 기획** (아래 B1~B5) | 진행 |
-| 4 | **레벨·시스템 설계** (아래 L1~S1) | 진행 |
-| 5 | 뼈대 도구 시험(spec-kit vs OpenSpec)과 연결, 범위 이탈 차단 훅(`scope-guard`, 브리프의 MVP·범위 밖 기준) | |
+| 4 | **레벨·시스템 설계** (아래 L1~S1) | 1차 완료 |
+| 5 | 뼈대 도구 시험(spec-kit vs OpenSpec, [결과](research/lifecycle-trial-2026-11.md))과 OpenSpec 연결, 범위 이탈 차단 훅 (`scope-guard`) | 1차 완료 |
 | 6 | 그래픽 인계: 완성 게임에서 에셋·효과 재고를 뽑아 game-art-skills 브리프로 변환 (`art-handoff`) | 보류 (game-art-skills가 완성될 때까지) |
 
 ### 3단계: 밸런스 기획
@@ -104,7 +104,6 @@ S1 현장 시험에서 뒤로 넘긴 것(181~186번은 고쳤고, 188번과 189�
 
 ## 결정 대기
 
-- 뼈대 도구 선택(spec-kit / OpenSpec)
 - 라이선스
 
 방어 공식 형태는 게임마다 고르게 하기로 했다. 근거: [방어 공식 조사](research/defense-formulas-2026-11.md)

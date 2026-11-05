@@ -1,0 +1,4 @@
+interface:
+  display_name: "범위 이탈 차단"
+  short_description: "OpenSpec 변경을 브리프와 시스템 설계에 잇고 MVP 밖의 일과 낡은 명세를 찾음"
+  default_prompt: "Use $scope-guard to connect this game's OpenSpec changes to its systems, and report any change that leaves the MVP or was written against rules that have since changed."
