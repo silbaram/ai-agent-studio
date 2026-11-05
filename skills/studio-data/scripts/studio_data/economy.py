@@ -17,11 +17,21 @@ from .common import add_issue as _err, did_you_mean
 
 PRICE_SOURCES = ("items", "enhance", "recipes", "upgrades")
 PURCHASE_TIMINGS = ("any", "stage_end")  # 단계 안 어느 때나 산다 / 단계가 끝날 때만 산다(라운드 사이의 상점)
+SETTING_FIELDS = {"currencies", "kill_reward", "sell", "prices", "time_unit", "leftover_max", "purchase_timing", "provenance", "note"}
+STAGE_FIELDS = {"id", "combat_stage", "duration", "kills", "drops", "income", "name", "intent", "status", "provenance", "acknowledged", "note"}
+PURCHASE_FIELDS = {"id", "price", "target", "after", "name", "intent", "status", "provenance", "acknowledged", "note"}
 PRICE_KEY = {"item": "items", "enhance": "enhance", "recipe": "recipes", "upgrade": "upgrades"}
 INCOME_PARTS = ("kills", "drops", "other")
 UNCHECKED_LABEL = {"enemies": "적", "items": "아이템", "upgrades": "영구 강화", "crafting": "강화·합성",
                    "combat": "전투 계산(combat_stage 연결)", "meta": "메타 성장 설정(meta_config)"}
 EPS = 1e-9
+
+
+def _known_keys(entry: dict, known: set, where: str, errors: list) -> None:
+    """모르는 키는 오류다. 그대로 두면 값이 조용히 빠져 구매 시점이나 길이가 말없이 달라진다. 값 계산은 계속한다."""
+    text = c.unknown_keys_text(entry, known)
+    if text:
+        _err(errors, "schema", where, text)
 
 
 def _num(v, minimum: float = 0.0, strict: bool = False) -> bool:
@@ -86,6 +96,7 @@ def read_settings(data: dict, errors: list) -> dict | None:
     if left is not None and not (_num(left) and left <= 1):
         _err(errors, "schema", "economy.leftover_max", "leftover_max는 0~1 비율입니다(판 끝에 남아도 되는 수입의 비율).")
         ok = False
+    _known_keys(cfg, SETTING_FIELDS, "economy", errors)
     timing = cfg.get("purchase_timing", "any")
     if timing not in PURCHASE_TIMINGS:
         _err(errors, "schema", "economy.purchase_timing", f"purchase_timing은 {', '.join(PURCHASE_TIMINGS)} 중 하나입니다: {timing!r}")
@@ -391,6 +402,8 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
         raw_buys = []
     stages = [s for _, s in c.check_identity(raw_stages, "stages", errors) if c.check_common(s, s["id"], errors)]
     buys = [p for _, p in c.check_identity(raw_buys, "purchases", errors) if c.check_common(p, p["id"], errors)]
+    for entry, known in [*((s, STAGE_FIELDS) for s in stages), *((p, PURCHASE_FIELDS) for p in buys)]:
+        _known_keys(entry, known, entry["id"], errors)
     refs = {"enemies": enemies, "items": items, "drop_tables": drop_tables, "upgrades": upgrades, "crafting": crafting,
             "pools": rarity_pools(items) if items is not None else {}, "sell_cache": {}}
     missing: set = set()
@@ -431,6 +444,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
         for st in timeline:
             starts[st["id"]] = t0
             t0 += st["duration"]
+        run_end = t0
         stage_ids = {s["id"] for s in stages}
         last_time = 0.0
         planned_ups: set = set()   # 계획에서 앞서 사는 영구 강화. 가격을 구하지 못한 구매도 계획에는 있다
@@ -463,7 +477,11 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
                 _err(errors, "schema", p["id"], "target은 [최소, 최대]이고 한쪽은 null로 비울 수 있습니다(최소 ≤ 최대).")
                 target = None
             after = p.get("after")
-            if after is not None and after not in stage_ids:
+            if c.is_number(after) and (after < 0 or (complete and after > run_end + EPS)):
+                _err(errors, "schema", p["id"], f"after(팔기 시작하는 단계나 시각)의 시각은 0부터 판 끝 {run_end:g}까지입니다: {after:g}")
+                blocked.setdefault(_currency_of(p, settings), p["id"])
+                continue
+            if after is not None and not c.is_number(after) and not (isinstance(after, str) and after in stage_ids):
                 _err(errors, "unknown_stage", p["id"], f"after에 적은 단계가 stages에 없습니다: {after!r}{did_you_mean(str(after), stage_ids)}")
                 blocked.setdefault(_currency_of(p, settings), p["id"])
                 continue
@@ -476,7 +494,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
                 continue
             price, currency = got
             if after is not None and cur[currency].get("carry"):
-                _err(errors, "schema", p["id"], "after(파는 단계)는 판 안 재화의 구매에만 씁니다. 판 사이 재화는 판 단위로 셉니다.")
+                _err(errors, "schema", p["id"], "after(팔기 시작하는 단계나 시각)는 판 안 재화의 구매에만 씁니다. 판 사이 재화는 판 단위로 셉니다.")
                 blocked.setdefault(currency, p["id"])
                 continue
             if ref_up and refs["upgrades"] is not None:
@@ -507,7 +525,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
                 hit = _time_reaching(timeline, currency, spent[currency], settings) if complete else None
                 if hit:
                     # 돈이 모이는 시점, 파는 단계가 시작하는 시점, 앞선 구매 시점 중 가장 늦은 때(계획 순서대로 산다)
-                    at = max(hit[0], starts.get(after, 0.0), last_time)
+                    at = max(hit[0], after if c.is_number(after) else starts.get(after, 0.0), last_time)
                     at, row["stage"] = _stage_end(timeline, at) if settings["purchase_timing"] == "stage_end" else (at, _stage_at(timeline, at))
                     last_time = at
                     row["at"] = round(at, 4)

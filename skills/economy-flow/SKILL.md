@@ -51,7 +51,7 @@ description: "Models currency income per stage (kills times enemy rewards, expec
 | 합성 | `{"recipe": "forge_iron"}` → 합성 비용 ÷ 성공률(재료는 빼고 재화만) |
 | 영구 강화 | `{"upgrade": "weapon_1"}` → 영구 강화 `cost` |
 
-구매마다 `target`([최소, 최대])으로 의도한 시점을 적을 수 있다. 판 안 재화는 시간(`time_unit`), 판 사이 재화는 판 수다. 상점이나 제작대가 특정 단계부터 열리면 `after`에 그 단계를 적는다. 그 전에는 돈이 있어도 사지 않는다.
+구매마다 `target`([최소, 최대])으로 의도한 시점을 적을 수 있다. 판 안 재화는 시간(`time_unit`), 판 사이 재화는 판 수다. 상점이나 제작대가 특정 단계부터 열리면 `after`에 그 단계를 적고, 단계 중간에 열리면 그 시각을 적는다. 그 전에는 돈이 있어도 사지 않는다.
 
 ### 4. 계산하고 읽는다
 
@@ -59,7 +59,7 @@ description: "Models currency income per stage (kills times enemy rewards, expec
 python3 .claude/skills/studio-data/scripts/studio.py check . --table economy
 ```
 
-- **구매 시점**: 판 안 재화는 누적 수입이 (앞선 구매 + 이 구매)에 닿는 시점, `after` 단계가 열리는 시점, 앞 구매 시점 중 가장 늦은 때. 단계 안에서는 고르게 들어온다고 본다.
+- **구매 시점**: 판 안 재화는 누적 수입이 (앞선 구매 + 이 구매)에 닿는 시점, `after`의 단계나 시각, 앞 구매 시점 중 가장 늦은 때. 단계 안에서는 고르게 들어온다고 본다.
 - `requirement_missing`: 영구 강화를 선행 조건보다 먼저 사는 계획이다. 순서를 고친다.
 - `duplicate_purchase`·`enhance_gap`: 같은 영구 강화를 두 번 사거나, 같은 강화의 단계를 건너뛰거나 겹쳐 사는 계획이다.
 - 시점이 "앞 구매를 계산하지 못해 미확인"이면 앞의 오류·미확인 구매부터 고친다. 그 재화는 남는 양도 내지 않는다.

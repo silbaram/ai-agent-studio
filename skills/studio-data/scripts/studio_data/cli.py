@@ -155,8 +155,11 @@ def cmd_check(args) -> int:
             for w in r["warnings"]:
                 print(f"warning [{w['code']}] {w['where']}: {w['message']}")
             for a in r.get("acknowledged", []):
-                target = f"({a['part']})" if a.get("part") and a["part"] != a["where"] else ""
+                shown = [x for x in (a.get("part"), a.get("value")) if x and x != a["where"] and not a["where"].endswith(f".{x}")]
+                target = f"({', '.join(shown)})" if shown else ""
                 print(f"확인한 경고 [{a['code']}] {a['where']}{target}: {a['reason']}")
+            for text in r.get("ack_notes", []):
+                print("참고: " + text)
             if d["kind"] in EXTRA_PRINTERS:
                 EXTRA_PRINTERS[d["kind"]](r)
             if args.table and d["kind"] in TABLE_PRINTERS and (table_kinds is None or d["kind"] in table_kinds):
@@ -457,8 +460,17 @@ def cmd_hook(args) -> int:
     return code
 
 
+class ShowVersion(argparse.Action):
+    """판은 파일 내용으로 내므로 --version을 쓸 때만 계산한다."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(f"studio-data {c.fingerprint()}")
+        parser.exit()
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="studio.py", description="게임 설계 데이터 공용 도구 (컨셉·아이템·영구 강화·적·수치 출처).")
+    ap.add_argument("--version", nargs=0, action=ShowVersion, help="설치본의 판을 출력합니다. 두 설치본의 값이 같으면 같은 판입니다.")
     sub = ap.add_subparsers(dest="command", required=True, metavar="명령")
 
     v = sub.add_parser("view", help="데이터를 브라우저에서 봅니다 (읽기 전용, 자동 갱신).")
