@@ -14,17 +14,17 @@ STATUSES = ("proposed", "approved", "cut")
 PROVENANCE_KINDS = {"assumed": "assumed", "computed": "computed", "measured": "measured",
                     "가정": "assumed", "계산": "computed", "측정": "measured"}
 TEXT_FIELDS = ("name", "effect", "intent")
-DATASET_KINDS = ("concepts", "items", "upgrades", "enemies", "combat", "growth", "budget", "crafting", "economy", "levels", "playtests")
-KIND_LABELS = {"concepts": "컨셉", "items": "아이템", "upgrades": "영구 강화", "enemies": "적", "combat": "전투 계산",
+DATASET_KINDS = ("concepts", "systems", "items", "upgrades", "enemies", "combat", "growth", "budget", "crafting", "economy", "levels", "playtests")
+KIND_LABELS = {"concepts": "컨셉", "systems": "시스템 설계", "items": "아이템", "upgrades": "영구 강화", "enemies": "적", "combat": "전투 계산",
                "growth": "판 안 성장", "budget": "스탯 예산", "crafting": "강화·합성", "economy": "재화 흐름", "levels": "레벨 구성", "playtests": "플레이 기록"}
 LIST_KEYS = {"combat": ("stages",), "budget": ("archetypes",), "crafting": ("enhance", "recipes"), "economy": ("stages", "purchases"),
              "growth": ("choices", "builds")}  # 항목 배열의 키가 종류 이름과 다른 경우
-ACK_CHECKED = ("levels", "economy")  # 확인이 그 파일 안에서만 쓰이는 종류. 아이템·적의 확인은 다른 파일의 검사가 읽는다
+ACK_CHECKED = ("levels", "economy", "systems")  # 확인이 그 파일 안에서만 쓰이는 종류. 아이템·적의 확인은 다른 파일의 검사가 읽는다
 LEVEL_ACK_CODES = ("curve_unused_point", "enemy_not_in_stage", "enemy_unplaced", "greybox_failed", "kills_differ", "kills_not_linked", "long_stretch", "purchase_off_span", "reward_drought", "strong_run",
                    "time_gap", "time_outside_stage")  # 레벨 구성이 내는 경고. 테스트가 검사기와 맞춰 본다
 ECONOMY_ACK_CODES = ("currency_piles_up", "duplicate_purchase", "enhance_gap", "gear_before_purchase", "kill_not_in_stage", "meta_income_differs", "meta_order_differs",
                      "requirement_missing", "reward_missing", "target_out_of_range", "unaffordable")  # 재화 흐름이 내는 경고
-FOREIGN_NAMES = ("levels",)  # 게임이 자기 형식으로도 흔히 쓰는 파일 이름. 종류 키가 없으면 이 도구의 파일로 보지 않는다
+FOREIGN_NAMES = ("levels", "systems")  # 게임이 자기 형식으로도 흔히 쓰는 파일 이름. 종류 키가 없으면 이 도구의 파일로 보지 않는다
 SUBFOLDERS = ("design", "data")
 STAT_PREFIX = "stat."
 
@@ -146,6 +146,11 @@ def _num(value: str):
         return float(value)
 
 
+def _our_systems(value) -> bool:
+    """최상위 systems가 시스템 설계의 객체 배열인가. 엔진 설정의 이름 목록이나 객체는 이 도구의 파일이 아니다."""
+    return isinstance(value, list) and all(isinstance(x, dict) for x in value)
+
+
 def detect_kind(data, path: Path | None = None) -> str | None:
     """JSON 최상위 키로 종류를 판단한다. 시뮬레이터 설정은 'meta'로 구분한다."""
     if not isinstance(data, dict):
@@ -153,7 +158,7 @@ def detect_kind(data, path: Path | None = None) -> str | None:
     if ("rooms" in data and "difficulty" in data) or data.get("model") == "combat":
         return "meta"  # 메타 성장 시뮬레이터 설정(추상 모델 또는 전투 계산 모델)
     for kind in DATASET_KINDS:
-        if kind in data:
+        if kind in data and (kind != "systems" or _our_systems(data[kind])):
             return kind  # 형식이 틀려도 종류로 인정해야 검사기가 형식 오류를 보고한다
     return "levels" if "threat_budget" in data else None
 

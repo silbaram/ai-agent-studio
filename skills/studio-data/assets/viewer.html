@@ -231,13 +231,15 @@ const LABEL = {
           stage_counts_mismatch: "단계 판 수 어긋남", unknown_reference: "지금 데이터에 없는 id",
           gear_before_purchase: "구매보다 앞선 기준 장비", unknown_role: "없는 역할", kills_differ: "처치 수 다름", kills_not_linked: "이어지지 않은 처치 수", enemy_unplaced: "조우에 없는 적", curve_unused_point: "곡선의 남는 값", enemy_not_in_stage: "전투 단계 밖 적",
           long_stretch: "쉬는 곳 사이가 김", reward_drought: "보상 사이가 김", strong_run: "강한 조우 연속", time_gap: "비는 시간", time_outside_stage: "단계 밖 시각",
-          purchase_off_span: "시각이 어긋난 구매", unknown_purchase: "없는 구매", greybox_failed: "그레이박스 실패", unknown_encounter: "없는 조우" },
-  unchecked: { nothing: "계산한 것 없음", value: "가치 비교(스탯 예산 없음)", meta: "메타 성장 설정 없음", drop_tables: "드랍 테이블 없음",
+          purchase_off_span: "시각이 어긋난 구매", unknown_purchase: "없는 구매", greybox_failed: "그레이박스 실패", unknown_encounter: "없는 조우",
+          pillar_unserved: "맡는 시스템 없는 필러", mvp_unserved: "맡는 시스템 없는 MVP", scope_mismatch: "브리프와 다른 범위", scope_dependency: "범위를 넘는 의존", dependency_cycle: "의존 순환",
+          system_without_pillar: "필러 없는 시스템", system_without_rules: "규칙 없는 시스템", unknown_pillar: "없는 필러", unknown_mvp: "없는 MVP 항목", unknown_out_of_scope: "없는 범위 밖 항목", unknown_system: "없는 시스템" },
+  unchecked: { concepts_unreadable: "컨셉 파일을 읽지 못함", nothing: "계산한 것 없음", value: "가치 비교(스탯 예산 없음)", meta: "메타 성장 설정 없음", drop_tables: "드랍 테이블 없음",
                threat_budget: "위협도 예산 없음", stages: "조우 없는 단계", scores: "위협도를 내지 못한 조우", enemies: "적 데이터 없음", combat: "전투 계산 없음", economy: "재화 흐름 없음" },
 };
-const KIND_LABEL = { concepts: "컨셉", items: "아이템", upgrades: "영구 강화", enemies: "적", combat: "전투 계산", growth: "판 안 성장",
+const KIND_LABEL = { concepts: "컨셉", systems: "시스템 설계", items: "아이템", upgrades: "영구 강화", enemies: "적", combat: "전투 계산", growth: "판 안 성장",
                      budget: "스탯 예산", crafting: "강화·합성", economy: "재화 흐름", levels: "레벨 구성", playtests: "플레이 기록" };
-const KIND_ORDER = ["concepts", "items", "upgrades", "enemies", "combat", "growth", "budget", "crafting", "economy", "levels", "playtests"];
+const KIND_ORDER = ["concepts", "systems", "items", "upgrades", "enemies", "combat", "growth", "budget", "crafting", "economy", "levels", "playtests"];
 const OBJECT_KINDS = ["combat", "growth", "budget", "crafting", "economy"];  // 최상위가 배열이 아니라 객체인 종류
 const DEFAULT_SEARCH = ["id", "name", "effect", "intent"];
 const statusLabels = (ds) => KINDS[ds.kind].statusLabels || LABEL.status;
@@ -305,6 +307,12 @@ const KINDS = {
   levels: {
     listKey: "levels", groupName: "", custom: (ds, idx) => renderLevels(ds, idx),
     searchFields: ["id", "name", "intent", "combat_stage"],
+    groupOf: () => "all", groupLabel: () => "", defaultSort: { key: "id", desc: false },
+    columns: () => [], tieBreak: () => () => 0, groupMeta: () => null, extras: () => null,
+  },
+  systems: {
+    listKey: "systems", groupName: "", custom: (ds, idx) => renderSystems(ds, idx),
+    searchFields: ["id", "name", "intent"],
     groupOf: () => "all", groupLabel: () => "", defaultSort: { key: "id", desc: false },
     columns: () => [], tieBreak: () => () => 0, groupMeta: () => null, extras: () => null,
   },
@@ -1112,6 +1120,33 @@ function renderLevels(ds, idx) {
   return out;
 }
 
+function renderSystems(ds, idx) {
+  const r = ds.report || {};
+  const list = (Array.isArray(ds.data.systems) ? ds.data.systems : []).filter((e) => e && typeof e === "object");
+  const rows = Array.isArray(r.rows) ? r.rows : list.map((s) => ({ ...s, order: null, rules: Array.isArray(s.rules) ? s.rules.length : 0 }));
+  const scopes = { mvp: "MVP", later: "나중", out: "범위 밖" };
+  const text = (v) => (Array.isArray(v) && v.length ? v.join(", ") : "–");
+  const note = (x) => el("div", { class: "group-note", text: "⚠ " + x.message });
+  const known = new Set(list.map((e) => e.id));
+  const body = rows.map((x) => {
+    const entry = list.find((e) => e.id === x.id) || {};
+    const issues = idx.byEntry[x.id] || [];
+    return el("tr", { "data-id": x.id, class: issues.length ? "has-warn" : "" },
+      el("td", { class: "num" }, x.order === null || x.order === undefined ? dash() : String(x.order)),
+      el("td", { class: "name" }, el("div", { class: "nm", text: x.name || x.id }), x.name ? el("div", { class: "mono muted", text: x.id }) : null,
+        entry.intent ? el("div", { class: "muted", text: entry.intent }) : null, ...issues.map(note)),
+      el("td", { text: scopes[x.scope] || String(x.scope) }), el("td", { text: text(x.pillars) }), el("td", { text: text(x.mvp) }),
+      el("td", { class: "mono", text: text(x.depends_on) }),
+      el("td", {}, Array.isArray(entry.rules) && entry.rules.length ? el("ul", {}, entry.rules.filter((u) => u && typeof u === "object").map((u) => el("li", { text: u.text || u.id || "?" }))) : dash()));
+  });
+  const heads = ["순서", "시스템", "범위", "필러", "MVP", "의존", "규칙"];
+  return [el("section", { class: "panel", id: "group-all" },
+    el("div", { class: "ph" }, el("h2", {}, "시스템"), el("span", { class: "group-meta", text: r.concept ? `컨셉 ${r.concept}` : "브리프와의 연결은 서버 모드에서 봅니다." })),
+    ...idx.all.filter((x) => !known.has(x.where)).map(note),
+    el("div", { class: "tw" }, el("table", {}, el("thead", {}, el("tr", {}, ...heads.map((h) => el("th", {}, h)))),
+      el("tbody", {}, body.length ? body : [el("tr", {}, el("td", { colspan: String(heads.length), class: "muted", text: "시스템이 없습니다." }))]))))];
+}
+
 function renderPlaytests(ds, idx) {
   const sessions = (Array.isArray(ds.data.playtests) ? ds.data.playtests : []).filter((e) => e && typeof e === "object");
   const verdicts = (Array.isArray(ds.data.verdicts) ? ds.data.verdicts : []).filter((v) => v && typeof v === "object");
@@ -1208,7 +1243,7 @@ function render() {
 }
 
 function renderEmpty(snap) {
-  const files = [["design/concepts.json", "컨셉 탐색 기록"], ["data/items.json", "아이템"], ["data/upgrades.json", "영구 강화"], ["data/enemies.json", "적"], ["data/combat.json", "전투 계산"], ["data/budget.json", "스탯 예산"], ["data/growth.json", "판 안 성장"], ["data/crafting.json", "강화·합성"], ["data/economy.json", "재화 흐름"], ["data/levels.json", "레벨 구성"], ["data/playtests.json", "플레이 기록과 가설 판정"]];
+  const files = [["design/concepts.json", "컨셉 탐색 기록"], ["design/systems.json", "시스템 설계"], ["data/items.json", "아이템"], ["data/upgrades.json", "영구 강화"], ["data/enemies.json", "적"], ["data/combat.json", "전투 계산"], ["data/budget.json", "스탯 예산"], ["data/growth.json", "판 안 성장"], ["data/crafting.json", "강화·합성"], ["data/economy.json", "재화 흐름"], ["data/levels.json", "레벨 구성"], ["data/playtests.json", "플레이 기록과 가설 판정"]];
   return el("section", { class: "panel", id: "empty" },
     el("div", { class: "ph" }, el("h2", {}, "아직 데이터가 없습니다")),
     el("div", { class: "doc" },
@@ -1269,7 +1304,7 @@ async function loadFileTexts(named) {
     if (!name.toLowerCase().endsWith(".json")) { ds.error = "파일 모드에서는 JSON만 읽습니다. CSV는 서버 모드로 보세요."; return ds; }
     try {
       const data = JSON.parse(text), kind = detectKind(data);
-      if (!kind) ds.error = "컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터가 아닙니다 (최상위에 concepts / items / upgrades / enemies / levels / playtests 배열이나 combat / growth / budget / crafting / economy 객체가 필요합니다).";
+      if (!kind) ds.error = "컨셉·시스템 설계·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터가 아닙니다 (최상위에 concepts / systems / items / upgrades / enemies / levels / playtests 배열이나 combat / growth / budget / crafting / economy 객체가 필요합니다).";
       else Object.assign(ds, { ok: true, kind, data });
     } catch (e) { ds.error = "JSON 형식 오류: " + e.message; }
     return ds;

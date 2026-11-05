@@ -25,7 +25,7 @@ class ProjectDiscovery(unittest.TestCase):
 
     def test_project_root_finds_design_and_data_but_skips_meta(self):
         names = sorted(p.relative_to(self.root).as_posix() for p in datasets.discover([self.root]))
-        self.assertEqual(names, ["data/budget.json", "data/combat.json", "data/crafting.json", "data/economy.json", "data/enemies.json", "data/growth.json", "data/items.json", "data/levels.json", "data/playtests.json", "data/upgrades.json", "design/concepts.json"])
+        self.assertEqual(names, ["data/budget.json", "data/combat.json", "data/crafting.json", "data/economy.json", "data/enemies.json", "data/growth.json", "data/items.json", "data/levels.json", "data/playtests.json", "data/upgrades.json", "design/concepts.json", "design/systems.json"])
 
     def test_deeper_folders_are_not_scanned(self):
         (self.root / "data" / "old").mkdir()
@@ -57,12 +57,12 @@ class Check(unittest.TestCase):
     def test_whole_sample_project_passes(self):
         code, out = run_cli("check", self.root)
         self.assertEqual(code, 0)
-        self.assertIn("전체: 파일 11개 · 오류 0 · 경고 0 · 확인한 경고 1 → PASS", out)
+        self.assertIn("전체: 파일 12개 · 오류 0 · 경고 0 · 확인한 경고 1 → PASS", out)
 
     def test_json_payload_lists_every_dataset(self):
         code, out = run_cli("check", self.root, "--json")
         data = json.loads(out)
-        self.assertEqual(sorted(d["kind"] for d in data["datasets"]), ["budget", "combat", "concepts", "crafting", "economy", "enemies", "growth", "items", "levels", "playtests", "upgrades"])
+        self.assertEqual(sorted(d["kind"] for d in data["datasets"]), ["budget", "combat", "concepts", "crafting", "economy", "enemies", "growth", "items", "levels", "playtests", "systems", "upgrades"])
 
     def test_assumption_gate_applies_to_data_and_brief_criteria(self):
         code, out = run_cli("check", self.root, "--fail-on-assumed")
@@ -134,7 +134,7 @@ class ReviewRegressions(unittest.TestCase):
                 code, out = run_cli("check", self.root)
                 self.assertEqual(code, 1)
                 self.assertIn(f"{key} 배열이 필요합니다", out)
-                self.assertIn("파일 11개", out)
+                self.assertIn("파일 12개", out)
                 self.save(rel, original)
 
     def test_non_string_origin_is_a_schema_error_not_a_crash(self):
@@ -216,7 +216,7 @@ class ReviewRegressions(unittest.TestCase):
             datasets.collect([self.root])
         finally:
             datasets.read = original
-        self.assertEqual(sorted(calls), ["budget.json", "combat.json", "concepts.json", "crafting.json", "economy.json", "enemies.json", "growth.json", "items.json", "levels.json", "meta.json", "meta_combat.json", "playtests.json", "upgrades.json"])
+        self.assertEqual(sorted(calls), ["budget.json", "combat.json", "concepts.json", "crafting.json", "economy.json", "enemies.json", "growth.json", "items.json", "levels.json", "meta.json", "meta_combat.json", "playtests.json", "systems.json", "upgrades.json"])
 
 
 class ViewWithoutData(unittest.TestCase):
@@ -295,7 +295,7 @@ class ViewerWithConcepts(unittest.TestCase):
             server.shutdown()
             server.server_close()
         kinds = {d["kind"]: d for d in snap["datasets"]}
-        self.assertEqual(set(kinds), {"concepts", "items", "upgrades", "enemies", "combat", "budget", "crafting", "economy", "growth", "levels", "playtests"})
+        self.assertEqual(set(kinds), {"concepts", "systems", "items", "upgrades", "enemies", "combat", "budget", "crafting", "economy", "growth", "levels", "playtests"})
         self.assertEqual(kinds["concepts"]["report"]["approved"], ["parry_tempo"])
 
     def test_page_file_exists_where_the_server_looks(self):

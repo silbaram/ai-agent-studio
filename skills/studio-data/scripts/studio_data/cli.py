@@ -17,17 +17,17 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from . import budget, calibrate, claude, combat, concepts, crafting, datasets, economy, enemies, growth, items, levels, meta_sim, playtests, provenance, upgrades, viewer
+from . import budget, calibrate, claude, combat, concepts, crafting, datasets, economy, enemies, growth, items, levels, meta_sim, playtests, provenance, systems, upgrades, viewer
 from . import common as c
 
 EXTRA_PRINTERS = {"items": items.print_extra, "upgrades": upgrades.print_extra, "enemies": enemies.print_extra,
                   "combat": combat.print_extra, "budget": budget.print_extra, "crafting": crafting.print_extra,
-                  "economy": economy.print_extra, "growth": growth.print_extra, "levels": levels.print_extra, "playtests": playtests.print_extra}
+                  "economy": economy.print_extra, "growth": growth.print_extra, "levels": levels.print_extra, "playtests": playtests.print_extra, "systems": systems.print_extra}
 TABLE_PRINTERS = {"concepts": concepts.table, "combat": combat.table, "budget": budget.table, "crafting": crafting.table,
-                  "economy": economy.table, "growth": growth.table, "levels": levels.table}
+                  "economy": economy.table, "growth": growth.table, "levels": levels.table, "systems": systems.table}
 COUNT_PRINTERS = {"concepts": concepts.print_counts, "combat": combat.print_counts, "budget": budget.print_counts,
                   "crafting": crafting.print_counts, "economy": economy.print_counts, "growth": growth.print_counts,
-                  "levels": levels.print_counts, "playtests": playtests.print_counts}
+                  "levels": levels.print_counts, "playtests": playtests.print_counts, "systems": systems.print_counts}
 GATE_LABELS = {"playtests": "판정이 확정되지 않은 가설(버팀·틀림 확정이 아님): ", "levels": "출처가 가정이거나 비어 있는 항목과 통과하지 않은 그레이박스 확인: "}
 
 
@@ -113,7 +113,7 @@ def cmd_check(args) -> int:
     entries, skipped = datasets.scan_all([Path(p) for p in args.paths])
     datasets.validate_all(entries)
     if not entries:
-        print("컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터 파일을 찾지 못했습니다.", file=sys.stderr)
+        print("컨셉·시스템 설계·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터 파일을 찾지 못했습니다.", file=sys.stderr)
         return 2
     unreadable = [d for d in entries if not d["ok"]]
     reports = [d["report"] for d in entries if d["ok"]]
@@ -480,12 +480,12 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--no-browser", action="store_true", help="브라우저를 자동으로 열지 않습니다.")
     v.set_defaults(func=cmd_view)
 
-    k = sub.add_parser("check", help="컨셉·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터를 검사합니다.")
+    k = sub.add_parser("check", help="컨셉·시스템 설계·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터를 검사합니다.")
     k.add_argument("paths", nargs="*", help="프로젝트·데이터 폴더 또는 파일 (하나 이상)")
     k.add_argument("--strict", action="store_true", help="경고도 실패로 처리합니다.")
     k.add_argument("--fail-on-assumed", action="store_true", help="삭제되지 않은 항목 중 출처가 가정이거나 비어 있는 것, 판정이 확정되지 않은 가설이 있으면 실패합니다 (확정 판정 전 게이트).")
     k.add_argument("--table", nargs="?", const="all", metavar="종류,...",
-                   help="컨셉 비교표, 전투 계산표, 빌드 비교표, 예산 비교표, 강화·합성 표, 재화 흐름 표, 조우 표(마크다운)를 출력합니다. "
+                   help="컨셉 비교표, 전투 계산표, 빌드 비교표, 예산 비교표, 강화·합성 표, 재화 흐름 표, 조우 표, 시스템 표(마크다운)를 출력합니다. "
                         "종류를 쉼표로 고를 수 있습니다(예: --table combat,levels). 표만 고르고 검사 보고는 모두 나옵니다. 파일로 저장하지 않습니다.")
     k.add_argument("--ids", help="--table에 보일 컨셉 id만 쉼표로 고릅니다 (예: a,b,c). 적은 순서대로 보입니다.")
     k.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
