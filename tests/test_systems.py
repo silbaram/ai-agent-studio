@@ -1,6 +1,7 @@
 """시스템 설계(S1) 테스트: 시스템의 규칙과 의존 관계를 브리프의 필러·범위에 잇는다. 표준 라이브러리 unittest만 사용한다."""
 import io
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -27,6 +28,10 @@ def codes(rows):
 
 def warning(result, code):
     return next(w for w in result["warnings"] if w["code"] == code)
+
+
+def error(result, code):
+    return next(e for e in result["errors"] if e["code"] == code)
 
 
 def row(result, sid="ripening"):
@@ -77,6 +82,16 @@ class Concept(unittest.TestCase):
     def test_a_cut_concept_is_reported(self):
         r = run(concepts=[{"id": "gems", "status": "cut", "brief": BRIEF}], concept="gems")
         self.assertEqual(warning(r, "cut_referenced")["where"], "concept")
+
+    def test_an_unapproved_concept_is_a_warning(self):
+        r = run(concepts=[{"id": "gems", "status": "proposed", "brief": BRIEF}], concept="gems")
+        self.assertIn("approved", warning(r, "concept_not_approved")["message"])
+
+    def test_an_approved_concept_is_quiet(self):
+        self.assertNotIn("concept_not_approved", codes(run(concept="gems")["warnings"]))
+
+    def test_a_cut_concept_is_not_called_unapproved_too(self):
+        self.assertNotIn("concept_not_approved", codes(run(concepts=[{"id": "gems", "status": "cut", "brief": BRIEF}], concept="gems")["warnings"]))
 
     def test_a_concept_without_a_brief_is_an_error(self):
         self.assertIn("brief_missing", codes(run(concept="other")["errors"]))
@@ -167,25 +182,32 @@ class Scope(unittest.TestCase):
     def test_a_later_system_claiming_an_mvp_item_is_a_warning(self):
         self.assertIn("scope_mismatch", codes(run(system(), system("x", "later", mvp=["조준 무기"]))["warnings"]))
 
-    def test_an_mvp_system_claiming_out_of_scope_is_a_warning(self):
-        self.assertIn("scope_mismatch", codes(run(system(out_of_scope=["멀티플레이"]))["warnings"]))
+    def test_a_built_system_claiming_out_of_scope_is_an_error_no_ack_can_hide(self):
+        r = run(system(out_of_scope=["멀티플레이"], acknowledged={"scope_mismatch": "기반 시스템이다"}))
+        self.assertIn("멀티플레이", error(r, "out_of_scope_claimed")["message"])
+
+    def test_an_unknown_item_is_not_also_called_a_claim(self):
+        self.assertNotIn("out_of_scope_claimed", codes(run(system(out_of_scope=["없는 범위"]))["errors"]))
+
+    def test_without_a_brief_nothing_is_called_a_claim(self):
+        self.assertEqual(run(system(out_of_scope=["멀티플레이"]), concepts=None)["errors"], [])
 
     def test_an_out_system_has_to_name_its_item(self):
         self.assertIn("scope_mismatch", codes(run(system(), system("net", "out", pillars=[], mvp=[]))["warnings"]))
 
-    def test_an_mvp_system_on_a_later_one_is_a_warning(self):
+    def test_an_mvp_system_on_a_later_one_is_an_error(self):
         r = run(system(depends_on=["hud"]), system("hud", "later", mvp=[]))
-        self.assertIn("hud", warning(r, "scope_dependency")["message"])
+        self.assertIn("hud", error(r, "scope_dependency")["message"])
 
-    def test_a_later_system_on_an_out_one_is_a_warning(self):
+    def test_a_later_system_on_an_out_one_is_an_error(self):
         r = run(system(), system("hud", "later", mvp=[], depends_on=["net"]), system("net", "out", pillars=[], mvp=[], out_of_scope=["멀티플레이"]))
-        self.assertEqual(warning(r, "scope_dependency")["where"], "hud")
+        self.assertEqual(error(r, "scope_dependency")["where"], "hud")
 
     def test_a_system_on_one_of_its_own_scope_is_fine(self):
-        self.assertNotIn("scope_dependency", codes(run(system("a"), system("b", depends_on=["a"]))["warnings"]))
+        self.assertNotIn("scope_dependency", codes(run(system("a"), system("b", depends_on=["a"]))["errors"]))
 
     def test_a_later_system_on_an_mvp_one_is_fine(self):
-        self.assertNotIn("scope_dependency", codes(run(system(), system("hud", "later", mvp=[], depends_on=["ripening"]))["warnings"]))
+        self.assertNotIn("scope_dependency", codes(run(system(), system("hud", "later", mvp=[], depends_on=["ripening"]))["errors"]))
 
 
 class Dependencies(unittest.TestCase):
@@ -197,16 +219,17 @@ class Dependencies(unittest.TestCase):
         self.assertIn("cut_referenced", codes(r["warnings"]))
 
     def test_a_system_cannot_depend_on_itself(self):
-        self.assertIn("dependency_cycle", codes(run(system(depends_on=["ripening"]))["warnings"]))
+        self.assertIn("dependency_cycle", codes(run(system(depends_on=["ripening"]))["errors"]))
 
-    def test_a_cycle_is_a_warning_naming_its_members(self):
-        text = warning(run(system("a", depends_on=["b"]), system("b", depends_on=["a"])), "dependency_cycle")["message"]
+    def test_a_cycle_is_an_error_naming_its_members(self):
+        text = error(run(system("a", depends_on=["b"]), system("b", depends_on=["a"])), "dependency_cycle")["message"]
         self.assertIn("a", text)
         self.assertIn("b", text)
 
     def test_what_hangs_off_a_cycle_has_no_order_and_is_not_named_as_the_cycle(self):
         r = run(system("a", depends_on=["b"]), system("b", depends_on=["a"]), system("c", depends_on=["a"]))
-        self.assertEqual(warning(r, "dependency_cycle")["part"], "a~b")
+        self.assertIn("a, b", error(r, "dependency_cycle")["message"])
+        self.assertNotIn("c", error(r, "dependency_cycle")["message"].split(":")[1].split(".")[0])
         self.assertIsNone(row(r, "c")["order"])
 
     def test_the_build_order_follows_the_dependencies(self):
@@ -222,11 +245,52 @@ class Dependencies(unittest.TestCase):
 
     def test_a_dependency_on_an_out_system_does_not_block_the_order(self):
         r = run(system(), system("hud", "later", mvp=[], depends_on=["net"]), system("net", "out", pillars=[], mvp=[], out_of_scope=["멀티플레이"]))
-        self.assertEqual(row(r, "hud")["order"], 1)
+        self.assertEqual(row(r, "hud")["order"], 1)   # 범위 의존 오류는 따로 난다
 
     def test_mvp_comes_before_later_within_a_step(self):
         r = run(system("a", "later", mvp=[]), system("b"))
         self.assertEqual([x["id"] for x in r["rows"]], ["b", "a"])
+
+
+class Foundations(unittest.TestCase):
+    """기반 시스템: 브리프의 항목을 직접 맡지 않지만 MVP 시스템이 기댄다."""
+
+    def base(self, **over):
+        return system("body", pillars=[], mvp=[], foundation=True, **over)
+
+    def result(self):
+        return run(self.base(), system(depends_on=["body"]))
+
+    def test_it_needs_no_pillar_or_mvp_item(self):
+        self.assertEqual((self.result()["errors"], self.result()["warnings"]), ([], []))
+
+    def test_it_comes_first(self):
+        self.assertEqual(row(self.result(), "body")["order"], 1)
+
+    def test_nobody_leaning_on_it_is_a_warning(self):
+        self.assertEqual(warning(run(self.base(), system()), "foundation_unused")["where"], "body")
+
+    def test_a_cut_system_does_not_count_as_leaning(self):
+        self.assertIn("foundation_unused", codes(run(self.base(), system(), system("old", status="cut", depends_on=["body"]))["warnings"]))
+
+    def test_a_system_out_of_scope_does_not_count_as_leaning(self):
+        out = system("online", scope="out", pillars=[], mvp=[], out_of_scope=["멀티플레이"], depends_on=["body"])
+        self.assertIn("foundation_unused", codes(run(self.base(), system(), out)["warnings"]))
+
+    def test_it_still_needs_rules(self):
+        self.assertIn("system_without_rules", codes(run(self.base(rules=[]), system(depends_on=["body"]))["warnings"]))
+
+    def test_it_cannot_hide_a_claim_on_out_of_scope(self):
+        self.assertIn("out_of_scope_claimed", codes(run(self.base(out_of_scope=["멀티플레이"]), system(depends_on=["body"]))["errors"]))
+
+    def test_the_value_is_a_boolean(self):
+        self.assertIn("schema", codes(run(system(foundation="yes"))["errors"]))
+
+    def test_a_broken_system_may_be_the_one_leaning_on_it(self):
+        self.assertNotIn("foundation_unused", codes(run(self.base(), system(), system("bad", scope="soon", depends_on=["body"]))["warnings"]))
+
+    def test_the_table_shows_it(self):
+        self.assertIn("MVP(기반)", sy.table({}, self.result()))
 
 
 class Rules(unittest.TestCase):
@@ -294,6 +358,60 @@ class Output(unittest.TestCase):
         code, out = self.game_file("data/engine.json", '{"systems": ["physics"]}')
         self.assertEqual(code, 0, out)
 
+    def design_file(self, text):
+        (self.root / "design/systems.json").write_text(text, encoding="utf-8")
+        return run_cli("check", self.root)
+
+    def test_a_slip_in_the_design_file_never_passes_quietly(self):
+        good = json.loads((self.root / "design/systems.json").read_text(encoding="utf-8"))
+        slips = [{**good, "systems": [*good["systems"], "tutorial"]}, {**good, "systems": [*good["systems"], None]}, {**good, "systems": {"a": {}}}]
+        for slip in slips:
+            self.assertEqual(self.design_file(json.dumps(slip, ensure_ascii=False))[0], 1, str(slip)[:60])
+        typo = {"concept": good["concept"], "system": good["systems"]}
+        self.assertEqual(self.design_file(json.dumps(typo, ensure_ascii=False))[0], 2)
+        self.assertEqual(self.design_file('{"concept": "parry_tempo"}')[0], 2)
+
+    def test_a_design_file_that_is_not_an_object_cannot_be_read(self):
+        for text in ('["systems"]', "5"):
+            self.assertEqual(self.design_file(text)[0], 2, text)
+
+    def test_a_slip_is_caught_from_inside_the_design_folder_too(self):
+        (self.root / "design/systems.json").write_text('{"concept": "parry_tempo", "systems": ["tutorial"]}', encoding="utf-8")
+        here = Path.cwd()
+        os.chdir(self.root / "design")
+        self.addCleanup(os.chdir, here)
+        self.assertEqual(run_cli("check", "systems.json")[0], 1)
+
+    def test_objects_of_a_game_engine_outside_design_are_skipped(self):
+        code, out = self.game_file("data/systems.json", '{"systems": [{"name": "PhysicsSystem", "tick": 60}, {"name": "AI", "priority": 2}]}')
+        self.assertEqual(code, 0, out)
+        self.assertIn("건너뛰었습니다", out)
+
+    def test_plain_values_outside_design_are_skipped(self):
+        (self.root / "design/systems.json").unlink()
+        for text in ('{"systems": [1, 2]}', '{"systems": ["scope"]}', '{"systems": [null]}'):
+            (self.root / "data/systems.json").write_text(text, encoding="utf-8")
+            code, out = run_cli("check", self.root)
+            self.assertEqual(code, 0, out)
+            self.assertIn("건너뛰었습니다", out)
+
+    def test_a_scope_alone_marks_a_design_file_outside_design(self):
+        code, out = self.game_file("data/systems.json", '{"systems": [{"id": "x", "name": "x", "scope": "soon"}]}')
+        self.assertEqual(code, 1, out)
+
+    def test_a_design_file_outside_design_is_read(self):
+        original = (self.root / "design/systems.json").read_text(encoding="utf-8")
+        (self.root / "design/systems.json").unlink()
+        (self.root / "data/systems.json").write_text(original, encoding="utf-8")
+        self.assertIn("시스템 설계", run_cli("check", self.root)[1])
+        self.assertIn("systems", [d["kind"] for d in datasets.collect([self.root]) if d["ok"]])
+
+    def test_two_design_files_are_an_error(self):
+        original = (self.root / "design/systems.json").read_text(encoding="utf-8")
+        (self.root / "data/systems.json").write_text(original, encoding="utf-8")
+        self.assertIn("하나만", run_cli("check", self.root)[1])
+        self.assertEqual(run_cli("check", self.root)[0], 1)
+
     def test_a_broken_file_of_that_name_is_a_read_failure(self):
         self.assertEqual(self.game_file("design/systems.json", '{ "systems": [')[0], 2)
 
@@ -316,7 +434,8 @@ class Output(unittest.TestCase):
         page = (STUDIO / "assets/viewer.html").read_text(encoding="utf-8")
         self.assertRegex(page, r'const KIND_ORDER = \[[^\]]*"systems"')
         self.assertIn("renderSystems", page)
-        for code in ("pillar_unserved", "mvp_unserved", "scope_mismatch", "scope_dependency", "dependency_cycle", "system_without_pillar", "system_without_rules", "unknown_pillar", "unknown_mvp", "unknown_out_of_scope", "unknown_system"):
+        for code in ("pillar_unserved", "mvp_unserved", "scope_mismatch", "scope_dependency", "dependency_cycle", "system_without_pillar", "system_without_rules", "unknown_pillar", "unknown_mvp", "unknown_out_of_scope", "unknown_system",
+                     "concept_not_approved", "foundation_unused", "out_of_scope_claimed"):
             self.assertIn(f"{code}:", page)
 
     def test_the_skill_is_documented(self):
@@ -324,8 +443,12 @@ class Output(unittest.TestCase):
         fmt = (ROOT / "skills/system-design/references/systems-format.md").read_text(encoding="utf-8")
         self.assertTrue(skill.startswith("---\nname: system-design\n"))
         self.assertTrue((ROOT / "skills/system-design/agents/openai.yaml").exists())
-        for code in ("pillar_unserved", "mvp_unserved", "scope_mismatch", "scope_dependency", "dependency_cycle", "system_without_pillar", "system_without_rules"):
+        for code in ("pillar_unserved", "mvp_unserved", "scope_mismatch", "scope_dependency", "dependency_cycle", "system_without_pillar", "system_without_rules",
+                     "concept_not_approved", "foundation_unused", "out_of_scope_claimed"):
             self.assertIn(f"`{code}`", fmt)
+        self.assertIn("`foundation`", fmt)
+        self.assertIn("기반 시스템", skill)
+        self.assertIn("`proposed`", fmt)
         self.assertIn("system-design", (ROOT / "README.md").read_text(encoding="utf-8"))
         arch = (ROOT / "docs/architecture.md").read_text(encoding="utf-8")
         self.assertIn("| S1 | **시스템 설계.** 시스템의 규칙과 의존 관계를 브리프의 필러·범위에 연결 (`system-design`) | 1차 완료 |", arch)

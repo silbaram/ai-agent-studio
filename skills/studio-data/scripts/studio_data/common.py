@@ -146,9 +146,11 @@ def _num(value: str):
         return float(value)
 
 
-def _our_systems(value) -> bool:
-    """최상위 systems가 시스템 설계의 객체 배열인가. 엔진 설정의 이름 목록이나 객체는 이 도구의 파일이 아니다."""
-    return isinstance(value, list) and all(isinstance(x, dict) for x in value)
+def _our_systems(data: dict) -> bool:
+    """design/ 밖의 파일이 시스템 설계인가. systems는 엔진 설정에도 흔한 키라, concept가 있거나 scope를 적은 항목이 있어야 이 도구의 파일로 본다.
+    design/systems.json은 이 판별과 상관없이 이 도구의 파일이다(datasets.read). 작은 실수로 검사 전체가 빠지면 안 되기 때문이다."""
+    value = data.get("systems")
+    return isinstance(value, list) and ("concept" in data or any(isinstance(x, dict) and "scope" in x for x in value))
 
 
 def detect_kind(data, path: Path | None = None) -> str | None:
@@ -158,7 +160,7 @@ def detect_kind(data, path: Path | None = None) -> str | None:
     if ("rooms" in data and "difficulty" in data) or data.get("model") == "combat":
         return "meta"  # 메타 성장 시뮬레이터 설정(추상 모델 또는 전투 계산 모델)
     for kind in DATASET_KINDS:
-        if kind in data and (kind != "systems" or _our_systems(data[kind])):
+        if kind in data and (kind != "systems" or _our_systems(data)):
             return kind  # 형식이 틀려도 종류로 인정해야 검사기가 형식 오류를 보고한다
     return "levels" if "threat_budget" in data else None
 

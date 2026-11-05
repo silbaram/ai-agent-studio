@@ -50,7 +50,12 @@ def _broken_foreign(path: Path, raw: bytes) -> str | None:
     if b'"threat_budget"' in raw or (b'"levels"' in raw and b'"encounters"' in raw):
         return "levels"
     stem = path.stem.lower()
-    return stem if stem in FOREIGN_KEYS and not _game_format(raw, FOREIGN_KEYS[stem]) else None
+    return stem if stem in FOREIGN_KEYS and (_design_systems(path) or not _game_format(raw, FOREIGN_KEYS[stem])) else None
+
+
+def _design_systems(path: Path) -> bool:
+    """design/systems.json인가. 게임 파일이 놓일 자리가 아니라서 내용과 상관없이 시스템 설계로 읽는다."""
+    return path.name.lower() == "systems.json" and path.parent.name.lower() == "design"
 
 
 def _kind_by_name(path: Path) -> str | None:
@@ -72,6 +77,8 @@ def read(path: Path) -> dict:
     entry["version"] = hashlib.sha256(raw).hexdigest()[:16]
     try:
         kind, data = c.load_dataset(path)
+        if kind is None and _design_systems(path) and "systems" in data:
+            kind = "systems"
     except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         entry["kind"] = c.kind_from_filename(path) or _kind_by_name(path) or _broken_foreign(path, raw)
         entry["error"] = f"파일 형식 오류: {exc}"
@@ -85,7 +92,7 @@ def read(path: Path) -> dict:
         if entry["meta"]:
             entry["config"] = data
         named = path.stem.lower()
-        if kind is None and named in c.DATASET_KINDS and (named not in c.FOREIGN_NAMES or not data):
+        if kind is None and named in c.DATASET_KINDS and (named not in c.FOREIGN_NAMES or not data or _design_systems(path)):
             # 이름이 concepts.json 같은데 최상위 키가 없으면 건너뛰지 않고 이유를 알린다(예: 제약만 적은 직후).
             entry["kind"] = named
             entry["error"] = (f"최상위에 \"{named}\" 배열이 없어 {c.KIND_LABELS[named]} 파일로 읽지 못했습니다. "
@@ -144,7 +151,7 @@ def scan(targets: list[Path]) -> list[dict]:
 
 def skipped_note(path: str) -> str:
     """건너뛴 파일을 알리는 문장. check와 뷰어가 같은 문장을 쓴다."""
-    label, keys = ("시스템 설계", "객체 배열 systems") if Path(path).stem.lower() == "systems" else ("레벨 구성", "levels나 threat_budget")
+    label, keys = ("시스템 설계", "scope를 적은 systems나 concept") if Path(path).stem.lower() == "systems" else ("레벨 구성", "levels나 threat_budget")
     return f"{path}: {label} 형식이 아니라 건너뛰었습니다(최상위에 {keys} 키가 없거나, 주석이 있는 JSON입니다). 게임 자체 파일이 아니면 고칩니다."
 
 
@@ -401,6 +408,9 @@ def validate_all(entries: list[dict]) -> list[dict]:
             elif d["kind"] == "systems":
                 raw_concepts = [x for e in loaded_concepts for x in e["data"]["concepts"] if isinstance(x, dict)] if not broken_concepts and loaded_concepts else None
                 d["report"] = systems.validate(d["data"], raw_concepts, concepts_unreadable=bool(broken_concepts))
+                first = next(x for x in entries if x["ok"] and x["kind"] == "systems")
+                if d is not first:  # 맡는 필러와 MVP는 파일을 넘어 세지 않는다
+                    c.add_issue(d["report"]["errors"], "schema", "systems", f"시스템 설계 파일은 하나만 씁니다. {first['name']}에 합칩니다.")
             elif d["kind"] == "playtests":
                 d["report"] = playtests.validate(d["data"], hypotheses, concepts_unreadable=bool(broken_concepts), refs=stage_refs)
             else:

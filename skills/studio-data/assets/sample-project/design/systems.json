@@ -3,6 +3,17 @@
   "concept": "parry_tempo",
   "systems": [
     {
+      "id": "movement",
+      "name": "이동과 카메라",
+      "intent": "브리프가 말하지 않지만 조작이 기대는 기반",
+      "scope": "mvp",
+      "foundation": true,
+      "rules": [
+        { "id": "follow", "text": "카메라는 플레이어를 따라간다" }
+      ],
+      "status": "approved"
+    },
+    {
       "id": "combat_input",
       "name": "패링·회피·공격 조작",
       "intent": "다른 시스템이 모두 기대는 기본 조작",
@@ -13,6 +24,7 @@
         { "id": "parry_window", "text": "패링은 입력 뒤 짧은 시간만 받아들인다" },
         { "id": "dodge_cost", "text": "회피는 쓴 뒤 잠시 다시 쓰지 못한다" }
       ],
+      "depends_on": ["movement"],
       "status": "approved"
     },
     {

@@ -10,7 +10,7 @@ from .common import add_issue as _err, did_you_mean
 
 SCOPES = {"mvp": "MVP", "later": "나중", "out": "범위 밖"}
 TOP_FIELDS = {"concept", "systems", "note"}
-SYSTEM_FIELDS = {"id", "name", "intent", "scope", "pillars", "mvp", "out_of_scope", "rules", "depends_on", "status", "provenance", "acknowledged", "note"}
+SYSTEM_FIELDS = {"id", "name", "intent", "scope", "foundation", "pillars", "mvp", "out_of_scope", "rules", "depends_on", "status", "provenance", "acknowledged", "note"}
 RULE_FIELDS = {"id", "text", "note"}
 LINKS = (("pillars", "unknown_pillar", "필러"), ("mvp", "unknown_mvp", "MVP 항목"), ("out_of_scope", "unknown_out_of_scope", "범위 밖 항목"))  # 키, 오류 코드, 이름
 
@@ -23,7 +23,9 @@ def _pick_concept(data: dict, concepts: list, errors: list, warnings: list) -> d
         if found is None:
             _err(errors, "unknown_concept", "concept", f"컨셉 데이터에 없는 컨셉입니다: {wanted}.{did_you_mean(str(wanted), [x.get('id') for x in concepts])}")
         elif not c.is_active(found):
-            _err(warnings, "cut_referenced", "concept", f"삭제(cut)된 컨셉에 이었습니다: {wanted}. 지금 컨셉의 브리프로 옮깁니다.")
+            _err(warnings, "cut_referenced", "concept", f"삭제(cut)된 컨셉에 이었습니다: {wanted}. 지금 컨셉의 브리프로 옮겨 적습니다.")
+        elif found.get("status") != "approved":
+            _err(warnings, "concept_not_approved", "concept", f"승인(approved)되지 않은 컨셉에 이었습니다: {wanted}. 브리프가 확정되지 않아 이 연결도 확정이 아닙니다.")
         return found
     approved = [x for x in concepts if x.get("status") == "approved"]
     if len(approved) != 1:
@@ -77,6 +79,9 @@ def _check_system(s: dict, errors: list) -> bool:
     if text:
         _err(errors, "schema", s["id"], text)
         ok = False
+    if not isinstance(s.get("foundation", False), bool):
+        _err(errors, "schema", s["id"], f"foundation(기반 시스템인가)은 true나 false입니다: {c.json_text(s['foundation'])}")
+        ok = False
     if s.get("scope") not in SCOPES:
         _err(errors, "schema", s["id"], f"scope는 {', '.join(SCOPES)} 중 하나입니다: {c.json_text(s.get('scope'))}")
         ok = False
@@ -90,24 +95,24 @@ def _check_links(s: dict, items: dict, errors: list) -> None:
         for x in s.get(key, []):
             if x not in items[key]:
                 _err(errors, code, s["id"], f"브리프에 없는 {label}입니다: {x}.{did_you_mean(x, items[key])} 브리프의 문구 그대로 적습니다.")
+            elif key == "out_of_scope" and s["scope"] != "out":
+                _err(errors, "out_of_scope_claimed", s["id"], f"브리프가 범위 밖이라고 한 항목을 맡습니다: {x}. 브리프를 바꾸거나 범위를 out으로 둡니다.")
 
 
 def _check_scope(s: dict, warnings: list) -> None:
     """시스템의 범위가 브리프와 맞는가."""
-    scope, sid = s["scope"], s["id"]
+    scope, sid, base = s["scope"], s["id"], s.get("foundation", False)
     problems = []
-    if scope == "mvp" and not s.get("mvp"):
-        problems.append("범위가 MVP인데 브리프의 어떤 MVP 항목도 맡지 않습니다. 브리프의 MVP에 넣거나 범위를 later로 둡니다.")
+    if scope == "mvp" and not s.get("mvp") and not base:
+        problems.append("범위가 MVP인데 브리프의 어떤 MVP 항목도 맡지 않습니다. 브리프의 MVP에 넣거나, 범위를 later로 두거나, 다른 시스템이 기대는 기반이면 foundation을 true로 둡니다.")
     if scope != "mvp" and s.get("mvp"):
         problems.append(f"범위가 {SCOPES[scope]}인데 브리프의 MVP 항목을 맡습니다: {', '.join(s['mvp'])}.")
-    if scope != "out" and s.get("out_of_scope"):
-        problems.append(f"브리프가 범위 밖이라고 한 항목을 맡습니다: {', '.join(s['out_of_scope'])}. 브리프를 바꾸거나 범위를 out으로 둡니다.")
     if scope == "out" and not s.get("out_of_scope"):
         problems.append("범위가 out인데 브리프의 범위 밖 항목을 가리키지 않습니다.")
     for text in problems:
         _err(warnings, "scope_mismatch", sid, text, owner=sid)
-    if scope != "out" and not s.get("pillars"):
-        _err(warnings, "system_without_pillar", sid, "어떤 필러도 맡지 않습니다. 필러를 돕지 않는 시스템은 만들 이유를 다시 봅니다.", owner=sid)
+    if scope != "out" and not s.get("pillars") and not base:
+        _err(warnings, "system_without_pillar", sid, "어떤 필러도 맡지 않습니다. 필러를 돕지 않는 시스템은 만들 이유를 다시 봅니다. 다른 시스템이 기대는 기반이면 foundation을 true로 둡니다.", owner=sid)
     if scope != "out" and not s.get("rules"):
         _err(warnings, "system_without_rules", sid, "규칙이 없습니다. 구현할 수 있게 규칙을 문장으로 적습니다.", owner=sid)
 
@@ -124,7 +129,11 @@ def _check_dependencies(live: dict, cut: set, known: set, lost: set, errors: lis
             elif d not in live:
                 _err(errors, "unknown_system", s["id"], f"없는 시스템입니다: {d}.{did_you_mean(d, known)}")
             elif rank.index(live[d]["scope"]) > rank.index(s["scope"]):
-                _err(warnings, "scope_dependency", s["id"], f"범위가 {SCOPES[s['scope']]}인데 범위가 {SCOPES[live[d]['scope']]}인 {d}에 의존합니다. 범위를 맞추거나 의존을 끊습니다.", owner=s["id"], part=d)
+                _err(errors, "scope_dependency", s["id"], f"{SCOPES[s['scope']]} 시스템이 {SCOPES[live[d]['scope']]} 시스템 {d}에 의존해 만들 수 없습니다. 범위를 맞추거나 의존을 끊습니다.")
+    leaned = {d for s in live.values() if s["scope"] != "out" for d in s.get("depends_on", [])}
+    for s in live.values():
+        if s.get("foundation") and s["id"] not in leaned and not lost:  # 빠진 시스템이 기대고 있을 수 있다
+            _err(warnings, "foundation_unused", s["id"], "기반 시스템인데 어떤 시스템도 기대지 않습니다. 의존을 적거나 foundation을 뺍니다.", owner=s["id"])
 
 
 def _steps(live: dict) -> dict:
@@ -203,11 +212,11 @@ def validate(data: dict, concepts: list | None = None, concepts_unreadable: bool
     steps = _steps(live)
     loop = _cycle(live, steps)
     if loop:
-        _err(warnings, "dependency_cycle", loop[0], f"시스템이 서로 의존합니다: {', '.join(loop)}. 먼저 만들 수 있는 쪽이 없습니다. 의존을 끊거나 한 시스템으로 합칩니다.", owner=loop[0], part="~".join(loop))
+        _err(errors, "dependency_cycle", loop[0], f"시스템이 서로 의존합니다: {', '.join(loop)}. 먼저 만들 수 있는 쪽이 없습니다. 의존을 끊거나 한 시스템으로 합칩니다.")
     if items is not None and not lost:   # 빠진 시스템이 맡던 것을 빠졌다고 말하지 않는다
         _check_coverage(live, items, warnings)
     order = list(SCOPES)
-    rows = [{"id": s["id"], "name": s.get("name"), "scope": s["scope"], "order": steps.get(s["id"]), "pillars": s.get("pillars", []), "mvp": s.get("mvp", []),
+    rows = [{"id": s["id"], "name": s.get("name"), "scope": s["scope"], "foundation": s.get("foundation", False), "order": steps.get(s["id"]), "pillars": s.get("pillars", []), "mvp": s.get("mvp", []),
              "out_of_scope": s.get("out_of_scope", []), "depends_on": s.get("depends_on", []), "rules": len(s.get("rules", []))}
             for s in sorted(live.values(), key=lambda x: (steps.get(x["id"], 10 ** 6), order.index(x["scope"]), x["id"]))]
     return {
@@ -245,7 +254,7 @@ def table(data: dict, result: dict, ids: list[str] | None = None) -> str:
     """만드는 순서로 본 시스템 표(마크다운)."""
     rows = ["| 순서 | 시스템 | 범위 | 필러 | MVP | 의존 | 규칙 |", "|---|---|---|---|---|---|---|"]
     for x in result["rows"]:
-        cells = ("–" if x["order"] is None else str(x["order"]), c.table_cell(_title(x)), SCOPES[x["scope"]], c.table_cell(", ".join(x["pillars"])), c.table_cell(", ".join(x["mvp"])),
+        cells = ("–" if x["order"] is None else str(x["order"]), c.table_cell(_title(x)), SCOPES[x["scope"]] + ("(기반)" if x["foundation"] else ""), c.table_cell(", ".join(x["pillars"])), c.table_cell(", ".join(x["mvp"])),
                  c.table_cell(", ".join(x["depends_on"])), str(x["rules"]))
         rows.append("| " + " | ".join(cells) + " |")
     return "\n".join(rows)
