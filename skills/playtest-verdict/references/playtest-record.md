@@ -35,7 +35,7 @@
 | 필드 | 필수 | 뜻 |
 |---|---|---|
 | `id` | 예 | 소문자·숫자·밑줄. `pt_날짜_순번`을 권한다. `[측정: data/playtests.json#id]`의 출처가 된다 |
-| `date` | 예 | `YYYY-MM-DD` |
+| `date` | 예 | 달력에 있는 `YYYY-MM-DD` 날짜 |
 | `concept` | 예 | 시험한 컨셉 id (`design/concepts.json`) |
 | `build` | 예 | 빌드를 다시 만들 수 있는 이름. 보통 커밋 해시 |
 | `players` | 예 | 플레이한 사람 이름 배열. 같은 사람은 같은 이름으로 쓴다(사람 수를 센다) |
@@ -44,7 +44,7 @@
 | `notes` | 아니오 | `[{kind: observation / preference, text}]` |
 | `logs` | 아니오 | 원본 기록 파일 경로 배열 |
 | `stage_stats`, `upgrades`, `growth_build`, `groups` | 아니오 | 단계별 판 수와 평균 레벨·길이·처치·수입, 그때 가진 영구 강화, 판 안 성장 빌드, 강화 상태별 묶음. 가정값을 보정할 때 쓴다([calibration](calibration.md)) |
-| `greybox` | 아니오 | 레벨의 그레이박스 확인 기록 `[{check, value, passed, n, source, note}]`. `check`는 `levels.json`의 항목 id다. 재었으면 `value`(수), 재지 못하면 `passed`(true나 false)를 적는다. 둘 중 하나는 필요하다. `n`은 해 본 판 수로 1 이상이다. 해 보지 않았으면 기록을 적지 않는다. 날짜순 마지막 기록이 판정이 된다 |
+| `greybox` | 아니오 | 레벨의 그레이박스 확인 기록 `[{check, value, passed, n, source, note}]`. `check`는 `levels.json`의 항목 id다. 재었으면 `value`(수), 재지 못하면 `passed`(true나 false)를 적는다. 둘 중 하나는 필요하다. `n`은 해 본 판 수로 1 이상이다. 해 보지 않았으면 기록을 적지 않는다. 날짜순 마지막 기록이 판정이 된다. 같은 날짜면 세션 id의 순번순이다. 항목 id의 오타는 기록을 버리므로 오류다. 비슷한 이름이 없는 id는 지운 항목의 기록으로 보고 경고한다 |
 | `acknowledged` | 아니오 | 확인을 마친 경고 `{경고 코드: 이유}` |
 
 `value`에는 해석이 아니라 본 것을 적는다. "개선됨" 대신 "42% → 18%". 사람마다 다르면 사람별로 적는다.

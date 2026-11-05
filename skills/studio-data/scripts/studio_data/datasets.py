@@ -271,15 +271,21 @@ def _greybox_ids(entries: list[dict]) -> set | None:
     return {x["id"] for x in rows if isinstance(x, dict) and isinstance(x.get("id"), str)}
 
 
+def _session_order(session: dict) -> tuple:
+    """세션의 순서. 날짜순이고, 같은 날이면 id의 순번순이다. pt_날짜_10이 pt_날짜_9 뒤에 오게 숫자는 수로 견준다. 파일 순서에 판정이 달리지 않는다."""
+    parts = re.split(r"(\d+)", str(session.get("id")))
+    return session["date"], [int(p) if p.isdigit() else p for p in parts]
+
+
 def _greybox_log(entries: list[dict]) -> dict | None:
     """플레이 기록의 그레이박스 확인 {항목 id: 날짜순 기록}. 기록 파일이 없으면 None. 형식이 틀린 기록은 플레이 기록 검사가 알리므로 읽지 않는다."""
     data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "playtests"), None)
     if data is None:
         return None
     raw = data.get("playtests")
-    sessions = [s for s in raw if isinstance(s, dict) and isinstance(s.get("greybox"), list)] if isinstance(raw, list) else []
+    sessions = [s for s in raw if isinstance(s, dict) and isinstance(s.get("greybox"), list) and playtests.valid_date(s.get("date"))] if isinstance(raw, list) else []
     out: dict = {}
-    for s in sorted(sessions, key=lambda x: str(x.get("date"))):
+    for s in sorted(sessions, key=_session_order):
         for x in s["greybox"]:
             if not (isinstance(x, dict) and isinstance(x.get("check"), str)):
                 continue

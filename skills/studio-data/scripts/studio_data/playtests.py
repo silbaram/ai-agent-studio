@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import datetime
 import re
 
 from .common import STATUSES, check_identity, did_you_mean, is_int, is_number, unknown_keys_text, josa
@@ -19,11 +20,24 @@ DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 STAGE_FIELDS = {"stage", "entered", "cleared", "level", "duration", "kills", "income", "source", "note"}
 GROUP_FIELDS = {"upgrades", "growth_build", "stage_stats"}
 GREYBOX_FIELDS = {"check", "value", "passed", "n", "source", "note"}
+SESSION_FIELDS = {"id", "date", "concept", "build", "players", "runs", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note"}
+TOP_FIELDS = {"playtests", "verdicts", "note"}
 REF_LABEL = {"stages": "전투 단계", "upgrades": "영구 강화", "enemies": "적", "builds": "판 안 성장 빌드", "currencies": "재화", "greybox": "그레이박스 확인"}
 UNCHECKED_REASON = {
     "no_concepts": "컨셉 데이터를 함께 검사하지 않음 — 프로젝트 폴더나 design/concepts.json을 같이 넘기세요",
     "concepts_unreadable": "컨셉 파일을 읽지 못함 — 컨셉 파일의 오류를 먼저 고치세요",
 }
+
+
+def valid_date(v) -> bool:
+    """YYYY-MM-DD이고 달력에 있는 날짜인가. 기록의 순서가 날짜로 정해지므로 틀린 날짜는 판정을 바꾼다."""
+    if not (isinstance(v, str) and DATE.match(v)):
+        return False
+    try:
+        datetime.date.fromisoformat(v)
+    except ValueError:
+        return False
+    return True
 
 
 def _text(v) -> bool:
@@ -151,7 +165,7 @@ def _used_refs(s: dict) -> dict:
     return out
 
 
-def check_refs(s: dict, refs: dict | None, warnings: list, missing: set) -> None:
+def check_refs(s: dict, refs: dict | None, errors: list, warnings: list, missing: set) -> None:
     """단계 기록이 가리키는 id. 기록은 지난 빌드의 사실이라 데이터가 바뀌어도 고치지 않으므로, 없는 id는 오류가 아니라 경고다
     (calibrate의 통과율 비교는 지금 데이터로 계산할 수 없는 기록을 뺀다). 함께 읽지 않은 데이터는 미확인으로 센다."""
     for kind, ids in _used_refs(s).items():
@@ -165,7 +179,9 @@ def check_refs(s: dict, refs: dict | None, warnings: list, missing: set) -> None
             if x not in known:
                 advice = (" levels.json의 greybox에 있는 항목 id를 적습니다. 그 뒤에 항목을 지웠으면 기록은 그대로 둡니다." if kind == "greybox" else
                           " 그 뒤에 바뀐 것이면 기록은 그대로 둡니다(calibrate의 통과율 비교는 지금 데이터로 계산할 수 없는 기록을 뺍니다).")
-                _err(warnings, "unknown_reference", s["id"], f"{REF_LABEL[kind]} 데이터에 없는 id입니다: {x}.{did_you_mean(x, known)}{advice}")
+                hint = did_you_mean(x, known)
+                # 그레이박스 기록의 오타는 그 기록을 버려서 앞 판정이 그대로 남으므로 경고로 두지 않는다
+                _err(errors if kind == "greybox" and hint else warnings, "unknown_reference", s["id"], f"{REF_LABEL[kind]} 데이터에 없는 id입니다: {x}.{hint}{advice}")
 
 
 def _check_greybox(s: dict, where: str, errors: list) -> bool:
@@ -199,9 +215,12 @@ def _check_greybox(s: dict, where: str, errors: list) -> bool:
 
 def check_session(s: dict, errors: list, warnings: list) -> bool:
     where, ok = s["id"], True
-    if not (isinstance(s.get("date"), str) and DATE.match(s["date"])):
-        _err(errors, "schema", where, f"date는 YYYY-MM-DD 형식이어야 합니다: {s.get('date')!r}")
+    if not valid_date(s.get("date")):
+        _err(errors, "schema", where, f"date는 달력에 있는 YYYY-MM-DD 날짜여야 합니다: {s.get('date')!r}")
         ok = False
+    unknown = unknown_keys_text(s, SESSION_FIELDS)
+    if unknown:
+        _err(errors, "schema", where, f"{unknown} 빠진 값은 판정에 들어가지 않습니다.")
     for f in ("concept", "build"):
         if not _text(s.get(f)):
             _err(errors, "schema", where, f"{josa(f, '이가')} 비어 있습니다." + (" 빌드는 커밋 해시나 빌드 이름입니다." if f == "build" else ""))
@@ -284,6 +303,9 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
     refs: 단계 기록이 가리키는 id {stages, upgrades, enemies, builds, currencies}. 값이 None인 종류는 쓰면 미확인이다."""
     errors: list = []
     warnings: list = []
+    top = unknown_keys_text(data, TOP_FIELDS)
+    if top:
+        _err(errors, "schema", "playtests", top)
     raw = data.get("playtests")
     if not isinstance(raw, list):
         _err(errors, "schema", "playtests", "playtests 배열이 필요합니다.")
@@ -296,7 +318,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
     unchecked = 0
     missing_refs: set = set()
     for s in sessions.values():
-        check_refs(s, refs, warnings, missing_refs)
+        check_refs(s, refs, errors, warnings, missing_refs)
         observed = [o["hypothesis"] for o in s.get("observations", [])]
         if concepts is None:
             unchecked += 1
