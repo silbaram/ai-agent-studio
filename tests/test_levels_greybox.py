@@ -41,6 +41,11 @@ class Items(unittest.TestCase):
             r = run(both(level("s1", enc(), greybox=bad)))
             self.assertIn("schema", codes(r["errors"]), bad)
 
+    def test_a_list_of_another_shape_is_one_error_not_a_crash(self):
+        for bad in (None, 0, 5, True, False, "abcde", {"a": 1, "b": 2}):
+            r = run(both(level("s1", enc(), greybox=bad)))
+            self.assertEqual(len([e for e in r["errors"] if "greybox" in e["where"]]), 1, bad)
+
     def test_ids_are_unique_across_the_file(self):
         r = run(both(level("s1", enc(), greybox=[item()]), level("s2", enc("e2", {"c": 6}), greybox=[item()])))
         self.assertIn("duplicate_id", codes(r["errors"]))
@@ -162,11 +167,38 @@ class Sessions(unittest.TestCase):
     def test_a_session_of_only_checks_is_not_empty(self):
         self.assertNotIn("session_without_observations", codes(self.validate(greybox=[{"check": "g1", "value": 1}], refs={"greybox": {"g1"}})["warnings"]))
 
-    def test_an_unknown_check_is_a_warning_with_a_hint(self):
-        w = warning(self.validate(greybox=[{"check": "g2", "value": 1}], refs={"greybox": {"g1", "g22"}}), "unknown_reference")
-        self.assertIn("g22", w["message"])
-        self.assertIn("levels.json", w["message"])
-        self.assertNotIn("calibrate", w["message"])
+    def test_a_check_id_typo_is_an_error_because_the_record_would_be_lost(self):
+        r = self.validate(greybox=[{"check": "crypt_gat", "value": 1}], refs={"greybox": {"crypt_gate"}})
+        e = next(x for x in r["errors"] if x["code"] == "unknown_reference")
+        self.assertIn("crypt_gate", e["message"])
+        self.assertIn("levels.json", e["message"])
+        self.assertNotIn("calibrate", e["message"])
+
+    def test_an_item_removed_since_is_only_a_warning(self):
+        r = self.validate(greybox=[{"check": "old_item", "value": 1}], refs={"greybox": {"crypt_gate"}})
+        self.assertEqual(r["errors"], [])
+        self.assertIn("levels.json", warning(r, "unknown_reference")["message"])
+
+    def test_a_typo_in_a_session_key_is_an_error_with_a_hint(self):
+        r = self.validate(gerybox=[{"check": "g1", "value": 1}], refs={"greybox": {"g1"}})
+        self.assertIn("greybox", next(e["message"] for e in r["errors"] if e["code"] == "schema"))
+
+    def test_any_unknown_session_key_is_an_error(self):
+        self.assertIn("schema", codes(self.validate(status="cut")["errors"]))
+
+    def test_memos_are_free_on_a_session(self):
+        self.assertEqual(self.validate(note="시험값", _memo=1)["errors"], [])
+
+    def test_a_typo_at_the_top_of_the_file_is_an_error(self):
+        r = pt.validate({"playtests": [], "verdict": []}, {})
+        self.assertIn("verdicts", next(e["message"] for e in r["errors"] if e["code"] == "schema"))
+
+    def test_a_date_that_is_not_on_the_calendar_is_an_error(self):
+        for bad in ("2026-13-03", "2026-02-30", "2026-00-10"):
+            self.assertIn("schema", codes(self.validate(date=bad)["errors"]), bad)
+
+    def test_a_leap_day_is_fine(self):
+        self.assertEqual(self.validate(date="2028-02-29")["errors"], [])
 
     def test_a_stage_reference_keeps_its_own_advice(self):
         w = warning(self.validate(stage_stats=[{"stage": "zone_9", "entered": 1, "cleared": 1}], refs={"stages": {"zone_1"}}), "unknown_reference")
@@ -201,9 +233,31 @@ class Project_(Project):
         self.extra_session("2027-01-01", {"check": "crypt_forge_buy"})
         self.assertEqual(next(x for lvl in self.report("levels")["levels"] for x in lvl["greybox"])["status"], "passed")
 
-    def test_a_session_citing_an_unknown_check_is_a_warning_in_the_project(self):
+    def test_a_session_citing_a_mistyped_check_fails_the_project(self):
         self.extra_session("2027-01-01", {"check": "crypt_forge_bye", "value": 1})
-        self.assertIn("crypt_forge_buy", warning(self.report("playtests"), "unknown_reference")["message"])
+        self.assertIn("crypt_forge_buy", next(e["message"] for e in self.report("playtests")["errors"] if e["code"] == "unknown_reference"))
+        self.assertEqual(self.check()[0], 1)
+
+    def same_day(self, first, second):
+        def make(d):
+            base = d["playtests"][-1]
+            del base["greybox"]
+            for sid, value in (first, second):
+                d["playtests"].append({"id": sid, "date": "2027-01-01", "concept": base["concept"], "build": "x", "players": ["a"], "runs": 1,
+                                       "greybox": [{"check": "crypt_forge_buy", "value": value}]})
+        self.edit("data/playtests.json", make)
+        return next(x for lvl in self.report("levels")["levels"] for x in lvl["greybox"])
+
+    def test_on_one_date_the_higher_session_number_decides_whatever_the_file_order(self):
+        self.assertEqual(self.same_day(("pt_20270101_2", 285), ("pt_20270101_1", 999))["value"], 285)
+
+    def test_session_numbers_compare_as_numbers(self):
+        self.assertEqual(self.same_day(("pt_20270101_10", 285), ("pt_20270101_9", 999))["value"], 285)
+
+    def test_a_session_with_an_impossible_date_is_not_read(self):
+        self.extra_session("2026-13-03", {"check": "crypt_forge_buy", "value": 999})
+        r = self.report("levels")
+        self.assertEqual(next(x for lvl in r["levels"] for x in lvl["greybox"])["value"], 285)
 
     def test_a_text_value_does_not_stop_the_level_check(self):
         self.edit("data/playtests.json", lambda d: d["playtests"][-1]["greybox"].__setitem__(0, {"check": "crypt_forge_buy", "value": "많이", "passed": True}))
@@ -245,6 +299,8 @@ class Project_(Project):
             self.assertIn(word, fmt)
         self.assertIn("### 6. 그레이박스", skill)
         self.assertIn("`greybox`", record)
+        self.assertIn("같은 날짜", fmt)
+        self.assertIn("같은 날짜", record)
         self.assertIn("`greybox`", (ROOT / "skills/playtest-verdict/SKILL.md").read_text(encoding="utf-8"))
         tools = skill[skill.index("## 도구"):skill.index("## 절차")]
         self.assertIn("그레이박스", tools)

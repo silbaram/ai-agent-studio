@@ -882,10 +882,14 @@ def _judge(item: dict, record: dict | None) -> str:
 
 def _greybox_rows(lv: dict, log: dict | None, seen: set, errors: list, warnings: list) -> list:
     """레벨의 그레이박스 확인 항목과 판정. log: 플레이 기록 {항목 id: 날짜순 기록}. 마지막 기록이 지금의 판정이다."""
+    raw = lv.get("greybox", [])
+    if not isinstance(raw, list):
+        _err(errors, "schema", f"{lv['id']}.greybox", f"greybox는 확인 항목 {{id, check, encounter, expect}} 배열입니다: {_shown(raw)}")
+        return []
     written = lv.get("encounters")
     spots = [x["id"] for x in written if isinstance(x, dict) and isinstance(x.get("id"), str)] if isinstance(written, list) else []
     rows = []
-    for _, item in c.check_identity(lv.get("greybox", []), f"{lv['id']}.greybox", errors):
+    for _, item in c.check_identity(raw, f"{lv['id']}.greybox", errors):
         at = f"{lv['id']}.{item['id']}"
         ok = _known_keys(item, GREYBOX_FIELDS, at, errors)
         if item["id"] in seen:
