@@ -225,6 +225,7 @@ def validate(data: dict, concepts: list | None = None, concepts_unreadable: bool
         **c.summary_counts(entries),
         "unverified": [],   # 시스템과 규칙은 설계 결정이다. 측정으로 올릴 수치가 아니라 출처 게이트에 걸지 않는다
         "concept": concept.get("id") if concept else None,
+        "brief_out_of_scope": items["out_of_scope"] if items else None,
         "rows": rows,
         "unchecked": len(missing),
         "unchecked_kinds": sorted(missing),
