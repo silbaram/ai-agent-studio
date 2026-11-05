@@ -23,6 +23,7 @@ ENCOUNTER_FIELDS = {"id", "name", "role", "enemies", "repeat", "enemy_repeat", "
 LEVEL_FIELDS = {"id", "name", "combat_stage", "encounters", "intent", "status", "provenance", "acknowledged", "note"}
 BUDGET_FIELDS = {"curve", "roles", "tolerance", "kills_tolerance", "provenance", "note"}
 CURVE_FIELDS = {"growth", "base", "rate", "values", "note"}  # 곡선의 기준은 전투 단계의 순서로 정해져 있어 by를 쓰지 않는다
+TOP_FIELDS = {"threat_budget", "pacing", "levels", "note"}
 PACING_LIMITS = ("strong_at", "max_strong_run", "max_rest_load", "max_reward_load")
 PACING_FIELDS = {*PACING_LIMITS, "carry_levels", "provenance", "note"}
 SPAN_KINDS = {"rest": ("쉬는 곳 사이", "max_rest_load", "long_stretch", "쉬는 곳을 넣거나 조우를 줄입니다.", "쉬는 곳이"),
@@ -32,12 +33,14 @@ UNCHECKED_LABEL = {"enemies": "적", "combat": "전투 계산", "economy": "재�
 SOURCE_LABEL = {"assumed": "가정", "computed": "계산", "measured": "측정", "unspecified": "미지정"}
 SECOND_UNITS = ("초", "s", "sec", "secs", "second", "seconds")  # 전투 계산의 처치 시간(초)과 나눌 수 있는 재화 흐름 time_unit
 KILL_HEADS = {"time": ("처치 시간(초)", "단일 대상 처치 시간(초)", "처치 시간 ÷ 길이"), "hits": ("처치 타수", "단일 대상 처치 타수", "타수 ÷ 길이")}  # 조우 표, 단계 표, 비율
+LATE_ADVICE = {"money": "돈이 늦습니다. 가격이나 수입을 보고, 그때도 열려 있으면 조우에 open_for를 적습니다.",
+               "after": "재화 흐름의 after 때문에 늦습니다. after를 고치거나, 그때도 열려 있으면 조우에 open_for를 적습니다.",
+               "order": "구매 계획의 앞 구매를 기다리느라 늦습니다. 구매 순서를 보거나, 그때도 열려 있으면 조우에 open_for를 적습니다.",
+               "stage_end": "단계 끝에 사는 게임입니다. 조우를 단계 끝으로 옮깁니다."}  # 재화 흐름이 구매 시점을 정한 까닭별 처방
 EPS = 1e-9
 
 
-def _shown(v) -> str:
-    """메시지에 적는 값. 사용자가 적은 JSON 표기 그대로다."""
-    return json.dumps(v, ensure_ascii=False)
+_shown = c.json_text
 
 
 def _positive(v) -> bool:
@@ -122,7 +125,7 @@ PACE_KEYS = (("at", _at_or_after_zero, "at(판 시작부터의 시각)은 0 이�
              ("rest", lambda v: isinstance(v, bool), "rest(쉬는 곳인가)는 true나 false입니다"),
              ("reward", lambda v: isinstance(v, str) and bool(v.strip()), "reward(주는 보상)는 비어 있지 않은 글입니다"),
              ("hazard", _positive, "hazard(적 없이 드는 소모를 위협도로 적은 값)는 0보다 큰 수입니다"),
-             ("open_for", _at_or_after_zero, "open_for(구매가 열려 있는 시간)는 0 이상의 수입니다"),
+             ("open_for", _positive, "open_for(구매가 열려 있는 시간)는 0보다 큰 수입니다"),
              ("purchases", lambda v: isinstance(v, list) and bool(v) and all(isinstance(k, str) for k in v) and len(set(v)) == len(v),
               "purchases(재화 흐름의 구매 id 목록)는 겹치지 않는 id의 비어 있지 않은 배열입니다"))
 
@@ -581,7 +584,7 @@ def _overlaps(timed: list) -> list:
 
 def _fills(x: dict, timed: list) -> bool:
     """단계의 시간을 메우는 구간인가. 싸움과 겹치는 적 없는 조우는 그동안 열려 있는 시설이라 메우지 않는다."""
-    return _long(x) and (x["weight"] != 0 or not any(y["weight"] != 0 and _meet(x, y) for y in timed))
+    return _long(x) and (x["weight"] != 0 or not any(y["weight"] != 0 and y["start"] is not None and _meet(x, y) for y in timed))
 
 
 def _window_text(first, last, unit: str) -> str:
@@ -616,7 +619,8 @@ def _check_times(listed: list, ordered: list, by_stage: dict, shaky: set, links:
         if outside:
             owner = _stage_owner(info["levels"], "time_outside_stage", sid)
             _err(warnings, "time_outside_stage", owner, f"단계 {sid}의 조우가 {_time_text(low, high, unit)}에 걸치는데 재화 흐름의 단계는 "
-                 f"{_window_text(first, last, unit)}입니다(벗어난 조우: {', '.join(outside)}). 조우의 시각이나 재화 흐름의 duration을 맞춥니다.", owner=owner, part=sid)
+                 f"{_window_text(first, last, unit)}입니다(벗어난 조우: {', '.join(outside)}). 조우의 시각이나 재화 흐름의 duration을 맞춥니다."
+                 + (" 싸움 동안 열려 있는 시설이면 duration 대신 open_for를 적습니다." if any(x["id"] in outside and x["weight"] == 0 for x in xs) else ""), owner=owner, part=sid)
         holes = _holes([(x["start"], x["end"]) for x in xs if _fills(x, xs)], first, last)
         if holes:
             owner = _stage_owner(info["levels"], "time_gap", sid)
@@ -656,8 +660,7 @@ def _off_span(row: dict, lv: dict, x: dict, links: dict, following: dict, unit: 
         closing = _open_until(x)
         if x["start"] - EPS <= row["at"] <= closing + EPS:
             return None
-        advice = (f"돈이 먼저 모입니다. 재화 흐름의 구매 after에 시각 {c.josa(_fmt(x['start']), '을를')} 적습니다." if row["at"] < x["start"]
-                  else "돈이 늦습니다. 가격이나 수입을 보고, 그때도 열려 있으면 조우에 open_for를 적습니다.")
+        advice = f"돈이 먼저 모입니다. 재화 흐름의 구매 after에 시각 {c.josa(_fmt(x['start']), '을를')} 적습니다." if row["at"] < x["start"] else LATE_ADVICE[row.get("held_by") or "money"]
         return f"구매 {pid} 재화 흐름에서 {_fmt(row['at'])}{unit}에 일어나는데 조우 {x['id']}의 시각은 {_time_text(x['start'], closing, unit)}입니다. {advice}"
     here = links.get(lv["stage"], {}).get("all", [lv["stage"]])
     if row.get("stage") is None or row["stage"] in here or following.get(row["stage"]) in here:
@@ -694,7 +697,10 @@ def _check_purchases(ordered: list, links: dict, plan: dict | None, economy, uni
     for label, ids in (("시점을 모르는 구매", blind), ("판 사이 구매", between)):
         if ids:
             text += f" · {label}: {', '.join(ids)}"
-    return [text]
+    ends = [k["end"] for k in links.values()]
+    run_end = max(ends) if ends and None not in ends else None   # 길이가 없는 단계가 있으면 판 끝을 모른다
+    past = [x["id"] for _, x in _walk(ordered) if x["open_for"] and run_end is not None and x["start"] is not None and _open_until(x) > run_end + EPS]
+    return [text] + ([f"판 끝({_fmt(run_end)}{unit})을 넘어 열려 있는 시설: {', '.join(past)}. 판 끝까지 열려 있으면 그 시각까지만 적습니다."] if past else [])
 
 
 def _beats(lv: dict) -> list:
@@ -716,6 +722,18 @@ def _beats(lv: dict) -> list:
     return sorted(calm + fights, key=lambda beat: beat[0]["start"])
 
 
+def _standing(x: dict, timed: list) -> bool:
+    """시간을 차지하지 않고 서 있는 적 없는 조우인가. 시설이나 순간이라 구간을 시작하지 않는다."""
+    return x["weight"] == 0 and x["start"] is not None and not _fills(x, timed)
+
+
+def _reach(x: dict, shut, timed: list):
+    """구간의 끝이 되는 시각. 적 없는 조우로 끊으면 그 시작까지이고, 싸움과 겹치는 적 없는 조우는 열려 있는 시설이라 끝을 늘리지 않는다."""
+    if x["weight"] != 0 or x["start"] is None:
+        return x["end"]
+    return x["end"] if x is not shut and _fills(x, timed) else x["start"]
+
+
 def _span_walk(ordered: list, kind: str, carry: bool, lost: bool) -> tuple[list, list]:
     """(표시로 끊은 구간, 끊지 못한 표시). kind: rest나 reward. 표시가 있는 조우는 자기 부담까지 넣고 끊는다. 적 없는 조우로 끊으면 길이는 그 시작까지다.
     횟수가 1보다 작은 표시는 없는 판이 있어 끊지 않는다. 위협이 없는 구간은 내지 않는다. 일부만 더한 값을 내지 않는다.
@@ -728,7 +746,8 @@ def _span_walk(ordered: list, kind: str, carry: bool, lost: bool) -> tuple[list,
         if now is not None and now["threat"] != 0:
             load, threat = now["load"], now["threat"]
             length = None if now["start"] is None or now["end"] is None else round(now["end"] - now["start"], 4)
-            out.append({**now, "closed_by": by, "load": None if load is None else round(load, 2), "threat": None if threat is None else round(threat, 4), "length": length})
+            out.append({**now, "closed_by": by, "load": None if load is None else round(load, 2), "threat": None if threat is None else round(threat, 4), "length": length,
+                        "rate": round(load / length, 3) if load is not None and length else None})
         now = None
 
     for lv in ordered:
@@ -740,12 +759,13 @@ def _span_walk(ordered: list, kind: str, carry: bool, lost: bool) -> tuple[list,
             shut = next((x for x in reversed(marked) if x["repeat"] >= 1), None)
             maybe += [x["id"] for x in marked if x["repeat"] < 1]
             for x in beat:
+                if now is None and _standing(x, lv["encounters"]):
+                    continue
                 if now is None:
                     now = {"kind": kind, "level": lv["id"], "from": x["id"], "load": 0.0, "threat": 0.0, "start": x["start"], "end": x["start"]}
-                stop = x["start"] if x is shut and x["weight"] == 0 else x["end"]
                 now.update(to_level=lv["id"], to=x["id"],
                            load=_known(add, now["load"], x["load"] if whole else None), threat=_known(add, now["threat"], x["weight"] if whole else None),
-                           end=_known(max, now["end"], stop))
+                           end=_known(max, now["end"], _reach(x, shut, lv["encounters"])))
             if shut is not None:
                 close(shut["id"])
     close(None)
@@ -796,6 +816,11 @@ def _span_name(s: dict) -> str:
     return _span_key(s) + (f" ({s['level']}~{s['to_level']})" if s["to_level"] != s["level"] else "")
 
 
+def _ack_way(code: str, s: dict) -> str:
+    """구간 경고를 확인하는 길. 대상은 괄호의 레벨 범위를 뺀 구간 이름이다."""
+    return f"의도한 구간이면 레벨 {s['level']}의 acknowledged에 {{{_shown(code)}: {{{_shown(_span_key(s))}: 이유}}}}로 적습니다."
+
+
 def _pace(ordered: list, settings: dict, lost: bool, warnings: list) -> tuple[dict, list]:
     """(구간과 연속, 읽을 때 알아야 할 문장). 상한을 넘으면 첫 조우에 경고를 건다. lost: 형식 오류로 빠진 레벨이 있는가."""
     spans, unsure, notes, kinds = [], [], [], []
@@ -811,7 +836,7 @@ def _pace(ordered: list, settings: dict, lost: bool, warnings: list) -> tuple[di
         for s in found:
             s.update(limit=limit, over=limit is not None and s["load"] is not None and s["load"] > limit + EPS)
             if s["over"]:
-                _err(warnings, code, f"{s['level']}.{s['from']}", f"{label} 구간 {_span_name(s)}의 부담이 평범한 조우 {_fmt(s['load'])}개 분량입니다(상한 {_fmt(limit)}). {advice}",
+                _err(warnings, code, f"{s['level']}.{s['from']}", f"{label} 구간 {_span_name(s)}의 부담이 평범한 조우 {_fmt(s['load'])}개 분량입니다(상한 {_fmt(limit)}). {advice} {_ack_way(code, s)}",
                      owner=s["level"], part=_span_key(s), value=f"부담 {_fmt(s['load'])}")
         spans += found
         if limit is not None and not marked:
@@ -821,13 +846,25 @@ def _pace(ordered: list, settings: dict, lost: bool, warnings: list) -> tuple[di
     for s in runs:
         s.update(limit=limit, over=limit is not None and s["length"] > limit + EPS)
         if s["over"]:
-            _err(warnings, "strong_run", f"{s['level']}.{s['from']}", f"강한 조우가 {_span_key(s)}에서 {_fmt(s['length'])}번 이어집니다(상한 {_fmt(limit)}). 사이에 약한 조우나 쉬는 곳을 넣습니다.",
+            advice = "한 조우의 횟수입니다. 횟수를 줄이거나 조우를 나눠 사이에 약한 조우를 넣습니다." if s["from"] == s["to"] else "사이에 약한 조우나 쉬는 곳을 넣습니다."
+            _err(warnings, "strong_run", f"{s['level']}.{s['from']}", f"강한 조우가 {_span_key(s)}에서 {_fmt(s['length'])}번 이어집니다(상한 {_fmt(limit)}). {advice} {_ack_way('strong_run', s)}",
                  owner=s["level"], part=_span_key(s), value=f"{_fmt(s['length'])}번")
+    if limit is not None and not carry and not lost:
+        crossing = [s for s in _strong_walk(ordered, True) if s["to_level"] != s["level"] and s["length"] > limit + EPS]
+        notes += [f"레벨을 넘으면 강한 조우가 {_span_name(s)}에서 {_fmt(s['length'])}번 이어집니다(상한 {_fmt(limit)}). 레벨 사이에 체력이 이어지는 게임이면 carry_levels를 적습니다." for s in crossing]
     if unsure:
         notes.append(f"횟수가 1보다 작아 구간을 끊지 않은 조우: {', '.join(dict.fromkeys(unsure))}. 없는 판이 있어서입니다. 구간의 값은 평균이고 어느 한 경로의 값이 아닙니다.")
     if lost and (carry or "reward" in kinds):
         notes.append("형식 오류로 빠진 레벨이 있어 레벨을 넘는 구간의 부담을 내지 않고, 강한 조우 연속은 레벨 안에서만 봅니다.")
     return {"spans": spans, "strong_runs": runs, "kinds": kinds}, notes
+
+
+def _beat_rate(beat: list):
+    """길이당 부담. 시간을 나누는 묶음은 합을 묶음의 시간으로 나눈 값이라 행끼리 견줄 수 있다."""
+    if any(x["load"] is None for x in beat):
+        return None
+    length = beat[0]["duration"] if len(beat) == 1 else max(x["end"] for x in beat) - min(x["start"] for x in beat)
+    return round(sum(x["load"] for x in beat) / length, 3) if length else None
 
 
 def _pace_used(data: dict, ordered: list) -> bool:
@@ -863,6 +900,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
     적이나 전투 계산이 없으면 미확인으로 센다. 재화 흐름은 조우가 구매를 가리킬 때만 미확인이고, 그 밖에는 있을 때만 맞춰 본다."""
     errors: list = []
     warnings: list = []
+    _known_keys(data, TOP_FIELDS, "levels", errors)
     cfg = read_settings(data, errors)
     settings = read_pacing(data, cfg["tolerance"] if cfg else DEFAULT_TOLERANCE, errors)
     raw = data.get("levels")
@@ -964,8 +1002,10 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
     _place_in_time(ordered, links, shaky)
     pace_notes = _check_times(listed, ordered, by_stage, shaky, links, economy, unit, warnings) + _check_purchases(ordered, links, purchases, economy, unit, errors, warnings)
     pacing, walk_notes = _pace(ordered, settings, bool(dropped), warnings)
+    for beat in (beat for lv in ordered for beat in _beats(lv)):
+        for x in beat:
+            x["rate"] = _beat_rate(beat)
     for _, x in _walk(ordered):   # 구간은 줄이기 전의 값으로 더했다. check와 뷰어가 따로 줄이지 않게 여기서 한 번만 줄인다
-        x["rate"] = round(x["load"] / x["duration"], 3) if x["load"] is not None and x["duration"] else None
         x["intensity"] = None if x["intensity"] is None else round(x["intensity"], 2)
         x["load"] = None if x["load"] is None else round(x["load"], 2)
     if purchases is None and any(x["purchases"] for _, x in _walk(ordered)):
@@ -1091,9 +1131,9 @@ def print_extra(result: dict) -> None:
     pacing = result["pacing"]
     for s in _shown_spans(pacing):
         length = "" if s["length"] is None else f" · 길이 {_fmt(s['length'])}{pacing['time_unit']}"
-        print(f"구간 {SPAN_KINDS[s['kind']][0]} {_span_name(s)}: 부담 {_fmt(s['load'])}{length}" + (" ⚠" if s["over"] else ""))
+        print(f"구간 {SPAN_KINDS[s['kind']][0]} {_span_name(s)}: 부담 {_fmt(s['load'])}{length}" + _over_mark(s, SPAN_KINDS[s["kind"]][2], result))
     for s in pacing["strong_runs"]:
-        print(f"강한 조우 연속 {_span_name(s)}: {_fmt(s['length'])}번 (세기 {_fmt(pacing['strong_at'])} 이상)" + (" ⚠" if s["over"] else ""))
+        print(f"강한 조우 연속 {_span_name(s)}: {_fmt(s['length'])}번 (세기 {_fmt(pacing['strong_at'])} 이상)" + _over_mark(s, "strong_run", result))
     for text in result["notes"]:
         print("참고: " + text)
     kinds = result["unchecked_kinds"]
@@ -1110,6 +1150,13 @@ def print_extra(result: dict) -> None:
         print("레벨 구성 미확인: 계산한 조우가 없음(빈 levels이거나 모두 삭제)")
     if "scores" in kinds:
         print("레벨 구성 미확인: 적의 위협도를 내지 못한 조우 " + ", ".join(result["unscored"]))
+
+
+def _over_mark(s: dict, code: str, result: dict) -> str:
+    """상한을 넘었다는 표시. 확인한 구간은 확인함이다."""
+    if not s["over"]:
+        return ""
+    return " (확인함)" if any(a["code"] == code and a.get("part") == _span_key(s) for a in result.get("acknowledged", [])) else " ⚠"
 
 
 def _shown_spans(pacing: dict) -> list:
@@ -1138,13 +1185,15 @@ def _pace_table(result: dict) -> list:
                 when = "–" if x["start"] is None else _time_text(x["start"], x["end"], unit)
                 rows.append("| " + " | ".join((lv["id"], x["id"], when, _fmt(x["intensity"]), _fmt(x["load"]), _fmt(x["rate"]), _marks(x, unit))) + " |")
         rows += ["", f"세기는 평범한 조우가 1입니다. 강함은 세기 {_fmt(pacing['strong_at'])} 이상입니다."]
-        rows += ["", "| 구간 | 조우 | 끝낸 곳 | 부담 | 길이 | 상한 |", "|---|---|---|---|---|---|"]
-        for s in _shown_spans(pacing):
+        shown = _shown_spans(pacing)
+        rows += ["", "| 구간 | 조우 | 끝낸 곳 | 부담 | 길이 | 길이당 부담 | 상한 |", "|---|---|---|---|---|---|---|"] if shown else []
+        for s in shown:
             length = "–" if s["length"] is None else f"{_fmt(s['length'])}{unit}"
-            rows.append("| " + " | ".join((SPAN_KINDS[s["kind"]][0], _span_name(s), s["closed_by"] or "–", _fmt(s["load"]), length, _fmt(s["limit"]) + (" ⚠" if s["over"] else ""))) + " |")
+            rows.append("| " + " | ".join((SPAN_KINDS[s["kind"]][0], _span_name(s), s["closed_by"] or "–", _fmt(s["load"]), length, _fmt(s["rate"]),
+                                            _fmt(s["limit"]) + _over_mark(s, SPAN_KINDS[s["kind"]][2], result))) + " |")
     if pacing["strong_runs"]:
         rows += ["", f"| 강한 조우 연속(세기 {_fmt(pacing['strong_at'])} 이상) | 횟수 | 상한 |", "|---|---|---|"]
-        rows += ["| " + " | ".join((_span_name(s), _fmt(s["length"]), _fmt(s["limit"]) + (" ⚠" if s["over"] else ""))) + " |" for s in pacing["strong_runs"]]
+        rows += ["| " + " | ".join((_span_name(s), _fmt(s["length"]), _fmt(s["limit"]) + _over_mark(s, "strong_run", result))) + " |" for s in pacing["strong_runs"]]
     return rows
 
 

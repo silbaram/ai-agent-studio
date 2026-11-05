@@ -20,6 +20,10 @@ KIND_LABELS = {"concepts": "컨셉", "items": "아이템", "upgrades": "영구 �
 LIST_KEYS = {"combat": ("stages",), "budget": ("archetypes",), "crafting": ("enhance", "recipes"), "economy": ("stages", "purchases"),
              "growth": ("choices", "builds")}  # 항목 배열의 키가 종류 이름과 다른 경우
 ACK_CHECKED = ("levels", "economy")  # 확인이 그 파일 안에서만 쓰이는 종류. 아이템·적의 확인은 다른 파일의 검사가 읽는다
+LEVEL_ACK_CODES = ("curve_unused_point", "enemy_not_in_stage", "enemy_unplaced", "kills_differ", "kills_not_linked", "long_stretch", "purchase_off_span", "reward_drought", "strong_run",
+                   "time_gap", "time_outside_stage")  # 레벨 구성이 내는 경고. 테스트가 검사기와 맞춰 본다
+ECONOMY_ACK_CODES = ("currency_piles_up", "duplicate_purchase", "enhance_gap", "gear_before_purchase", "kill_not_in_stage", "meta_income_differs", "meta_order_differs",
+                     "requirement_missing", "reward_missing", "target_out_of_range", "unaffordable")  # 재화 흐름이 내는 경고
 FOREIGN_NAMES = ("levels",)  # 게임이 자기 형식으로도 흔히 쓰는 파일 이름. 종류 키가 없으면 이 도구의 파일로 보지 않는다
 SUBFOLDERS = ("design", "data")
 STAT_PREFIX = "stat."
@@ -96,6 +100,11 @@ def valid_range(rng) -> bool:
 def out_of_range(v, rng) -> bool:
     lo, hi = rng
     return (lo is not None and v < lo) or (hi is not None and v > hi)
+
+
+def json_text(v) -> str:
+    """메시지에 적는 값. 사용자가 적은 JSON 표기 그대로다."""
+    return json.dumps(v, ensure_ascii=False)
 
 
 def table_cell(v) -> str:
@@ -332,21 +341,38 @@ def ack_reason(entry: dict, code: str, part: str | None = None) -> str | None:
     return reason.strip() if reason else None
 
 
-def _unused_acks(acks: dict, used: set, seen: list) -> list:
+def _ack_advice(kind: str, code: str, target, seen: list) -> str:
+    """쓰이지 않은 확인의 다음 할 일. 자리가 틀렸으면 자리를, 이름이 틀렸으면 비슷한 이름을 말한다. 구간은 끝을 나누는 구간만 비슷하다고 본다."""
+    if kind != "levels" and code in LEVEL_ACK_CODES:
+        return "이 경고는 레벨 구성이 내므로 levels.json의 레벨에 적습니다."
+    if kind != "economy" and code in ECONOMY_ACK_CODES:
+        return "이 경고는 재화 흐름이 내므로 economy.json의 단계나 구매에 적습니다."
+    same = [w for w in seen if w["code"] == code]
+    home = next((w.get("owner", w["where"]) for w in same if target is not None and w.get("part") == target), None)
+    if home:
+        return f"이 경고의 확인은 {home}에 적습니다."
+    if not same:
+        return "그런 경고가 없습니다." + did_you_mean(code, {w["code"] for w in seen})
+    parts = [w["part"] for w in same if w.get("part")]
+    if target is not None and "~" in target:
+        ends = set(target.split("~"))
+        parts = [p for p in parts if ends & set(p.split("~"))]
+    return "그런 경고가 없습니다." + (did_you_mean(target, parts) if target is not None else "")
+
+
+def _unused_acks(kind: str, acks: dict, used: set, seen: list) -> list:
     """어떤 경고도 덮지 않은 확인을 말하는 문장. acks: {항목 id: 항목}, used: 덮은 (항목, 코드, 대상), seen: 이번 경고 전부."""
     out = []
     for eid, entry in acks.items():
         if not is_active(entry):
             continue   # 삭제한 항목은 계산에서 빠지므로 경고가 없는 것이 맞다
         for code, reason in entry["acknowledged"].items():
-            same = [w for w in seen if w["code"] == code]
             if isinstance(reason, dict):
                 for target in reason:
                     if (eid, code, target) not in used:
-                        hint = did_you_mean(target, [w["part"] for w in same if w.get("part")]) if same else did_you_mean(code, {w["code"] for w in seen})
-                        out.append(f"쓰이지 않은 확인: {eid}의 {code}({target}). 그런 경고가 없습니다.{hint}")
+                        out.append(f"쓰이지 않은 확인: {eid}의 {code}({target}). {_ack_advice(kind, code, target, seen)}")
             elif not any(k[:2] == (eid, code) for k in used):
-                out.append(f"쓰이지 않은 확인: {eid}의 {code}. 그런 경고가 없습니다.{did_you_mean(code, {w['code'] for w in seen})}")
+                out.append(f"쓰이지 않은 확인: {eid}의 {code}. {_ack_advice(kind, code, None, seen)}")
     return out
 
 
@@ -384,7 +410,7 @@ def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
             kept.append(w)
     report["warnings"] = kept
     if kind in ACK_CHECKED and not report.get("unchecked") and not report["errors"]:
-        report["ack_notes"] = _unused_acks(acks, used, seen)
+        report["ack_notes"] = _unused_acks(kind, acks, used, seen)
 
 
 def summary_counts(entries: list[dict]) -> dict:
