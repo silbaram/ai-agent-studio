@@ -438,8 +438,11 @@ def cmd_scope(args) -> int:
         print(reason, file=sys.stderr)
         return 2
     project = project.resolve()
+    if args.refresh and args.link is None:
+        print("--refresh는 --link와 함께 씁니다: studio.py scope --link <변경> <시스템 id> … --refresh", file=sys.stderr)
+        return 2
     if args.link is not None:
-        code, lines = scope.link(project, args.link[0], args.link[1:])
+        code, lines = scope.link(project, args.link[0], args.link[1:], refresh=args.refresh)
         for line in lines:
             print(line, file=sys.stderr if code else sys.stdout)
         return code
@@ -556,7 +559,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     g = sub.add_parser("scope", help="OpenSpec 변경을 브리프와 시스템 설계에 대어 범위 이탈을 찾습니다.")
     g.add_argument("project", nargs="?", default=".", help="게임 프로젝트 폴더 (기본: 현재 폴더)")
-    g.add_argument("--link", nargs="+", metavar=("변경", "시스템"), help="변경이 다루는 시스템과 지금 규칙의 지문을 .openspec.yaml에 적습니다.")
+    g.add_argument("--link", nargs="+", metavar=("변경", "시스템"), help="변경이 다루는 시스템을 .openspec.yaml에 적습니다. 새 시스템은 지금 규칙의 지문을 찍고, 이미 이은 시스템은 지문을 그대로 둡니다.")
+    g.add_argument("--refresh", action="store_true", help="--link와 함께: 적은 시스템의 지문을 모두 지금 규칙으로 새로 찍습니다. 명세를 바뀐 규칙에 맞춘 뒤에만 씁니다.")
     g.add_argument("--json", action="store_true", help="JSON으로 출력합니다.")
     g.set_defaults(func=cmd_scope)
 

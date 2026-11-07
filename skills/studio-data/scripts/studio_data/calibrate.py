@@ -517,11 +517,14 @@ def summarize_runs(path, group_by: str | None = None) -> dict:
                     item[key] = {k: _whole(sum(x[key].get(k, 0) for x in with_data) / len(with_data)) for k in names}
             item["source"] = str(path)
             stats.append(item)
-        group: dict = {"upgrades": list(upgrades), "stage_stats": stats}
+        group: dict = {"upgrades": list(upgrades), "runs": len(mine), "stage_stats": stats}   # runs: 이 묶음의 판 수. 단계를 골라 시작해도 맞다
         if build:
             group["growth_build"] = build
         if group_by is not None:
             group["variant"] = {group_by: variant}
+        named = list(dict.fromkeys(r["player"] for r in mine if r["player"]))
+        if named:
+            group["players"] = named   # 판정 표본이 손으로 쓴 사람 수 대신 센다
         out.append(group)
     result: dict = {"runs": len(runs), "logs": [str(path)], "groups": out}
     players = list(dict.fromkeys(r["player"] for r in runs.values() if r["player"]))

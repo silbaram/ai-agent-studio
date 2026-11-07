@@ -412,7 +412,8 @@ def validate_all(entries: list[dict]) -> list[dict]:
                 if d is not first:  # 맡는 필러와 MVP는 파일을 넘어 세지 않는다
                     c.add_issue(d["report"]["errors"], "schema", "systems", f"시스템 설계 파일은 하나만 씁니다. {first['name']}에 합칩니다.")
             elif d["kind"] == "playtests":
-                d["report"] = playtests.validate(d["data"], hypotheses, concepts_unreadable=bool(broken_concepts), refs=stage_refs)
+                d["report"] = playtests.validate(d["data"], hypotheses, concepts_unreadable=bool(broken_concepts), refs=stage_refs,
+                                                 root=_project_root(Path(d["path"])))
             else:
                 d["report"] = VALIDATORS[d["kind"]].validate(d["data"])
             c.apply_acknowledged(d["kind"], d["data"], d["report"])
@@ -426,6 +427,12 @@ def _purchase_plan(entries: list) -> dict | None:
     """재화 흐름이 계산한 구매 {id: 행}. 레벨 구성보다 먼저 검사하므로 보고서가 있다. 재화 흐름이 없거나 읽지 못했으면 None."""
     report = next((d.get("report") for d in entries if d["ok"] and d["kind"] == "economy"), None)
     return {p["id"]: p for p in report["purchases"]} if report else None
+
+
+def _project_root(path: Path) -> Path:
+    """데이터 파일의 게임 프로젝트 폴더. design/·data/ 안이면 그 위, 아니면 파일이 있는 폴더다. 기록의 경로는 이 폴더 기준이다."""
+    folder = path.resolve().parent
+    return folder.parent if folder.name in c.SUBFOLDERS else folder
 
 
 def collect(targets: list[Path]) -> list[dict]:

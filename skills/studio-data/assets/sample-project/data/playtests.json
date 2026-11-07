@@ -48,10 +48,10 @@
       "growth_build": "balanced",
       "logs": ["playtests/pt_20261115_1/runs.csv"],
       "groups": [
-        { "upgrades": [], "stage_stats": [
+        { "upgrades": [], "runs": 5, "players": ["self"], "stage_stats": [
           { "stage": "zone_1", "entered": 5, "cleared": 3, "level": 1 },
           { "stage": "zone_2", "entered": 3, "cleared": 1, "level": 5 } ] },
-        { "upgrades": ["weapon_1"], "stage_stats": [
+        { "upgrades": ["weapon_1"], "runs": 7, "players": ["self"], "stage_stats": [
           { "stage": "zone_1", "entered": 7, "cleared": 6, "level": 1 },
           { "stage": "zone_2", "entered": 6, "cleared": 4, "level": 5 },
           { "stage": "zone_3", "entered": 4, "cleared": 1, "level": 10 } ] }
