@@ -69,7 +69,7 @@
 | `combat_stage` | 아니오 | 이어지는 전투 단계 id. 없으면 레벨 id와 같은 단계 |
 | `greybox` | 아니오 | 그래픽 없이 확인할 항목 배열. 아래 `greybox` 절 |
 | `encounters` | 예 | 조우 배열. 판에서 지나는 순서대로 |
-| `status`, `provenance`, `acknowledged` | 아니오 | 다른 데이터와 같다. 경고는 레벨에서 `{코드: {대상: 이유}}`로 확인한다. 대상은 경고가 말하는 조우나 적의 id, 단계 id, 구매 id, 구간(`첫 조우~끝 조우`)이다. 단계 전체의 경고(`kills_differ`, `enemy_unplaced`, `enemy_not_in_stage`)는 그 단계의 어느 레벨에서든 확인할 수 있다. 어느 레벨에도 걸리지 않는 경고(`kills_not_linked`, `curve_unused_point`)는 아무 레벨에서 확인한다 |
+| `status`, `provenance`, `acknowledged` | 아니오 | 다른 데이터와 같다. 경고는 레벨에서 `{코드: {대상: 이유}}`로 확인한다. 대상은 경고가 말하는 조우나 적의 id, 단계 id, 구매 id, 구간(`첫 조우~끝 조우`)이다. 단계 전체의 경고(`kills_differ`, `enemy_unplaced`, `enemy_not_in_stage`, `kill_time_over_length`)는 그 단계의 어느 레벨에서든 확인할 수 있다. 어느 레벨에도 걸리지 않는 경고(`kills_not_linked`, `curve_unused_point`)는 아무 레벨에서 확인한다 |
 
 한 전투 단계의 레벨은 한 판에 모두 지나는 것으로 센다. 대체 맵(한 판에 그중 하나만 나옴)은 조우의 `repeat`를 나오는 확률로 나눠 적는다. 셋 중 하나가 나오면 `repeat`는 1/3배다.
 
@@ -172,6 +172,7 @@
 | `curve_unused_point` | 경고 | `table` 곡선의 값이 가리키는 전투 단계가 없음. 값이 없는 단계만 오타로 추정한다. 다음 단계를 미리 적어 둔 값이면 아무 레벨의 `acknowledged`에 `{"curve_unused_point": {단계 id: 이유}}`로 적는다 |
 | `enemy_not_in_stage` | 경고 | 전투 단계에 나오지 않는 적을 놓음. 단계와 적마다 한 줄이고 놓은 조우를 나열한다 |
 | `enemy_unplaced` | 경고 | 전투 단계의 적이 어떤 조우에도 없음 |
+| `kill_time_over_length` | 경고 | 단계 표의 처치 시간 ÷ 길이가 1배를 넘음(처치 시간에 "이상"이 붙어도). 단일 대상 기준이라 범위 공격·관통·판 안 성장이 메울 수 있다. 메우면 그 단계 레벨에서 `{"kill_time_over_length": 이유}`로 확인한다. 비율이 없으면(길이를 모름, 초가 아님) 보지 않는다 |
 | `kills_differ` | 경고 | 조우의 처치 수가 재화 흐름과 `kills_tolerance`를 넘게 다름. 양쪽 출처와 고칠 쪽을 말한다. 조우의 출처는 그 적을 놓은 조우에서 읽고, 조우마다 다르면 "섞임"이다. 재화 흐름의 출처는 단계에서, 없으면 `economy`에서 읽는다. 측정값이 앞서고, 측정값이 없으면 조우가 원본이므로 재화 흐름을 옮기라고 말한다 |
 | `kills_not_linked` | 경고 | 처치 수가 있는 재화 흐름 단계가 어떤 레벨이나 전투 단계와도 이어지지 않아 맞춰 보지 못함. 일부러 그렇다면 아무 레벨의 `acknowledged`에 `{"kills_not_linked": {재화 흐름 단계 id: 이유}}`로 적는다 |
 | `greybox_failed` | 경고 | 그레이박스 확인의 마지막 기록이 실패. 레벨에서 `{"greybox_failed": {항목 id: 이유}}`로 확인한다 |

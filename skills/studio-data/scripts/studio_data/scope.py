@@ -23,6 +23,7 @@ PAIR = re.compile(r"^([a-z0-9_]+): ([0-9a-f]{8})$")
 SKIP_SPECS = re.compile(r"^skip_specs:\s*true\s*$", re.MULTILINE)
 SYSTEMS_FILE = Path("design/systems.json")
 CHANGES = Path("openspec/changes")
+RULE_REF = re.compile(r"(?<![A-Za-z0-9_./\\-])([a-z0-9_]+)\.([a-z0-9_]+)(?![A-Za-z0-9_/\\-]|\.[A-Za-z0-9])")  # gems.ripen. id 규칙(ID_PATTERN)과 같은 글자. 경로·파일 이름은 뺀다
 MEASURED = ("proposal.md", "tasks.md")  # 무엇을 만들지 적는 문서. design.md는 Non-Goals에 범위 밖을 적는 자리라 재지 않는다
 
 
@@ -105,11 +106,29 @@ def _found_items(text: str, items: list) -> list[tuple[int, str]]:
     return [(number, item) for number, line in _measured_lines(text) for item, phrase in wanted if phrase.search(c.fold_text(line))]
 
 
-def _check_texts(change: Path, paths: list[Path], items: list, errors: list) -> None:
-    for path in paths:
-        for number, item in _found_items(path.read_text(encoding="utf-8", errors="replace"), items):
+def _check_texts(change: Path, texts: list[tuple[Path, str]], items: list, errors: list) -> None:
+    for path, text in texts:
+        for number, item in _found_items(text, items):
             where = f"{change.name}/{path.relative_to(change).as_posix()}:{number}"
             _err(errors, "out_of_scope_in_spec", where, f"브리프가 범위 밖이라고 한 항목이 변경에 있습니다: {item}. 변경에서 빼거나, 브리프를 바꿀지 사용자에게 묻습니다.")
+
+
+def _check_rule_refs(change: Path, texts: list[tuple[Path, str]], systems: dict, declared: dict, errors: list) -> None:
+    """명세가 가리키는 규칙(시스템.규칙)의 시스템이 변경에 이어졌는가. 잇지 않으면 그 규칙이 바뀌어도 design_changed가 나지 않는다.
+    시스템과 규칙이 모두 설계에 있는 표기만 본다. 없는 규칙은 파일 이름과 가리지 못해 재지 않는다."""
+    for path, text in texts:
+        for number, line in _measured_lines(text):
+            for sid, rid in RULE_REF.findall(line):
+                s = systems.get(sid)
+                if s is None or sid in declared or rid not in {r.get("id") for r in s.get("rules", []) if isinstance(r, dict)}:
+                    continue
+                where = f"{change.name}/{path.relative_to(change).as_posix()}:{number}"
+                if _buildable(s):
+                    fix = f"이 변경이 그 시스템도 다루면 studio.py scope --link {change.name} {' '.join(sorted({*declared, sid}))}로 잇고, 아니면 그 줄을 뺍니다."
+                else:   # 이을 수 없는 시스템이다. --link가 거부한다
+                    fix = (f"그 시스템은 이번에 만들지 않습니다(범위 {s['scope']}, 상태 {s.get('status', '없음')}). 그 줄을 빼고, 하지 않을 일이면 design.md의 "
+                           "Non-Goals에 적습니다. 만들어야 하면 범위를 바꿀지 사용자에게 묻습니다.")
+                _err(errors, "rule_of_unlinked_system", where, f"변경이 잇지 않은 시스템의 규칙을 가리킵니다: {sid}.{rid}. {fix}")
 
 
 def _check_change(change: Path, design: dict, errors: list) -> None:
@@ -131,7 +150,11 @@ def _check_change(change: Path, design: dict, errors: list) -> None:
             _err(errors, "system_not_in_mvp", change.name, f"이번에 만들 시스템이 아닙니다: {sid}(범위 {s['scope']}, 상태 {s.get('status', '없음')}). 범위를 바꿀지 사용자에게 묻습니다.")
         elif stamp(s) != mark:
             _err(errors, "design_changed", change.name, f"명세를 쓴 뒤 규칙이 바뀌었습니다: {sid}. 명세를 지금 규칙에 맞춘 뒤 studio.py scope --link {change.name} {' '.join(sorted(declared))}로 다시 잇습니다.")
-    _check_texts(change, [change / n for n in MEASURED if (change / n).is_file()] + specs, design["out_of_scope"], errors)
+    measured = [change / n for n in MEASURED if (change / n).is_file()] + specs
+    texts = [(path, path.read_text(encoding="utf-8", errors="replace")) for path in measured]   # 훅이 편집마다 부르므로 한 번만 읽는다
+    _check_texts(change, texts, design["out_of_scope"], errors)
+    if declared:
+        _check_rule_refs(change, texts, systems, declared, errors)
 
 
 def check(root: Path) -> dict:

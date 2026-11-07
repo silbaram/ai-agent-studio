@@ -40,10 +40,10 @@
 | `build` | 예 | 빌드를 다시 만들 수 있는 이름. 보통 커밋 해시 |
 | `players` | 예 | 플레이한 사람 이름 배열. 같은 사람은 같은 이름으로 쓴다(사람 수를 센다) |
 | `runs` | 예 | 이 세션의 판 수 합계 |
-| `observations` | 아니오 | `[{hypothesis, value, metric, n, source, note}]`. `hypothesis`(가설 id)와 `value`(문자열 또는 수)가 필수. 없고 단계 기록도 없으면 경고 |
+| `observations` | 아니오 | `[{hypothesis, value, metric, n, source, note}]`. `hypothesis`(가설 id)와 `value`(문자열 또는 수)가 필수. 없고 단계 기록도 없으면 경고. 스크립트로 계산한 값은 그 출력을 세션 폴더에 결과 파일로 남기고 `source`를 그 파일로, `note`를 `[계산: 스크립트]`로 적는다 |
 | `notes` | 아니오 | `[{kind: observation / preference, text}]` |
 | `logs` | 아니오 | 원본 기록 파일 경로 배열 |
-| `stage_stats`, `upgrades`, `growth_build`, `groups` | 아니오 | 단계별 판 수와 평균 레벨·길이·처치·수입, 그때 가진 영구 강화, 판 안 성장 빌드, 강화 상태별 묶음. 가정값을 보정할 때 쓴다([calibration](calibration.md)) |
+| `stage_stats`, `upgrades`, `growth_build`, `groups` | 아니오 | 단계별 판 수와 평균 레벨·길이·처치·수입, 그때 가진 영구 강화, 판 안 성장 빌드, 강화 상태별 묶음. 묶음에는 강화 밖의 시험 조건 `variant`(`{로그 열: 값}`, `runlog --group-by`가 쓴다)를 달 수 있다. 가정값을 보정할 때 쓴다([calibration](calibration.md)) |
 | `greybox` | 아니오 | 레벨의 그레이박스 확인 기록 `[{check, value, passed, n, source, note}]`. `check`는 `levels.json`의 항목 id다. 재었으면 `value`(수), 재지 못하면 `passed`(true나 false)를 적는다. 둘 중 하나는 필요하다. `n`은 해 본 판 수로 1 이상이다. 해 보지 않았으면 기록을 적지 않는다. 날짜순 마지막 기록이 판정이 된다. 같은 날짜면 세션 id의 순번순이다. 항목 id의 오타는 기록을 버리므로 오류다. 비슷한 이름이 없는 id는 지운 항목의 기록으로 보고 경고한다 |
 | `acknowledged` | 아니오 | 확인을 마친 경고 `{경고 코드: 이유}` |
 
@@ -67,7 +67,7 @@
 |---|---|
 | `holds` | 관찰값이 있고, `failure_signal`이 나오지 않았다 |
 | `refuted` | 관찰값에서 `failure_signal`이 나왔다 |
-| `unknown` | 관찰값이 없다 / 표본이 가설의 `test`에 적은 계획보다 적다 / 신호가 나왔는지 기록으로 가릴 수 없다 |
+| `unknown` | 관찰값이 없다 / 표본이 가설의 `sample`(없으면 `test`에 적은 계획)보다 적다 / 신호가 나왔는지 기록으로 가릴 수 없다 |
 
 판정 기준(`failure_signal`의 문턱값)은 판정하면서 바꾸지 않는다. 바꿔야 한다면 판정과 별도로 브리프를 고치고, 그 사실을 보고한다.
 
@@ -82,6 +82,7 @@
 | `session_concept_mismatch` | 오류 | 판정이 다른 컨셉의 세션을 가리킴 |
 | `observation_missing` | 오류 | 버팀·틀림인데 근거 세션에 그 가설의 관찰값이 없음 |
 | `duplicate_verdict` | 오류 | 한 가설에 `cut`이 아닌 판정이 둘 이상 |
+| `verdict_sample_short` | 오류 | 버팀·틀림인데, 그 가설을 관찰한 근거 세션을 합친 사람 수나 판 수가 가설의 `sample`보다 적음. 제안(`proposed`)이어도 오류다. `sample`이 없는 가설은 보지 않는다 |
 | `session_without_observations` | 경고 | 세션에 관찰값도 단계 기록도 없음 |
 | `stage_counts_mismatch`, `unknown_reference` | 경고 | 단계 기록의 판 수가 이어지지 않음, 지금 데이터에 없는 id([calibration](calibration.md)) |
 

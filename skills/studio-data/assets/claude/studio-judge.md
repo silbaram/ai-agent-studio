@@ -13,11 +13,11 @@ tools: Read, Grep, Glob, Bash
    - md 문서가 있으면 `python3 .claude/skills/studio-data/scripts/studio.py provenance design/ --check-paths`
    - Windows PowerShell이면 `python3` 대신 `py`.
 2. `design/concepts.json`에서 선택(approved)한 컨셉의 `brief.hypotheses`를 읽는다. 가설마다 `claim`, `failure_signal`, `test`를 본다.
-3. `data/playtests.json`의 세션에서 그 가설의 `observations`를 찾는다. `logs`나 `source`에 적힌 기록 파일이 있으면 Read로 열어 관찰값과 맞는지 본다.
+3. `data/playtests.json`의 세션에서 그 가설의 `observations`를 찾는다. `logs`나 `source`에 적힌 기록 파일이 있으면 Read로 열어 관찰값과 맞는지 본다. `[계산: 스크립트]`인 값은 `source`의 결과 파일과 맞춰 본다. 스크립트는 돌리지 못한다(훅이 막는다). 결과 파일이 없으면 손으로 다시 세지 말고, 그 값을 확인하지 못했다고 적는다.
 4. 가설마다 셋 중 하나를 제안한다.
    - `holds`(버팀): 관찰값이 있고, `failure_signal`이 나오지 않았다.
    - `refuted`(틀림): 관찰값에서 `failure_signal`이 나왔다.
-   - `unknown`(모름): 관찰값이 없거나, `test`에 적은 표본(사람 수·판 수)에 못 미치거나, 신호가 나왔는지 기록만으로 가릴 수 없다.
+   - `unknown`(모름): 관찰값이 없거나, 가설의 `sample`(없으면 `test`에 적은 표본)에 못 미치거나, 신호가 나왔는지 기록만으로 가릴 수 없다. 결과가 주장과 반대 방향인데 `failure_signal`이 그 방향을 말하지 않으면 그 사실을 따로 말한다.
 
 ## 지킬 것
 

@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from . import provenance
-from .common import ID_PATTERN, STATUSES, check_identity, is_active, josa
+from .common import ID_PATTERN, STATUSES, check_identity, is_active, is_int, josa
 from .common import did_you_mean as _did_you_mean
 from .common import table_cell as _cell
 
@@ -131,8 +131,20 @@ def check_concept(c: dict, where: str, errors: list, warnings: list, ctx: dict |
     return ok
 
 
-def check_brief(c: dict, where: str, errors: list) -> None:
+SAMPLE_KEYS = ("players", "runs")
+
+
+def read_sample(v) -> dict | None:
+    """가설의 최소 표본 {players, runs}: 확정 판정에 필요한 사람 수와 판 수(세션을 합친 값). 형식이 틀리면 None."""
+    if not (isinstance(v, dict) and v and set(v) <= set(SAMPLE_KEYS)
+            and all(is_int(x, 1) for x in v.values())):
+        return None
+    return {k: v[k] for k in SAMPLE_KEYS if k in v}
+
+
+def check_brief(c: dict, where: str, errors: list, warnings: list | None = None) -> None:
     """선택(approved)한 컨셉은 반증 가능한 브리프를 갖춰야 한다."""
+    warnings = [] if warnings is None else warnings
     b = c.get("brief")
     if not isinstance(b, dict):
         errors.append({"code": "brief_missing", "where": where, "message": "선택한 컨셉에는 brief가 필요합니다."})
@@ -159,8 +171,19 @@ def check_brief(c: dict, where: str, errors: list) -> None:
     for n, h in enumerate(hyps if isinstance(hyps, list) else []):
         need(isinstance(h, dict) and all(_text(h.get(k)) for k in ("claim", "failure_signal", "test")),
              f"brief.hypotheses[{n}]에 claim, failure_signal(틀렸다는 신호), test가 필요합니다.")
-        hid = h.get("id") if isinstance(h, dict) else None
+        if not isinstance(h, dict):
+            continue
+        if "sample" in h and read_sample(h["sample"]) is None:
+            errors.append({"code": "schema", "where": where,
+                           "message": f"brief.hypotheses[{n}].sample은 {{players: 사람 수, runs: 판 수}} 중 하나 이상을 1 이상의 정수로 씁니다: {h['sample']!r}"})
+        elif "sample" not in h:
+            warnings.append({"code": "hypothesis_sample_missing", "where": where,
+                             "message": f"brief.hypotheses[{n}]({h.get('id') or '이름 없음'})에 최소 표본(sample: {{players, runs}})이 없습니다. "
+                                        "판정에 필요한 사람 수와 판 수를 플레이 전에 정해 둡니다."})
+        hid = h.get("id")
         if hid is None:
+            warnings.append({"code": "hypothesis_id_missing", "where": where,
+                             "message": f"brief.hypotheses[{n}]에 id가 없습니다. 기록과 판정은 가설 id로 가리키므로 플레이 전에 답니다(소문자·숫자·밑줄)."})
             continue
         if not (isinstance(hid, str) and ID_PATTERN.match(hid)) or hid in seen_ids:
             errors.append({"code": "schema", "where": where,
@@ -277,7 +300,7 @@ def validate(data: dict) -> dict:
     unverified: list = []
     for c in valid:
         if c.get("status") == "approved":
-            check_brief(c, c["id"], errors)
+            check_brief(c, c["id"], errors, warnings)
             if isinstance(c.get("brief"), dict):
                 unverified += check_brief_numbers(c, errors, warnings)
     structure = check_structure(active, warnings, ctx["fixed"])
@@ -307,9 +330,11 @@ def hypothesis_index(data: dict) -> dict:
         if not (isinstance(c, dict) and isinstance(c.get("id"), str)) or c["id"] in out:
             continue
         hyps = (c.get("brief") or {}).get("hypotheses") if isinstance(c.get("brief"), dict) else None
-        ids = [h.get("id") if isinstance(h, dict) and isinstance(h.get("id"), str) else None
-               for h in (hyps if isinstance(hyps, list) else [])]
-        out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids}
+        hyps = hyps if isinstance(hyps, list) else []
+        ids = [h.get("id") if isinstance(h, dict) and isinstance(h.get("id"), str) else None for h in hyps]
+        samples = {h["id"]: read_sample(h.get("sample")) for h in hyps
+                   if isinstance(h, dict) and isinstance(h.get("id"), str) and read_sample(h.get("sample"))}
+        out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids, "samples": samples}
     return out
 
 

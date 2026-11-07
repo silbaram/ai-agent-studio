@@ -31,18 +31,18 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 ## 절차
 
-### 1. 플레이 전: 가설에 id를 단다
+### 1. 플레이 전: 가설에 id와 최소 표본을 단다
 
 `design/concepts.json`에서 시험할 컨셉의 `brief.hypotheses`마다 `id`를 넣는다(소문자·숫자·밑줄, 예: `density_timing`). 기록과 판정은 이 id로 가설을 가리킨다. 문장을 바꿔도 id는 그대로 둔다.
 
-시험 전에 가설의 `test`에 적은 표본(사람 수, 판 수)과 기록할 값을 사용자와 확인한다. 프로토타입이 그 값을 로그로 남기게 하면 옮겨 적는 실수가 줄어든다.
+시험 전에 가설마다 최소 표본(`"sample": {"players": 3, "runs": 15}`)과 기록할 값을 사용자와 정한다. 표본은 확정 판정에 필요한 사람 수와 판 수이고, 근거 세션을 합쳐 이보다 적으면 버팀·틀림 판정이 오류다(`verdict_sample_short`). `check`는 id나 표본이 없는 가설을 경고한다. 프로토타입이 기록할 값을 로그로 남기게 하면 옮겨 적는 실수가 줄어든다. 시험 조건(설정)이 여러 가지면 로그에 그 열을 두고 `runlog --group-by`로 나눠 모은다.
 
 ### 2. 플레이한 뒤: 세션을 기록한다
 
 한 번 모여 플레이할 때마다 `data/playtests.json`의 `playtests`에 세션 하나를 넣는다. 형식은 [references/playtest-record.md](references/playtest-record.md).
 
 - 날짜, 플레이한 사람, 빌드(커밋 해시), 판 수
-- 가설별 관찰값(`observations`): 가설의 `failure_signal`을 판단하는 데 필요한 값. 로그에서 읽었으면 `source`에 파일을 적는다
+- 가설별 관찰값(`observations`): 가설의 `failure_signal`을 판단하는 데 필요한 값. 로그에서 읽었으면 `source`에 파일을 적는다. 스크립트로 계산한 값(비율, 상관)은 그 출력을 세션 폴더에 결과 파일로 남기고(예: `python3 game/summarize.py playtests/pt_20261107_1 > playtests/pt_20261107_1/summary.txt`) `source`를 그 결과 파일로 둔다. 판정 에이전트는 스크립트를 돌리지 못하므로(훅이 막는다) 결과 파일이 없으면 값을 확인할 수 없다
 - 레벨의 그레이박스 확인 기록(`greybox`): `levels.json`의 항목 id마다 잰 값이나 판정. 항목은 `… check . --table levels` 끝의 확인 표에 있다
 - 그 밖의 관찰과 선호(`notes`)
 
@@ -87,7 +87,7 @@ python3 .claude/skills/studio-data/scripts/studio.py calibrate data/meta_combat.
 
 ## 보고
 
-- `check` 결과 그대로: 판정별 버팀·틀림·모름, 근거 세션 수·판 수·사람 수, 오류·경고 수, `INCOMPLETE` 여부
+- `check` 결과 그대로: 판정별 버팀·틀림·모름, 그 가설을 관찰한 근거 세션 수·판 수·사람 수, 오류·경고 수, `INCOMPLETE` 여부
 - 확정되지 않은 가설 목록(`--fail-on-assumed`의 gate 줄)
 - 이번에 `[측정]`으로 올린 수치와 그 출처
 - `calibrate`를 돌렸으면: 쓴 세션과 표본, 표시된 차이, 구간을 벗어난 단계, 제안과 옮긴 값
@@ -97,7 +97,7 @@ python3 .claude/skills/studio-data/scripts/studio.py calibrate data/meta_combat.
 ## 한계
 
 - 검사기는 판정이 **증거를 가리키는지**만 본다. 관찰값이 틀렸다는 신호에 해당하는지는 판정 에이전트와 사용자가 본다.
-- 표본이 충분한지 숫자로 막지 않는다. 판 수·사람 수를 보여 줄 뿐이고, 가설의 `test`에 적은 계획과 비교하는 것은 판정 에이전트가 한다.
+- 표본은 가설의 `sample`에 적은 사람 수와 판 수만 숫자로 막는다. 사건 수(사망 몇 건)나 설정별 판 수는 막지 않으므로 판정 에이전트가 `test`와 견준다.
 - 보정 값은 기록한 빌드와 플레이어에서 나온 값이다. 보정해도 시뮬레이션 결과로 재미나 실제 난이도를 판정하지 않는다.
 - 판정 에이전트와 훅은 Claude Code 전용이다. 훅 입력의 에이전트 이름(`agent_type`)으로 판정 에이전트를 구분한다(Claude Code 2.1.316, WSL에서 확인. Windows는 미확인).
 
