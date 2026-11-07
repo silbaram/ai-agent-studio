@@ -122,7 +122,7 @@ class BodyNumbers(unittest.TestCase):
     def test_brief_criterion_with_one_untagged_threshold_is_warned(self):
         sample = json.loads((ROOT / "skills/studio-data/assets/sample-project/design/concepts.json").read_text(encoding="utf-8"))
         c = next(x for x in sample["concepts"] if x["status"] == "approved")
-        c["brief"]["hypotheses"] = [{"claim": "c", "failure_signal": "80% [가정] 이상이거나 사망의 50% 이상", "test": "t"}]
+        c["brief"]["hypotheses"] = [{"id": "h1", "claim": "c", "failure_signal": "80% [가정] 이상이거나 사망의 50% 이상", "test": "t", "sample": {"runs": 5}}]
         r = cc.validate({"concepts": [c]})
         self.assertEqual([w["code"] for w in r["warnings"]], ["untagged_number"])
         self.assertIn("50%", r["warnings"][0]["message"])

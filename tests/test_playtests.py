@@ -21,8 +21,8 @@ def codes(entries):
 
 
 def session(sid="pt_a", **over):
-    s = {"id": sid, "date": "2026-11-05", "concept": "parry_tempo", "build": "abc1234", "players": ["self"], "runs": 5,
-         "observations": [{"hypothesis": "learn_timing", "value": "같은 패턴 피격률 5판 동안 40% → 15%", "n": 5}]}
+    s = {"id": sid, "date": "2026-11-05", "concept": "parry_tempo", "build": "abc1234", "players": ["self", "friend_a", "friend_b"], "runs": 15,
+         "observations": [{"hypothesis": "learn_timing", "value": "같은 패턴 피격률 5판 동안 40% → 15%", "n": 15}]}
     s.update(over)
     return s
 

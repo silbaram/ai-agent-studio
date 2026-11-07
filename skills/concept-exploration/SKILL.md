@@ -102,13 +102,13 @@ python3 .claude/skills/studio-data/scripts/studio.py check design/concepts.json 
 - 필러 2~5개. 각각 "A와 B 중 이 게임은 __를 고른다" 형태의 설계 테스트
 - 안티필러(이 게임이 하지 않을 것) 1개 이상
 - 루프: 30초 / 한 판 / 판 사이 성장
-- 반증 가능한 가설 1개 이상: 주장, 틀렸다는 신호, 확인 방법
-- 가장 작은 프로토타입: 범위, 기간(일), 성공 기준
+- 반증 가능한 가설 1개 이상: id, 주장, 틀렸다는 신호, 확인 방법, 최소 표본. 틀렸다는 신호에는 반대 방향의 결과도 넣고, 지표를 함께 움직이는 변수를 확인 방법에 적는다
+- 가장 작은 프로토타입: 범위, 기간(일), 성공 기준. 프로토타입 범위의 원본은 여기다. 앞에서 쓴 `next_test`와 다르면 `next_test`를 맞춘다
 - MVP 7개 이하, 범위 밖 목록 1개 이상
 
 판정 기준 문장(`failure_signal`, `success_criteria`)의 수치에는 출처 태그를 붙인다. 예: `5판 [가정] 동안`. 규칙은 [numeric-provenance](../numeric-provenance/SKILL.md)와 같고, 검사기가 태그 없는 수치를 경고한다.
 
-검사기는 `approved` 컨셉의 브리프가 빠짐없는지 확인한다. 통과하지 못하면 프로토타입 단계로 넘기지 않는다. 검사기는 **구조**(빠진 항목, 개수, 틀렸다는 신호의 유무)만 본다. 필러 테스트가 실제로 무언가를 걸러내는지, 가설이 정말 반증 가능한지는 사람이 본다. 검사 통과를 브리프 품질 보증으로 보고하지 않는다.
+검사기는 `approved` 컨셉의 브리프가 빠짐없는지 확인한다. 통과하지 못하면 프로토타입 단계로 넘기지 않는다. 검사기는 **구조**(빠진 항목, 개수, 틀렸다는 신호의 유무, 가설의 id와 최소 표본)만 본다. 필러 테스트가 실제로 무언가를 걸러내는지, 가설이 정말 반증 가능한지는 사람이 본다. 검사 통과를 브리프 품질 보증으로 보고하지 않는다.
 
 ## 보고
 
@@ -120,7 +120,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check design/concepts.json 
 
 ## 다음 단계
 
-[system-design](../system-design/SKILL.md)으로 브리프를 시스템과 규칙으로 옮긴다. 프로토타입을 플레이하고 [playtest-verdict](../playtest-verdict/SKILL.md)로 기록과 판정을 남긴다. 판정 전에 가설마다 `id`를 넣는다. 틀렸다는 신호가 나오면 브리프를 고치거나 다른 후보로 돌아간다(이 스킬의 7단계 선택으로). 가설이 버티면 아이템·강화·적 데이터를 [progression-economy](../progression-economy/SKILL.md)로 시작한다.
+[system-design](../system-design/SKILL.md)으로 브리프를 시스템과 규칙으로 옮긴다. 프로토타입을 플레이하고 [playtest-verdict](../playtest-verdict/SKILL.md)로 기록과 판정을 남긴다. 틀렸다는 신호가 나오면 브리프를 고치거나 다른 후보로 돌아간다(이 스킬의 7단계 선택으로). 가설이 버티면 아이템·강화·적 데이터를 [progression-economy](../progression-economy/SKILL.md)로 시작한다.
 
 검사와 뷰어는 공용 도구 [studio-data](../studio-data/SKILL.md)에 있다. 이 스킬과 함께 설치한다. 기록을 보기 좋게 보려면 문서를 따로 만들지 않고 뷰어를 연다.
 

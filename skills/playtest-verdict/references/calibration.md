@@ -35,7 +35,7 @@ python3 .claude/skills/studio-data/scripts/studio.py calibrate .
 | 필드 | 필수 | 뜻 |
 |---|---|---|
 | `upgrades` | 통과율 비교에 예 | 이 세션의 플레이어가 판을 시작할 때 가진 영구 강화 id. 없었으면 `[]`. 적지 않으면 그 세션은 통과율 비교에서 빠진다. 판 사이에 강화를 사서 바뀌면 `groups`를 쓴다 |
-| `groups` | 아니오 | 세션 안의 강화 상태별 묶음 `[{upgrades, growth_build, stage_stats}]`. 쓰면 세션의 `upgrades`·`stage_stats`는 적지 않는다. 판을 합친 `entered`는 세션의 `runs`를 넘지 못한다 |
+| `groups` | 아니오 | 세션 안의 강화 상태별 묶음 `[{upgrades, growth_build, variant, stage_stats}]`. `variant`는 강화 밖의 시험 조건 `{로그 열: 값}`이다. 쓰면 세션의 `upgrades`·`stage_stats`는 적지 않는다. 판을 합친 `entered`는 세션의 `runs`를 넘지 못한다 |
 | `growth_build` | 아니오 | 플레이어가 주로 고른 방식에 가까운 판 안 성장 빌드 id. 없으면 시뮬레이터 설정의 `build` |
 | `stage_stats` | 아니오 | 단계 기록 배열. 판에서 지나는 순서대로 |
 | `stage` | 예 | 전투 계산의 단계 id |
@@ -67,6 +67,12 @@ run,player,upgrades,stage,cleared,level,duration,kills.slime,income.soul
 | `level`, `duration` | 아니오 | 들어설 때의 레벨, 그 단계의 길이 |
 | `kills.<적 id>`, `income.<재화>` | 아니오 | 그 단계의 처치 수, 수입 |
 | `_`로 시작하는 열 | 아니오 | 쓰지 않는 열(`_seed` 등). 그대로 넘어간다 |
+
+강화가 아닌 시험 조건(숙성 시간 배수, 난이도 설정)별로 보려면 그 열을 `--group-by`로 넘긴다. 그 값으로도 묶음을 나누고 묶음에 `variant`를 단다. 판 안의 줄은 그 값이 모두 같아야 하고, 없는 열이면 종료 코드 2다.
+
+```bash
+python3 .claude/skills/studio-data/scripts/studio.py runlog playtests/pt_20261112_1/runs.csv --group-by _setting
+```
 
 레벨은 들어간 판의 평균, 길이·처치·수입은 넘긴 판의 평균으로 모은다. 다음은 종료 코드 2다: 같은 판에 같은 단계가 두 번 있음, 실패한 뒤에 단계가 이어짐, 칸이 열보다 많음, 수가 아니거나 유한하지 않은 값(`inf`, `nan`), 위 표에 없는 열, 이름이 겹치는 열. 모르는 열을 거부하는 까닭은 열 이름이 틀리면 값이 조용히 사라지기 때문이다.
 

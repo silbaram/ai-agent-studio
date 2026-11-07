@@ -457,6 +457,19 @@ def _stage_rows(listed: list, by_stage: dict, order: list | None, stages: dict |
     return rows
 
 
+def _check_kill_ratio(rows: list, by_stage: dict, warnings: list) -> None:
+    """단일 대상 처치 시간이 단계 길이를 넘으면, 한 마리씩 잡아서는 그 단계의 적을 다 잡지 못한다. 무엇이 메우는지 사람이 확인한다."""
+    for row in rows:
+        if row["kill_ratio"] is None or row["kill_ratio"] <= 1:
+            continue
+        owner = _stage_owner(by_stage[row["id"]]["levels"], "kill_time_over_length", row["id"])
+        bound = " 이상" if row["kill_time_unknown"] else ""
+        _err(warnings, "kill_time_over_length", owner,
+             f"단계 {row['id']}: 단일 대상 처치 시간 {_fmt(row['kill_time'])}초{bound} / 길이 {_fmt(row['duration'])}초 = {row['kill_ratio']:g}배{bound}입니다. "
+             "그 단계의 기준 장비로 한 마리씩 잡으면 단계 안에 다 잡지 못합니다. 범위 공격·관통·판 안 성장이 메우면 그 이유를 이 단계 레벨의 "
+             "acknowledged에 적고, 아니면 조우 수나 기준 장비를 고칩니다.", owner=owner, part=row["id"])
+
+
 def _kill_check_note(listed: list, by_stage: dict, links: dict, economy, whole, dropped: set, astray: set) -> str | None:
     """처치 수를 어디까지 맞춰 봤는가. 재화 흐름은 없어도 미확인이 아니라서, 대조가 끝난 것처럼 읽히지 않게 따로 알린다.
     분모는 전투 단계다. astray: combat_stage가 틀려 어떤 단계에도 잇지 못한 재화 흐름 단계의 id."""
@@ -1096,6 +1109,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
         summary["unverified"] = ["pacing(페이싱 기준)"] + summary["unverified"]
         walk_notes = ["페이싱 기준의 출처가 가정입니다. 경고가 없어도 리듬이 좋다는 뜻이 아닙니다.", *walk_notes]
     stage_rows = _stage_rows(listed, by_stage, order, stages, counted, kill_times, kill_hits, links, unit, enemy_curve)
+    _check_kill_ratio(stage_rows, by_stage, warnings)
     astray = {i for link, info in links.items() if link not in (stages or {}) for i in info["ids"]} if stages is not None else set()
     threats = [lv["threat"] for lv in rows]
     return {

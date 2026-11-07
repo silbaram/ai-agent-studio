@@ -21,8 +21,8 @@ KIND_LABELS = {"concepts": "컨셉", "systems": "시스템 설계", "items": "�
 LIST_KEYS = {"combat": ("stages",), "budget": ("archetypes",), "crafting": ("enhance", "recipes"), "economy": ("stages", "purchases"),
              "growth": ("choices", "builds")}  # 항목 배열의 키가 종류 이름과 다른 경우
 ACK_CHECKED = ("levels", "economy", "systems")  # 확인이 그 파일 안에서만 쓰이는 종류. 아이템·적의 확인은 다른 파일의 검사가 읽는다
-LEVEL_ACK_CODES = ("curve_unused_point", "enemy_not_in_stage", "enemy_unplaced", "greybox_failed", "kills_differ", "kills_not_linked", "long_stretch", "purchase_off_span", "reward_drought", "strong_run",
-                   "time_gap", "time_outside_stage")  # 레벨 구성이 내는 경고. 테스트가 검사기와 맞춰 본다
+LEVEL_ACK_CODES = ("curve_unused_point", "enemy_not_in_stage", "enemy_unplaced", "greybox_failed", "kill_time_over_length", "kills_differ", "kills_not_linked", "long_stretch", "purchase_off_span",
+                   "reward_drought", "strong_run", "time_gap", "time_outside_stage")  # 레벨 구성이 내는 경고. 테스트가 검사기와 맞춰 본다
 ECONOMY_ACK_CODES = ("currency_piles_up", "duplicate_purchase", "enhance_gap", "gear_before_purchase", "kill_not_in_stage", "meta_income_differs", "meta_order_differs",
                      "requirement_missing", "reward_missing", "target_out_of_range", "unaffordable")  # 재화 흐름이 내는 경고
 FOREIGN_NAMES = ("levels", "systems")  # 게임이 자기 형식으로도 흔히 쓰는 파일 이름. 종류 키가 없으면 이 도구의 파일로 보지 않는다

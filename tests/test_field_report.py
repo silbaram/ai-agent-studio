@@ -218,7 +218,7 @@ class ConceptAxes(unittest.TestCase):
 # ---------- 11, 12, 13: 수치 출처 ----------
 class BriefNumbers(unittest.TestCase):
     def test_untagged_threshold_in_failure_signal_is_warned_11(self):
-        c = approved_with(hypotheses=[{"claim": "c", "failure_signal": "80% 이상이 같은 선택을 한다", "test": "3명에게 5판"}])
+        c = approved_with(hypotheses=[{"id": "h1", "claim": "c", "failure_signal": "80% 이상이 같은 선택을 한다", "test": "3명에게 5판", "sample": {"players": 3, "runs": 15}}])
         r = cc.validate({"concepts": [c]})
         self.assertEqual(codes(r["warnings"]), ["untagged_number"])
         self.assertIn("80%", r["warnings"][0]["message"])

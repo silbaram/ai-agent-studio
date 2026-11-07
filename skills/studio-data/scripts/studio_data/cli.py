@@ -337,11 +337,11 @@ def cmd_runlog(args) -> int:
         print(f"파일을 찾을 수 없습니다: {args.log}", file=sys.stderr)
         return 2
     try:
-        result = calibrate.summarize_runs(args.log)
+        result = calibrate.summarize_runs(args.log, args.group_by)
     except meta_sim.ConfigError as exc:
         print(f"판 로그를 모을 수 없습니다: {exc}", file=sys.stderr)
         return 2
-    print(f"{Path(args.log).name} · 판 {result['runs']}개 · 강화 상태 {len(result['groups'])}가지."
+    print(f"{Path(args.log).name} · 판 {result['runs']}개 · 묶음(강화 상태{' · ' + args.group_by if args.group_by else ''}) {len(result['groups'])}개."
           " 파일에 쓰지 않았습니다. 세션(id, date, concept, build 등)에 합쳐 data/playtests.json에 넣습니다.", file=sys.stderr)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
@@ -536,6 +536,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     r = sub.add_parser("runlog", help="판별 로그(CSV)를 세션의 단계 기록으로 모아 출력합니다 (파일에 쓰지 않음).")
     r.add_argument("log", help="판별 로그 CSV. 들어간 단계마다 한 줄: run, stage, cleared(1/0), upgrades, growth_build, player, level, duration, kills.<적>, income.<재화>")
+    r.add_argument("--group-by", metavar="열", help="강화가 아닌 시험 조건(예: _setting)의 열. 그 값으로도 나누고 묶음에 variant를 답니다.")
     r.set_defaults(func=cmd_runlog)
 
     p = sub.add_parser("provenance", help="기획 문서(md)의 수치 출처 태그를 검사합니다.")

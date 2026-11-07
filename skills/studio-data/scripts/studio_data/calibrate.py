@@ -445,8 +445,9 @@ def _check_run_columns(columns: list) -> None:
         raise ConfigError(f"판 로그의 열 이름이 겹칩니다: {', '.join(repeated)}")
 
 
-def summarize_runs(path) -> dict:
+def summarize_runs(path, group_by: str | None = None) -> dict:
     """판별 로그(CSV, 들어간 단계마다 한 줄)를 세션의 단계 기록으로 모은다. 강화 상태(와 빌드)별 묶음을 돌려주고 파일을 고치지 않는다.
+    group_by: 강화가 아닌 시험 조건(예: _setting)의 열. 주면 그 값으로도 나누고 묶음에 variant {열: 값}을 단다.
     열: run, stage, cleared(1/0) 필수. upgrades(;로 구분), growth_build, player, level, duration, kills.<적 id>, income.<재화> 선택.
     레벨은 들어간 판의 평균, 길이·처치·수입은 넘긴 판의 평균이다. 형식: playtest-verdict/references/calibration.md"""
     path = Path(path)
@@ -458,6 +459,8 @@ def summarize_runs(path) -> dict:
     except (OSError, UnicodeDecodeError, csv.Error) as exc:
         raise ConfigError(f"판 로그를 읽지 못했습니다({path}): {exc}")
     _check_run_columns(columns)
+    if group_by is not None and group_by not in columns:
+        raise ConfigError(f"판 로그에 나눌 열 {c.josa(group_by, '이가')} 없습니다. 열: {', '.join(columns)}")
     runs: dict = {}
     for n, row in rows:
         if None in row:  # DictReader는 열보다 많은 칸을 키 None에 모은다
@@ -466,10 +469,14 @@ def summarize_runs(path) -> dict:
         rid, stage, flag = row["run"], row["stage"], CLEARED.get(row["cleared"].lower())
         if not rid or not stage or flag is None:
             raise ConfigError(f"{n}번째 줄: run, stage와 cleared(1/0)가 필요합니다: cleared {row['cleared']!r}")
-        state = (tuple(sorted(x.strip() for x in row.get("upgrades", "").split(";") if x.strip())), row.get("growth_build") or None)
+        if group_by is not None and not row[group_by]:
+            raise ConfigError(f"{n}번째 줄: 나눌 열 {group_by}의 값이 비어 있습니다. 판마다 시험 조건을 적습니다.")
+        state = (tuple(sorted(x.strip() for x in row.get("upgrades", "").split(";") if x.strip())), row.get("growth_build") or None,
+                 row[group_by] if group_by is not None else None)
         run = runs.setdefault(rid, {"state": state, "stages": [], "failed": False, "player": row.get("player")})
         if run["state"] != state:
-            raise ConfigError(f"{n}번째 줄: 판 {rid}의 줄마다 upgrades나 growth_build가 다릅니다. 판 안에서는 같아야 합니다.")
+            kept = "upgrades나 growth_build" + (f"나 {group_by}" if group_by is not None else "")
+            raise ConfigError(f"{n}번째 줄: 판 {rid}의 줄마다 {c.josa(kept, '이가')} 다릅니다. 판 안에서는 같아야 합니다.")
         if stage in [x["stage"] for x in run["stages"]]:
             raise ConfigError(f"{n}번째 줄: 판 {rid}에 단계 {c.josa(stage, '이가')} 두 번 있습니다.")
         if run["failed"]:
@@ -490,7 +497,7 @@ def summarize_runs(path) -> dict:
     for run in runs.values():
         groups.setdefault(run["state"], []).append(run)
     out = []
-    for (upgrades, build), mine in groups.items():
+    for (upgrades, build, variant), mine in groups.items():
         order = list(dict.fromkeys(x["stage"] for r in mine for x in r["stages"]))
         stats = []
         for stage in order:
@@ -513,6 +520,8 @@ def summarize_runs(path) -> dict:
         group: dict = {"upgrades": list(upgrades), "stage_stats": stats}
         if build:
             group["growth_build"] = build
+        if group_by is not None:
+            group["variant"] = {group_by: variant}
         out.append(group)
     result: dict = {"runs": len(runs), "logs": [str(path)], "groups": out}
     players = list(dict.fromkeys(r["player"] for r in runs.values() if r["player"]))

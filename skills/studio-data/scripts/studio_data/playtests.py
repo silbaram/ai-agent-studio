@@ -18,7 +18,7 @@ DECIDED = ("holds", "refuted")
 NOTE_KINDS = ("observation", "preference")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 STAGE_FIELDS = {"stage", "entered", "cleared", "level", "duration", "kills", "income", "source", "note"}
-GROUP_FIELDS = {"upgrades", "growth_build", "stage_stats"}
+GROUP_FIELDS = {"upgrades", "growth_build", "variant", "stage_stats"}
 GREYBOX_FIELDS = {"check", "value", "passed", "n", "source", "note"}
 SESSION_FIELDS = {"id", "date", "concept", "build", "players", "runs", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note"}
 TOP_FIELDS = {"playtests", "verdicts", "note"}
@@ -111,7 +111,7 @@ def check_stage_stats(s: dict, errors: list, warnings: list) -> bool:
             ok = False
         return _check_records(s, "", s.get("runs"), where, errors, warnings) and ok
     if not (isinstance(groups, list) and groups and all(isinstance(g, dict) for g in groups)):
-        _err(errors, "schema", where, "groups는 강화 상태별 묶음 {upgrades, growth_build, stage_stats} 배열입니다.")
+        _err(errors, "schema", where, "groups는 강화 상태별 묶음 {upgrades, growth_build, variant, stage_stats} 배열입니다.")
         return False
     for key in ("stage_stats", "upgrades"):
         if key in s:
@@ -129,6 +129,11 @@ def check_stage_stats(s: dict, errors: list, warnings: list) -> bool:
             ok = False
         if "growth_build" in g and not _text(g["growth_build"]):
             _err(errors, "schema", where, f"{label}growth_build는 판 안 성장의 빌드 id입니다: {g['growth_build']!r}")
+            ok = False
+        variant = g.get("variant")
+        if "variant" in g and not (isinstance(variant, dict) and variant
+                                   and all(_text(k) and (_text(x) or (is_number(x) and not isinstance(x, bool))) for k, x in variant.items())):
+            _err(errors, "schema", where, f"{label}variant는 강화 밖의 시험 조건 {{로그 열: 값}}입니다(runlog --group-by가 씁니다): {variant!r}")
             ok = False
         if not (isinstance(g.get("stage_stats"), list) and g["stage_stats"]):
             _err(errors, "schema", where, f"{label}stage_stats(단계 기록 배열)가 필요합니다.")
@@ -298,6 +303,15 @@ def _hypothesis_ref(concept: str, hyp: str, where: str, concepts: dict, errors: 
     return False
 
 
+def _sample(sessions: list) -> dict:
+    """세션들을 합친 표본: 세션 수, 판 수, 사람 수(같은 이름은 한 사람)."""
+    return {"sessions": len(sessions), "runs": sum(s["runs"] for s in sessions), "players": len({p.strip() for s in sessions for p in s["players"]})}
+
+
+def _sample_text(sample: dict) -> str:
+    return " · ".join(f"{sample[k]}{unit}" for k, unit in (("players", "명"), ("runs", "판")) if k in sample)
+
+
 def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool = False, refs: dict | None = None) -> dict:
     """concepts: concepts.hypothesis_index()의 결과. None이면 컨셉·가설 참조를 확인하지 못한 것으로 센다.
     refs: 단계 기록이 가리키는 id {stages, upgrades, enemies, builds, currencies}. 값이 None인 종류는 쓰면 미확인이다."""
@@ -363,11 +377,14 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         if v["result"] in DECIDED and found and not any(o["hypothesis"] == v["hypothesis"] for s in found for o in s.get("observations", [])):
             _err(errors, "observation_missing", where,
                  f"근거로 든 세션에 가설 '{v['hypothesis']}'의 관찰값이 없습니다. 관찰값을 세션에 적거나 unknown(모름)으로 둡니다.")
-        verdicts[where] = {
-            "result": v["result"], "status": status, "reason": v["reason"],
-            "sample": {"sessions": len(found), "runs": sum(s["runs"] for s in found),
-                       "players": len({p.strip() for s in found for p in s["players"]})},
-        }
+        seen = [s for s in found if any(o["hypothesis"] == v["hypothesis"] for o in s.get("observations", []))]
+        have = _sample(seen)   # 그 가설을 관찰한 근거 세션만 센다. 출력과 게이트가 같은 값을 쓴다
+        need = concepts[v["concept"]].get("samples", {}).get(v["hypothesis"]) if concepts is not None else None
+        if v["result"] in DECIDED and seen and need and any(have[k] < need[k] for k in need):   # 관찰값이 없으면 observation_missing이 말한다
+            _err(errors, "verdict_sample_short", where,
+                 f"{RESULT_LABEL[v['result']]} 판정의 근거 표본({_sample_text(have)})이 가설의 최소 표본({_sample_text(need)})보다 적습니다. "
+                 "세션을 더 하거나 unknown(모름)으로 둡니다. 표본을 바꾸려면 브리프의 sample을 사용자와 고칩니다.")
+        verdicts[where] = {"result": v["result"], "status": status, "reason": v["reason"], "sample": have}
 
     unverified: list = []
     if concepts is not None:
@@ -402,7 +419,7 @@ def print_extra(result: dict) -> None:
     for where, v in result["verdicts"].items():
         s = v["sample"]
         state = "확정" if v["status"] == "approved" else "제안"
-        print(f"{where}: {RESULT_LABEL[v['result']]} ({state}) · 세션 {s['sessions']} · {s['runs']}판 · {s['players']}명")
+        print(f"{where}: {RESULT_LABEL[v['result']]} ({state}) · 관찰한 근거 세션 {s['sessions']} · {s['runs']}판 · {s['players']}명")
     if result["unchecked_reason"]:
         print(f"컨셉·가설 참조 미확인({UNCHECKED_REASON.get(result['unchecked_reason'], '')}): {result['unchecked'] - len(result['unchecked_refs'])}건")
     if result["unchecked_refs"]:

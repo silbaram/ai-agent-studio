@@ -27,7 +27,7 @@ description: "Shared tooling for the game-design skills: one entry script (studi
 | `python3 .claude/skills/studio-data/scripts/studio.py check .` | 컨셉·시스템 설계·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록을 한 번에 검사한다 |
 | `python3 .claude/skills/studio-data/scripts/studio.py simulate data/meta.json` | 메타 성장을 시뮬레이션한다(추상 모델, 또는 `"model": "combat"`이면 전투 계산 데이터로) |
 | `python3 .claude/skills/studio-data/scripts/studio.py calibrate data/meta_combat.json` | 플레이 기록의 단계 기록으로 가정값을 비교하고 생존 곡선 값을 제안한다. 파일을 고치지 않는다([calibration](../playtest-verdict/references/calibration.md)) |
-| `python3 .claude/skills/studio-data/scripts/studio.py runlog runs.csv` | 판별 로그(CSV)를 세션의 단계 기록으로 모아 출력한다. 파일에 쓰지 않는다 |
+| `python3 .claude/skills/studio-data/scripts/studio.py runlog runs.csv` | 판별 로그(CSV)를 세션의 단계 기록으로 모아 출력한다. 시험 조건별로 나누려면 `--group-by <열>`. 파일에 쓰지 않는다 |
 | `python3 .claude/skills/studio-data/scripts/studio.py provenance design/` | 기획 문서(md)의 수치 출처 태그를 검사한다 |
 | `python3 .claude/skills/studio-data/scripts/studio.py draft . --archetype <원형> --at <기준 값>` | 스탯 예산의 곡선과 원형으로 아이템·적 초안을 JSON으로 출력한다 (파일에 쓰지 않음) |
 | `python3 .claude/skills/studio-data/scripts/studio.py scope` | OpenSpec 변경을 브리프와 시스템 설계에 대어 범위 이탈을 찾는다. 절차는 [scope-guard](../scope-guard/SKILL.md) |
@@ -92,7 +92,7 @@ python3 .claude/skills/studio-data/scripts/studio.py setup claude .
 
 확인 범위: Claude Code 2.1.316, WSL(Linux)에서 실제 세션으로 확인했다. 판정 에이전트의 `check`는 통과하고 셸 리다이렉트 쓰기는 막혔으며, 메인 에이전트의 데이터 오류 편집은 오류로 되돌아왔고 메인 에이전트는 막히지 않았다. Windows에서의 훅 명령 실행은 아직 확인하지 않았다. Codex에는 같은 장치가 없다.
 
-범위 훅의 확인 범위: Claude Code 2.1.318, WSL(Linux), OpenSpec 1.16.0의 `claude -p` 세션에서 게임 파일 쓰기와 `openspec archive`가 막히고, 고친 뒤 통과하며, 범위를 넓히는 편집이 거부되는 것을 확인했다. 대화형 세션의 묻는 창과 Windows는 확인하지 못했다.
+범위 훅의 확인 범위: Claude Code 2.1.318, WSL(Linux), OpenSpec 1.16.0의 `claude -p` 세션에서 게임 파일 쓰기와 `openspec archive`가 막히고, 고친 뒤 통과하며, 범위를 넓히는 편집이 거부되는 것을 확인했다. 대화형 세션은 가상 터미널로 띄워 편집 자동 허용 모드에서 확인했다: 범위를 넓히는 편집은 확인 창이 뜨고, 거부하면 파일이 그대로이고 허락하면 바뀌며, 범위를 줄이는 편집은 창 없이 지나갔다. 창에 훅의 이유는 나오지 않았다. `bypassPermissions` 모드와 Windows는 확인하지 못했다.
 
 ## 코드 구조
 
