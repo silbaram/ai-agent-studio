@@ -9,7 +9,7 @@ from unittest import mock
 from _studio import ROOT, SAMPLE, STUDIO, calibrate as cal, common, concepts as cc, levels as lv, meta_sim as sm, playtests as pt, run_cli
 from test_levels import COMBAT, ENEMIES, THREAT, both, enc, level, run
 from test_levels_field import ECONOMY, TIMES
-from test_scope import Project
+from test_scope import HookCase, Project
 from studio_data import scope
 
 CONCEPTS = json.loads((SAMPLE / "design/concepts.json").read_text(encoding="utf-8"))
@@ -295,3 +295,246 @@ class Docs(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------- 현장 시험 237~242 ----------
+class LinkKeepsStamps(Project):
+    """237번: 다른 오류가 알려 준 --link가 design_changed를 지우면 안 된다. 지문을 새로 찍는 것은 --refresh로만."""
+
+    def change_rule(self):
+        data = self.design()
+        self.system(data, "tempo")["rules"][0]["text"] = "완전히 다른 규칙"
+        self.save(data)
+
+    def test_adding_a_system_keeps_the_old_stamp_237(self):
+        self.linked("add-tempo", "tempo")
+        self.change_rule()
+        code, out = run_cli("scope", self.root, "--link", "add-tempo", "tempo", "combat_input")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.codes(), ["design_changed"])
+        self.assertIn("--refresh", out)
+
+    def test_refresh_settles_a_changed_rule_237(self):
+        self.linked("add-tempo", "tempo")
+        self.change_rule()
+        self.assertIn("--refresh", self.report()["errors"][0]["message"])
+        self.assertEqual(run_cli("scope", self.root, "--link", "add-tempo", "tempo", "--refresh")[0], 0)
+        self.assertEqual(self.codes(), [])
+
+    def test_a_new_system_gets_todays_stamp_237(self):
+        self.linked("add-tempo", "tempo")
+        run_cli("scope", self.root, "--link", "add-tempo", "tempo", "combat_input")
+        meta = (self.root / "openspec/changes/add-tempo/.openspec.yaml").read_text(encoding="utf-8")
+        self.assertIn(f"combat_input: {scope.stamp(self.system(self.design(), 'combat_input'))}", meta)
+        self.assertEqual(self.codes(), [])
+
+    def test_dropping_and_adding_back_keeps_the_old_stamp_237(self):
+        self.linked("add-tempo", "tempo", "room_flow")
+        self.change_rule()
+        run_cli("scope", self.root, "--link", "add-tempo", "room_flow")
+        meta = (self.root / "openspec/changes/add-tempo/.openspec.yaml").read_text(encoding="utf-8")
+        self.assertIn("x-studio-dropped: {tempo: ", meta)
+        code, out = run_cli("scope", self.root, "--link", "add-tempo", "room_flow", "tempo")
+        self.assertIn("--refresh", out)
+        self.assertEqual(self.codes(), ["design_changed"])
+        self.assertNotIn("x-studio-dropped", (self.root / "openspec/changes/add-tempo/.openspec.yaml").read_text(encoding="utf-8"))
+        run_cli("scope", self.root, "--link", "add-tempo", "room_flow", "tempo", "--refresh")
+        self.assertEqual(self.codes(), [])
+
+    def test_refresh_needs_link_237(self):
+        self.assertEqual(run_cli("scope", self.root, "--refresh")[0], 2)
+
+
+class SourceFiles(unittest.TestCase):
+    """240번: 기록 파일 경로가 실제로 있는지, 계산한 관찰값이 결과 파일을 가리키는지 프로젝트 검사에서 본다."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        (self.root / "playtests/pt_a").mkdir(parents=True)
+        for name in ("runs.csv", "summary.txt"):
+            (self.root / "playtests/pt_a" / name).write_text("x", encoding="utf-8")
+
+    def check(self, logs=("playtests/pt_a/runs.csv",), **over):
+        s = session(logs=list(logs), **over)
+        return pt.validate({"playtests": [s], "verdicts": []}, cc.hypothesis_index(CONCEPTS), root=self.root)
+
+    def obs(self, **o):
+        return [{"hypothesis": "learn_timing", "value": "1단계 33%", "note": "[계산: game/summarize.py]", **o}]
+
+    def test_existing_files_pass_240(self):
+        self.assertEqual(self.check(observations=self.obs(source="playtests/pt_a/summary.txt"))["warnings"], [])
+
+    def test_a_missing_file_is_warned_240(self):
+        r = self.check(observations=self.obs(source="playtests/pt_a/nope.txt"), logs=["playtests/pt_a/gone.csv"])
+        self.assertEqual(codes(r["warnings"]), ["source_missing", "source_missing"])
+        self.assertIn("gone.csv", " ".join(w["message"] for w in r["warnings"]))
+
+    def test_words_are_not_paths_240(self):
+        r = self.check(observations=[{"hypothesis": "learn_timing", "value": "v", "source": "본인 메모"}])
+        self.assertEqual(r["warnings"], [])
+
+    def test_a_computed_value_needs_an_output_file_240(self):
+        for o in (self.obs(source="playtests/pt_a/runs.csv"), self.obs()):
+            with self.subTest(o):
+                self.assertEqual(codes(self.check(observations=o)["warnings"]), ["computed_without_output"])
+
+    def test_without_a_root_paths_are_not_read_240(self):
+        s = session(logs=["playtests/pt_a/gone.csv"])
+        self.assertEqual(pt.validate({"playtests": [s], "verdicts": []}, cc.hypothesis_index(CONCEPTS))["warnings"], [])
+
+    def test_the_project_check_finds_them_240(self):
+        (self.root / "data").mkdir()
+        (self.root / "design").mkdir()
+        (self.root / "design/concepts.json").write_text(json.dumps(CONCEPTS, ensure_ascii=False), encoding="utf-8")
+        s = session(logs=["playtests/pt_a/gone.csv"])
+        (self.root / "data/playtests.json").write_text(json.dumps({"playtests": [s], "verdicts": []}, ensure_ascii=False), encoding="utf-8")
+        code, out = run_cli("check", self.root)
+        self.assertIn("source_missing", out)
+
+
+class RecordedSample(unittest.TestCase):
+    """241번: 표본 게이트는 단계 기록이 있으면 손으로 쓴 판 수·사람 수가 아니라 기록을 센다."""
+
+    CSV = "run,stage,cleared,player\nr1,zone_1,0,self\nr2,zone_1,0,self\n"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / "runs.csv"
+        self.path.write_text(self.CSV, encoding="utf-8")
+
+    def logged(self, runs=15, **over):
+        body = cal.summarize_runs(self.path)
+        return session(runs=runs, players=("self", "friend_a", "friend_b"), groups=body["groups"], **over)
+
+    def test_runlog_names_the_players_of_each_group_241(self):
+        self.assertEqual(cal.summarize_runs(self.path)["groups"][0]["players"], ["self"])
+
+    def test_more_runs_or_players_than_the_records_is_warned_241(self):
+        r = judge([self.logged()], [])
+        self.assertEqual(codes(r["warnings"]), ["session_beyond_records"])
+        self.assertIn("2", r["warnings"][0]["message"])
+
+    def test_extra_players_alone_are_warned_241(self):
+        r = judge([self.logged(runs=2)], [])
+        self.assertEqual(codes(r["warnings"]), ["session_beyond_records"])
+        self.assertIn("friend_a, friend_b", r["warnings"][0]["message"])
+
+    def test_the_gate_counts_the_records_241(self):
+        r = judge([self.logged()], [verdict()])
+        self.assertEqual(codes(r["errors"]), ["verdict_sample_short"])
+        self.assertEqual(r["verdicts"]["parry_tempo.learn_timing"]["sample"], {"sessions": 1, "runs": 2, "players": 1})
+
+    def test_acknowledging_trusts_the_session_again_241(self):
+        s = self.logged(acknowledged={"session_beyond_records": "기록은 두 판만 남았고 나머지는 손으로 셌다"})
+        r = judge([s], [verdict()])
+        self.assertEqual(r["errors"], [])
+        self.assertEqual(r["verdicts"]["parry_tempo.learn_timing"]["sample"]["runs"], 15)
+
+    def test_group_players_are_names_241(self):
+        s = self.logged()
+        s["groups"][0]["players"] = ["", 3]
+        self.assertEqual(codes(judge([s], [])["errors"]), ["schema"])
+
+
+class PlaytestFolderOpen(HookCase):
+    """242번: 범위 오류가 있어도 플레이 기록과 결과 파일은 쓸 수 있다."""
+
+    def test_playtest_files_stay_open_242(self):
+        self.change()
+        for rel in ("playtests/pt_a/harvest.csv", "playtests/pt_a/summary.txt"):
+            self.assert_silent(self.write(rel))
+
+
+class SampleLogs(unittest.TestCase):
+    """240번: 샘플 기록이 가리키는 로그는 있어야 하고, runlog로 다시 모으면 기록과 같아야 한다."""
+
+    def test_sample_run_logs_reproduce_the_sample_records_240(self):
+        data = json.loads((SAMPLE / "data/playtests.json").read_text(encoding="utf-8"))
+        checked = 0
+        for s in data["playtests"]:
+            for log in s.get("logs", []):
+                self.assertTrue((SAMPLE / log).is_file(), log)
+                if not log.endswith("runs.csv"):
+                    continue
+                groups = cal.summarize_runs(SAMPLE / log)["groups"]
+                mine = s["groups"] if s.get("groups") else [s]
+                got = [[{k: v for k, v in x.items() if k != "source"} for x in g["stage_stats"]] for g in groups]
+                self.assertEqual(got, [h["stage_stats"] for h in mine], s["id"])
+                checked += 1
+        self.assertEqual(checked, 3)
+
+
+class MetaLineGuard(HookCase):
+    """237번: 지문 줄을 손으로 지우거나 고쳐 다시 이으면 바뀐 규칙이 새 지문으로 덮인다. 줄은 --link로만 쓴다."""
+
+    META = "openspec/changes/add-tempo/.openspec.yaml"
+
+    def test_editing_the_stamp_line_by_hand_is_blocked_237(self):
+        self.linked("add-tempo", "tempo")
+        text = (self.root / self.META).read_text(encoding="utf-8")
+        line = next(x for x in text.splitlines() if x.startswith("x-studio-systems:"))
+        self.assert_blocked(self.run_hook("Edit", file_path=str(self.root / self.META), old_string=line + "\n", new_string=""), "--link")
+        self.assert_blocked(self.write(self.META, "schema: spec-driven\n"), "--link")
+        self.assert_blocked(self.write(self.META, text.replace(line, "x-studio-systems: {tempo: 00000000}")), "--link")
+
+    def test_other_keys_and_new_changes_stay_open_237(self):
+        self.linked("add-tempo", "tempo")
+        text = (self.root / self.META).read_text(encoding="utf-8")
+        self.assert_silent(self.run_hook("Edit", file_path=str(self.root / self.META), old_string="created: 2026-11-05", new_string="created: 2026-11-06"))
+        self.assert_silent(self.write("openspec/changes/add-other/.openspec.yaml", "schema: spec-driven\n"))
+        self.assert_blocked(self.write("openspec/changes/add-other/.openspec.yaml", "x-studio-systems: {tempo: 1ad311e7}\n"), "--link")
+
+
+class PathLikeSources(SourceFiles):
+    """240번 검토: URL, 말, 앵커, 판 번호는 파일 경로가 아니다. 같은 파일을 다르게 적어도 같은 파일이다."""
+
+    def test_links_and_words_are_not_files_240(self):
+        for source in ("https://youtu.be/abc", "본인/지인 메모", "data/playtests.json#pt_a", "game/summarize.py 출력", "v1.2"):
+            with self.subTest(source):
+                r = self.check(observations=[{"hypothesis": "learn_timing", "value": "v", "source": source}])
+                self.assertEqual(r["warnings"], [])
+
+    def test_the_same_log_written_differently_is_still_the_log_240(self):
+        for source in ("./playtests/pt_a/runs.csv", "playtests\\pt_a\\runs.csv", " playtests/pt_a/runs.csv "):
+            with self.subTest(source):
+                self.assertIn("computed_without_output", codes(self.check(observations=self.obs(source=source))["warnings"]))
+
+
+class StageSelectRuns(unittest.TestCase):
+    """241번 검토: 판마다 다른 단계로 들어가는 게임도 판 수를 맞게 센다. 손으로 쓴 단계 기록은 기록으로 세지 않는다."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / "runs.csv"
+        self.path.write_text("run,stage,cleared,player\nr1,m1,1,self\nr2,m2,0,self\nr3,m3,1,friend_a\n", encoding="utf-8")
+
+    def test_runlog_counts_the_runs_of_each_group_241(self):
+        self.assertEqual(cal.summarize_runs(self.path)["groups"][0]["runs"], 3)
+
+    def test_mission_select_runs_are_counted_whole_241(self):
+        s = session(runs=3, players=("self", "friend_a"), groups=cal.summarize_runs(self.path)["groups"])
+        r = judge([s], [verdict("unknown")])
+        self.assertEqual(r["errors"], [])
+        self.assertNotIn("session_beyond_records", codes(r["warnings"]))     # 단계를 골라 시작하는 로그의 stage_counts_mismatch는 원래 확인으로 끈다
+        self.assertEqual(r["verdicts"]["parry_tempo.learn_timing"]["sample"], {"sessions": 1, "runs": 3, "players": 2})
+
+    def test_group_runs_must_fit_the_session_241(self):
+        groups = cal.summarize_runs(self.path)["groups"]
+        self.assertEqual(codes(judge([session(runs=2, players=("self", "friend_a"), groups=copy.deepcopy(groups))], [])["errors"]), ["schema"])
+        bad = copy.deepcopy(groups)
+        bad[0]["runs"] = 0
+        self.assertEqual(codes(judge([session(runs=3, players=("self", "friend_a"), groups=bad)], [])["errors"]), ["schema"])
+        bad = copy.deepcopy(groups)
+        bad[0]["runs"] = 1
+        bad[0]["stage_stats"][0]["entered"] = 2
+        self.assertIn("schema", codes(judge([session(runs=3, players=("self", "friend_a"), groups=bad)], [])["errors"]))   # entered가 묶음의 판 수를 넘는다
+
+    def test_hand_written_stage_records_are_not_counted_as_logs_241(self):
+        s = session(runs=15, stage_stats=[{"stage": "zone_1", "entered": 2, "cleared": 0}], upgrades=[])
+        r = judge([s], [])
+        self.assertEqual(r["warnings"], [])
+        self.assertEqual(pt._counted(s), (15, {"self"}))

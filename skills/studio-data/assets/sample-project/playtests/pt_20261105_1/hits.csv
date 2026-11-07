@@ -1,0 +1,16 @@
+player,run,same_way_hit_pct
+self,1,42
+self,2,35
+self,3,30
+self,4,22
+self,5,18
+friend_a,1,50
+friend_a,2,45
+friend_a,3,40
+friend_a,4,36
+friend_a,5,31
+friend_b,1,38
+friend_b,2,40
+friend_b,3,37
+friend_b,4,35
+friend_b,5,36

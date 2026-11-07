@@ -202,12 +202,14 @@ class Stamp(Project):
         self.save(data)
         self.assertIn("--link add-tempo room_flow tempo", self.report()["errors"][0]["message"])
 
-    def test_linking_again_settles_it(self):
+    def test_refreshing_the_link_settles_it(self):
         self.linked()
         data = self.design()
         self.system(data, "tempo")["rules"][0]["text"] = "완전히 다른 규칙"
         self.save(data)
         self.assertEqual(run_cli("scope", self.root, "--link", "add-tempo", "tempo")[0], 0)
+        self.assertEqual(self.codes(), ["design_changed"])     # 그냥 다시 이으면 지문을 그대로 둔다(237)
+        self.assertEqual(run_cli("scope", self.root, "--link", "add-tempo", "tempo", "--refresh")[0], 0)
         self.assertEqual(self.codes(), [])
 
 
@@ -395,8 +397,9 @@ class Command(Project):
         run_cli("scope", self.root, "--link", "add-tempo", "room_flow")
         text = (folder / ".openspec.yaml").read_text(encoding="utf-8")
         self.assertEqual(text.count("x-studio-systems"), 1)
-        self.assertIn("room_flow", text)
-        self.assertNotIn("tempo:", text)
+        line = next(x for x in text.splitlines() if x.startswith("x-studio-systems:"))
+        self.assertIn("room_flow", line)
+        self.assertNotIn("tempo:", line)     # 뺀 시스템의 지문은 x-studio-dropped에 남는다(237)
 
     def test_link_says_what_it_dropped(self):
         self.change()

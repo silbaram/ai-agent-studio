@@ -16,6 +16,7 @@ OpenSpec만으로는 막지 못한다. 범위 밖 변경도 `validate --strict`�
 ```bash
 python3 .claude/skills/studio-data/scripts/studio.py scope
 python3 .claude/skills/studio-data/scripts/studio.py scope --link <변경> <시스템 id> …
+python3 .claude/skills/studio-data/scripts/studio.py scope --link <변경> <시스템 id> … --refresh
 ```
 
 ## 쓰기 전에
@@ -27,7 +28,7 @@ OpenSpec을 처음 넣는 프로젝트는 [OpenSpec 설치](references/openspec-
 ## 절차
 
 1. **변경을 시작한다.** `/opsx:propose`로 변경을 만든다. 범위 밖 요청이면 만들기 전에 멈추고 사용자에게 묻는다.
-2. **시스템에 잇는다.** 변경을 만들면 바로 `scope --link <변경> <시스템 id>`를 실행한다. 이 변경이 맡는 시스템을 모두 적는다. 줄은 손으로 쓰지 않는다. 동작을 바꾸지 않는 변경(`skip_specs: true`)은 잇지 않아도 된다.
+2. **시스템에 잇는다.** 변경을 만들면 바로 `scope --link <변경> <시스템 id>`를 실행한다. 이 변경이 맡는 시스템을 모두 적는다. 새로 적은 시스템은 지금 규칙의 지문을 찍고, 이미 이은 시스템은 지문을 그대로 둔다. 뺀 시스템의 지문은 `x-studio-dropped` 줄에 남아 다시 이으면 되살아난다. 두 줄은 손으로 쓰지 않는다(훅이 막는다). 동작을 바꾸지 않는 변경(`skip_specs: true`)은 잇지 않아도 된다.
 3. **규칙을 가리킨다.** 명세는 `design/systems.json`의 규칙 id를 적고, 뜻을 길게 옮기지 않는다. 수치는 `data/`의 파일을 가리킨다.
 4. **만들기 전에 잰다.** `scope`를 돌려 오류가 없게 한다. 오류가 있으면 훅이 게임 파일의 편집을 막는다.
 5. **닫는다.** `/opsx:archive`로 닫는다. 오류가 있으면 메인 스펙 편집, `openspec archive`, 변경 폴더를 옮기는 `mv`가 막힌다.
@@ -40,7 +41,7 @@ OpenSpec을 처음 넣는 프로젝트는 [OpenSpec 설치](references/openspec-
 - `change_unreadable`: 줄을 손으로 썼다. `--link`로 다시 쓴다.
 - `unknown_system`: 시스템 설계에 없는 시스템이다. 새 시스템이 필요하면 설계에 먼저 적는다.
 - `system_not_in_mvp`: 나중이나 범위 밖, 삭제된 시스템이다. 이번에 만들 것이 아니다.
-- `design_changed`: 명세를 쓴 뒤 규칙이 바뀌었다. 명세를 지금 규칙에 맞춘 뒤 메시지의 명령으로 다시 잇는다. 명세를 고치지 않고 다시 잇지 않는다. `--link`는 적은 시스템으로 줄을 바꾸므로 빠뜨리면 뺀 시스템을 알린다.
+- `design_changed`: 명세를 쓴 뒤 규칙이 바뀌었다. 명세를 지금 규칙에 맞춘 뒤 메시지의 명령(`--link … --refresh`)으로 지문을 새로 찍는다. 그냥 `--link`는 이미 이은 시스템의 지문을 바꾸지 않으므로 이 오류가 남는다. 다른 오류를 풀려고 다시 이어도 바뀐 규칙이 조용히 받아들여지지 않게 하려는 것이다. 명세를 고치지 않고 `--refresh`하지 않는다. `--link`는 적은 시스템으로 줄을 바꾸므로 빠뜨리면 뺀 시스템을 알린다.
 - `rule_of_unlinked_system`: `proposal.md`, `tasks.md`, 명세가 `시스템.규칙`(예: `level_up.level`)으로 잇지 않은 시스템의 규칙을 가리킨다. 그 시스템도 다루면 메시지의 명령으로 이은 시스템을 모두 적어 다시 잇는다. 아니면 그 줄을 뺀다. 잇지 않으면 그 규칙이 바뀌어도 `design_changed`가 나지 않는다.
 - `out_of_scope_in_spec`: 브리프의 범위 밖 문구가 `proposal.md`, `tasks.md`, 명세에 있다. 뺀다. "멀티플레이 없이"처럼 뜻이 반대면 문장을 바꾼다. 하지 않을 일은 `design.md`의 Non-Goals에 적는다. 요구사항을 빼는 `## REMOVED Requirements` 절은 재지 않는다.
 - `design_unreadable`, `design_invalid`: 설계나 브리프를 믿을 수 없다. 브리프가 없으면 [concept-exploration](../concept-exploration/SKILL.md)으로 쓰고, 그 밖에는 `studio.py check`로 고친다.
@@ -49,7 +50,8 @@ OpenSpec을 처음 넣는 프로젝트는 [OpenSpec 설치](references/openspec-
 
 `studio.py setup claude`가 설치한다. `openspec/`과 `design/systems.json`이 다 있는 프로젝트에서만 움직인다.
 
-- **막는다.** `scope`에 오류가 있으면 게임을 만드는 파일의 편집, 메인 스펙 편집, `openspec archive`, 변경 폴더를 옮기는 `mv`를 막는다. `scope`가 재지 못해도 막는다. `design`, `data`, `docs`, `reports` 폴더, `openspec`의 나머지, 점으로 시작하는 폴더, 마크다운은 변경을 고칠 수 있게 열어 둔다.
+- **막는다.** `scope`에 오류가 있으면 게임을 만드는 파일의 편집, 메인 스펙 편집, `openspec archive`, 변경 폴더를 옮기는 `mv`를 막는다. `scope`가 재지 못해도 막는다. `design`, `data`, `docs`, `reports`, `playtests` 폴더, `openspec`의 나머지, 점으로 시작하는 폴더, 마크다운은 변경을 고치고 플레이 기록을 남길 수 있게 열어 둔다.
+- **지문 줄을 지킨다.** 진행 중인 변경의 `.openspec.yaml`에서 `x-studio-systems`나 `x-studio-dropped` 줄을 손으로 바꾸거나 지우는 편집을 막는다. 다른 키는 열어 둔다.
 - **메인 스펙의 새 줄을 잰다.** 메인 스펙 편집이 범위 밖 문구를 넣으면 막는다. 있던 줄은 재지 않는다.
 - **묻는다.** 범위를 넓히는 편집은 사용자에게 묻는다: 승인됐거나 시스템 설계가 잇는 브리프에 MVP 추가, 범위 밖 항목 제거, 컨셉 승인 추가와 내리기, MVP 시스템 추가, 이을 컨셉 변경. 읽을 수 없는 내용으로 범위 파일을 고치는 편집과 `.claude/settings*.json`, `studio-data`, `scope-guard` 설치본의 편집도 묻는다. 사용자가 허락하면 진행한다. 막힌 에이전트가 브리프나 훅을 고쳐 빠져나가지 못하게 하려는 것이다.
 
@@ -61,7 +63,7 @@ OpenSpec을 처음 넣는 프로젝트는 [OpenSpec 설치](references/openspec-
 
 - 범위 밖 문구는 글자 그대로만 찾는다. "온라인 협동 모드"는 "멀티플레이"로 잡지 못한다. 앞에 붙여 쓴 말("온라인멀티플레이")도 못 찾고, 한글 문구는 뒤에 이어진 말("스토리지")에도 걸린다.
 - `design.md`와 이미 메인 스펙에 있는 줄은 재지 않는다.
-- 변경을 지우면 재지 않는다. 변경 없이 쓴 게임 파일의 내용은 보지 않는다.
+- 변경을 지우면 재지 않는다. 변경 폴더를 지우고 다시 만들거나 셸로 지문 줄을 고치면 뺀 시스템의 지문도 사라진다. 변경 없이 쓴 게임 파일의 내용은 보지 않는다.
 - 닫은 뒤에 규칙이 바뀌면 메인 스펙과 어긋나도 모른다. 지문은 진행 중인 변경만 잰다.
 - 명세가 규칙 id를 적었는지는 보지 않는다. 적은 `시스템.규칙` 중 설계에 있는 것만 잇는지 본다. 없는 규칙 id(`gems.ripne`)는 파일 이름(`gems.json`)과 가리지 못해 잡지 않는다. 지문은 시스템 단위라 어느 규칙이 바뀌었는지 말하지 않는다.
 - `data`, `docs` 같은 열어 둔 폴더에 코드를 두면 게임 파일로 보지 않는다.

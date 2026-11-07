@@ -28,7 +28,7 @@ JUDGE_COMMANDS = ("check", "provenance")
 PYTHON = re.compile(r"^(python(3(\.\d+)?)?|py)(\.exe)?$", re.IGNORECASE)
 SHELL_META = re.compile(r"[;&|<>`$\n\r]")
 WATCHED = ("design", "data")
-PLANNING = ("design", "data", "docs", "reports")  # 무엇을 만들지 적는 곳. 나머지는 게임을 만드는 파일로 본다
+PLANNING = ("design", "data", "docs", "reports", "playtests")  # 무엇을 만들지 적는 곳과 플레이 기록. 나머지는 게임을 만드는 파일로 본다
 ARCHIVE = re.compile(r"openspec[^\s;&|]*(?:\s+-\S+)*\s+archive\b"  # openspec archive. npx와 판 지정, 앞의 옵션을 포함한다
                      r"|\b(?:mv|move|Move-Item)\s[^;&|\n]*(?:openspec[/\\]+changes[/\\]|archive[/\\])")  # /opsx:archive는 CLI 대신 폴더를 옮긴다
 GUARDED = "|".join(WRITE_TOOLS + ("Bash",))
@@ -197,6 +197,24 @@ def _sets_scope(rel: Path) -> bool:
     return (name == "systems.json" and parent == "design") or (name == "concepts.json" and parent in (".", *c.SUBFOLDERS))
 
 
+def _is_change_meta(rel: Path) -> bool:
+    """진행 중인 변경의 메타데이터(openspec/changes/<변경>/.openspec.yaml). 보관한 변경은 한 단계 더 깊어 여기에 들지 않는다."""
+    return len(rel.parts) == 4 and rel.parts[:2] == ("openspec", "changes") and rel.name == scope.META
+
+
+def _guard_meta(path: Path, tool: str, tool_input: dict) -> tuple[int, str, str]:
+    """시스템 줄과 뺀 시스템 줄은 scope --link만 쓴다. 손으로 지우고 다시 이으면 바뀐 규칙이 새 지문으로 덮인다. 다른 키는 열어 둔다."""
+    before = path.read_text(encoding="utf-8-sig", errors="replace") if path.is_file() else ""
+    try:
+        after = _edited_text(path, tool, tool_input)
+    except (OSError, UnicodeDecodeError):
+        after = None
+    if after is not None and scope.meta_lines(after) == scope.meta_lines(before):
+        return 0, "", ""
+    return 2, "", (f"{scope.KEY} 줄은 studio.py scope --link로만 씁니다. 손으로 지우거나 고친 뒤 다시 이으면 바뀐 규칙이 새 지문으로 덮입니다. "
+                   "시스템을 바꾸려면 scope --link <변경> <시스템 id> …를, 명세를 바뀐 규칙에 맞춘 뒤에는 --refresh를 붙여 씁니다.\n")
+
+
 def _ask(reason: str) -> tuple[int, str, str]:
     return 0, json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask", "permissionDecisionReason": reason}}), ""
 
@@ -263,6 +281,8 @@ def scope_guard(payload_text: str, project: Path | None = None) -> tuple[int, st
     if target is None:
         return 0, "", ""
     path, rel = target
+    if _is_change_meta(rel):
+        return _guard_meta(path, tool, tool_input)
     if _sets_scope(rel):
         return _ask_if_widened(project, path, tool, tool_input)
     if _guards_itself(rel):

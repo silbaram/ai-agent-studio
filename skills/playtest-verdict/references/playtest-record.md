@@ -42,8 +42,8 @@
 | `runs` | 예 | 이 세션의 판 수 합계 |
 | `observations` | 아니오 | `[{hypothesis, value, metric, n, source, note}]`. `hypothesis`(가설 id)와 `value`(문자열 또는 수)가 필수. 없고 단계 기록도 없으면 경고. 스크립트로 계산한 값은 그 출력을 세션 폴더에 결과 파일로 남기고 `source`를 그 파일로, `note`를 `[계산: 스크립트]`로 적는다 |
 | `notes` | 아니오 | `[{kind: observation / preference, text}]` |
-| `logs` | 아니오 | 원본 기록 파일 경로 배열 |
-| `stage_stats`, `upgrades`, `growth_build`, `groups` | 아니오 | 단계별 판 수와 평균 레벨·길이·처치·수입, 그때 가진 영구 강화, 판 안 성장 빌드, 강화 상태별 묶음. 묶음에는 강화 밖의 시험 조건 `variant`(`{로그 열: 값}`, `runlog --group-by`가 쓴다)를 달 수 있다. 가정값을 보정할 때 쓴다([calibration](calibration.md)) |
+| `logs` | 아니오 | 원본 기록 파일 경로 배열(프로젝트 폴더 기준). 계산 결과 파일은 넣지 않는다 |
+| `stage_stats`, `upgrades`, `growth_build`, `groups` | 아니오 | 단계별 판 수와 평균 레벨·길이·처치·수입, 그때 가진 영구 강화, 판 안 성장 빌드, 강화 상태별 묶음. 묶음에는 강화 밖의 시험 조건 `variant`(`{로그 열: 값}`, `runlog --group-by`가 쓴다)와 그 묶음의 판 수 `runs`, 그 묶음을 한 사람 `players`(둘 다 runlog가 쓴다)를 달 수 있다. 가정값을 보정할 때 쓴다([calibration](calibration.md)) |
 | `greybox` | 아니오 | 레벨의 그레이박스 확인 기록 `[{check, value, passed, n, source, note}]`. `check`는 `levels.json`의 항목 id다. 재었으면 `value`(수), 재지 못하면 `passed`(true나 false)를 적는다. 둘 중 하나는 필요하다. `n`은 해 본 판 수로 1 이상이다. 해 보지 않았으면 기록을 적지 않는다. 날짜순 마지막 기록이 판정이 된다. 같은 날짜면 세션 id의 순번순이다. 항목 id의 오타는 기록을 버리므로 오류다. 비슷한 이름이 없는 id는 지운 항목의 기록으로 보고 경고한다 |
 | `acknowledged` | 아니오 | 확인을 마친 경고 `{경고 코드: 이유}` |
 
@@ -82,7 +82,10 @@
 | `session_concept_mismatch` | 오류 | 판정이 다른 컨셉의 세션을 가리킴 |
 | `observation_missing` | 오류 | 버팀·틀림인데 근거 세션에 그 가설의 관찰값이 없음 |
 | `duplicate_verdict` | 오류 | 한 가설에 `cut`이 아닌 판정이 둘 이상 |
-| `verdict_sample_short` | 오류 | 버팀·틀림인데, 그 가설을 관찰한 근거 세션을 합친 사람 수나 판 수가 가설의 `sample`보다 적음. 제안(`proposed`)이어도 오류다. `sample`이 없는 가설은 보지 않는다 |
+| `verdict_sample_short` | 오류 | 버팀·틀림인데, 그 가설을 관찰한 근거 세션을 합친 사람 수나 판 수가 가설의 `sample`보다 적음. 제안(`proposed`)이어도 오류다. `sample`이 없는 가설은 보지 않는다. runlog가 쓴 묶음(모든 묶음에 `runs`나 `players`가 있음)이 있는 세션은 묶음의 판 수 합과 사람을 넘겨 세지 않는다. 손으로 쓴 단계 기록은 로그가 아니라 세지 않는다 |
+| `session_beyond_records` | 경고 | 세션의 `runs`가 묶음 `runs`의 합보다 많거나, `players`에 묶음의 `players`에 없는 사람이 있음. 표본은 로그에 남은 판과 사람만 센다. 로그에 남기지 못한 판·사람이 맞으면 세션의 `acknowledged`에 이유를 적고, 그러면 세션 값을 센다 |
+| `source_missing` | 경고 | `logs`나 `source`의 파일이 프로젝트에 없음. 확장자로 끝나는 것만 파일로 본다(URL, `#` 앵커, 말은 보지 않는다). `./`와 역슬래시는 같은 경로로 읽고, 경로는 프로젝트 폴더(`data/playtests.json`이면 그 위 폴더) 기준이다 |
+| `computed_without_output` | 경고 | 관찰값의 `note`가 `[계산: …]`인데 `source`가 없거나 `logs`의 원본 기록임(`./`, 역슬래시, 앞뒤 공백이 달라도 같은 파일로 본다). 계산 출력을 결과 파일로 남겨 `source`로 둔다. 결과 파일은 `logs`에 넣지 않는다 |
 | `session_without_observations` | 경고 | 세션에 관찰값도 단계 기록도 없음 |
 | `stage_counts_mismatch`, `unknown_reference` | 경고 | 단계 기록의 판 수가 이어지지 않음, 지금 데이터에 없는 id([calibration](calibration.md)) |
 

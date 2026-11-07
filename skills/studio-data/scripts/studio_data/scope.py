@@ -19,6 +19,9 @@ from .common import add_issue as _err, did_you_mean
 META = ".openspec.yaml"
 KEY = "x-studio-systems"
 LINE = re.compile(rf"^{KEY}:(.*(?:\n[ \t]+.*)*)$", re.MULTILINE)
+DROPPED_KEY = "x-studio-dropped"   # 뺀 시스템의 지문. 다시 이으면 이 지문을 되살려 그 사이 바뀐 규칙을 놓치지 않는다
+DROPPED = re.compile(rf"^{DROPPED_KEY}:(.*(?:\n[ \t]+.*)*)$", re.MULTILINE)
+DROPPED_WHOLE = re.compile(rf"^{DROPPED_KEY}:.*(?:\n[ \t]+.*)*(?:\n|\Z)", re.MULTILINE)
 PAIR = re.compile(r"^([a-z0-9_]+): ([0-9a-f]{8})$")
 SKIP_SPECS = re.compile(r"^skip_specs:\s*true\s*$", re.MULTILINE)
 SYSTEMS_FILE = Path("design/systems.json")
@@ -74,9 +77,14 @@ def _design(root: Path) -> dict:
     return design
 
 
-def _declared(text: str) -> dict | None:
+def meta_lines(text: str) -> list[str]:
+    """--link만 쓰는 줄들. 훅이 손편집을 가려낸다."""
+    return [m.group(0) for pattern in (LINE, DROPPED) for m in pattern.finditer(text)]
+
+
+def _declared(text: str, pattern: re.Pattern = LINE) -> dict | None:
     """적힌 {시스템: 지문}. 줄이 없거나 비면 빈 값이고, 이 도구가 쓰는 형식이 아니면 None이다."""
-    line = LINE.search(text)
+    line = pattern.search(text)
     if line is None:
         return {}
     value = line.group(1).strip()
@@ -149,7 +157,7 @@ def _check_change(change: Path, design: dict, errors: list) -> None:
         elif not _buildable(s):
             _err(errors, "system_not_in_mvp", change.name, f"이번에 만들 시스템이 아닙니다: {sid}(범위 {s['scope']}, 상태 {s.get('status', '없음')}). 범위를 바꿀지 사용자에게 묻습니다.")
         elif stamp(s) != mark:
-            _err(errors, "design_changed", change.name, f"명세를 쓴 뒤 규칙이 바뀌었습니다: {sid}. 명세를 지금 규칙에 맞춘 뒤 studio.py scope --link {change.name} {' '.join(sorted(declared))}로 다시 잇습니다.")
+            _err(errors, "design_changed", change.name, f"명세를 쓴 뒤 규칙이 바뀌었습니다: {sid}. 명세를 지금 규칙에 맞춘 뒤 studio.py scope --link {change.name} {' '.join(sorted(declared))} --refresh로 지문을 새로 찍습니다.")
     measured = [change / n for n in MEASURED if (change / n).is_file()] + specs
     texts = [(path, path.read_text(encoding="utf-8", errors="replace")) for path in measured]   # 훅이 편집마다 부르므로 한 번만 읽는다
     _check_texts(change, texts, design["out_of_scope"], errors)
@@ -175,8 +183,10 @@ def print_report(report: dict) -> None:
     print(f"전체: 변경 {len(report['changes'])}개 · 오류 {len(report['errors'])} → {verdict}")
 
 
-def link(root: Path, change: str, ids: list[str]) -> tuple[int, list[str]]:
-    """(종료 코드, 출력 줄). 변경이 다루는 시스템과 지금 규칙의 지문을 적는다. 뒤에 막힐 값은 적지 않는다."""
+def link(root: Path, change: str, ids: list[str], refresh: bool = False) -> tuple[int, list[str]]:
+    """(종료 코드, 출력 줄). 변경이 다루는 시스템을 적는다. 뒤에 막힐 값은 적지 않는다.
+    새 시스템은 지금 규칙의 지문을 찍고, 이미 이은 시스템은 지문을 그대로 둔다. 다시 이을 때 바뀐 규칙이 조용히 받아들여지지 않게 하려는 것이다.
+    refresh: 적은 시스템의 지문을 모두 새로 찍는다. 명세를 바뀐 규칙에 맞춘 뒤 design_changed를 푸는 길이다."""
     names = [p.name for p in _changes(root)]
     meta = root / CHANGES / change / META
     if change not in names or not meta.is_file():
@@ -191,20 +201,31 @@ def link(root: Path, change: str, ids: list[str]) -> tuple[int, list[str]]:
     problems += [f"이번에 만들 시스템이 아닙니다: {x}. 범위를 바꿀지 사용자에게 묻습니다." for x in ids if x in systems and not _buildable(systems[x])]
     if problems:
         return 1, problems
-    pairs = ", ".join(f"{x}: {stamp(systems[x])}" for x in sorted(set(ids)))
-    line = f"{KEY}: {{{pairs}}}"
     try:
         text = meta.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return 2, [f"변경의 메타데이터가 UTF-8이 아닙니다: {change}. 파일을 고친 뒤 다시 잇습니다."]
     before = _declared(text)
-    if LINE.search(text):
-        text = LINE.sub(lambda _: line, text, count=1)
-    else:
-        text += ("" if not text or text.endswith("\n") else "\n") + line + "\n"
+    known = {**(_declared(text, DROPPED) or {}), **(before or {})}   # 읽지 못한 줄은 새로 쓴다
+    marks = {x: (None if refresh else known.get(x)) or stamp(systems[x]) for x in sorted(set(ids))}
+    pairs = ", ".join(f"{x}: {m}" for x, m in marks.items())
+    text = _put_line(text, LINE, f"{KEY}: {{{pairs}}}")
+    remembered = {k: v for k, v in sorted(known.items()) if k not in marks}
+    gone = f"{DROPPED_KEY}: {{{', '.join(f'{k}: {v}' for k, v in remembered.items())}}}" if remembered else None
+    text = _put_line(text, DROPPED, gone) if gone else DROPPED_WHOLE.sub("", text, count=1)
     meta.write_text(text, encoding="utf-8")
     dropped = sorted(set(before or {}) - set(ids))
-    return 0, [f"{change}: {pairs}"] + ([f"뺀 시스템: {', '.join(dropped)}"] if dropped else [])
+    stale = [x for x, m in marks.items() if m != stamp(systems[x])]
+    out = [f"{change}: {pairs}"] + ([f"뺀 시스템: {', '.join(dropped)}"] if dropped else [])
+    if stale:
+        out.append(f"규칙이 바뀐 시스템의 지문은 그대로 두었습니다: {', '.join(stale)}. 명세를 지금 규칙에 맞춘 뒤 --refresh로 새로 찍습니다.")
+    return 0, out
+
+
+def _put_line(text: str, pattern: re.Pattern, line: str) -> str:
+    if pattern.search(text):
+        return pattern.sub(lambda _: line, text, count=1)
+    return text + ("" if not text or text.endswith("\n") else "\n") + line + "\n"
 
 
 # ---------- 범위를 넓히는 편집 ----------

@@ -35,7 +35,7 @@ python3 .claude/skills/studio-data/scripts/studio.py calibrate .
 | 필드 | 필수 | 뜻 |
 |---|---|---|
 | `upgrades` | 통과율 비교에 예 | 이 세션의 플레이어가 판을 시작할 때 가진 영구 강화 id. 없었으면 `[]`. 적지 않으면 그 세션은 통과율 비교에서 빠진다. 판 사이에 강화를 사서 바뀌면 `groups`를 쓴다 |
-| `groups` | 아니오 | 세션 안의 강화 상태별 묶음 `[{upgrades, growth_build, variant, stage_stats}]`. `variant`는 강화 밖의 시험 조건 `{로그 열: 값}`이다. 쓰면 세션의 `upgrades`·`stage_stats`는 적지 않는다. 판을 합친 `entered`는 세션의 `runs`를 넘지 못한다 |
+| `groups` | 아니오 | 세션 안의 강화 상태별 묶음 `[{upgrades, growth_build, variant, runs, players, stage_stats}]`. `variant`는 강화 밖의 시험 조건 `{로그 열: 값}`이고, `runs`는 그 묶음의 판 수, `players`는 그 묶음을 한 사람이다(runlog가 쓴다. `players`는 로그에 `player` 열이 있을 때만). 판정 표본은 이 두 값을 센다. 단계를 골라 시작하는 게임도 판 수가 맞다. 쓰면 세션의 `upgrades`·`stage_stats`는 적지 않는다. 판을 합친 `entered`는 세션의 `runs`를 넘지 못한다 |
 | `growth_build` | 아니오 | 플레이어가 주로 고른 방식에 가까운 판 안 성장 빌드 id. 없으면 시뮬레이터 설정의 `build` |
 | `stage_stats` | 아니오 | 단계 기록 배열. 판에서 지나는 순서대로 |
 | `stage` | 예 | 전투 계산의 단계 id |

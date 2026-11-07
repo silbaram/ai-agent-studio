@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 import datetime
+import posixpath
 import re
+from pathlib import Path
 
-from .common import STATUSES, check_identity, did_you_mean, is_int, is_number, unknown_keys_text, josa
+from .common import STATUSES, ack_reason, check_identity, did_you_mean, is_int, is_number, unknown_keys_text, josa
 from .common import add_issue as _err
 
 RESULTS = ("holds", "refuted", "unknown")
@@ -17,8 +19,10 @@ RESULT_LABEL = {"holds": "버팀", "refuted": "틀림", "unknown": "모름"}
 DECIDED = ("holds", "refuted")
 NOTE_KINDS = ("observation", "preference")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+PATH_LIKE = re.compile(r"^(?!.*://).*\.[A-Za-z][A-Za-z0-9]{0,4}$")  # 확장자로 끝나는 source만 파일로 본다. URL, 말, 앵커(#), 판 번호(v1.2)는 보지 않는다
+COMPUTED = "[계산"
 STAGE_FIELDS = {"stage", "entered", "cleared", "level", "duration", "kills", "income", "source", "note"}
-GROUP_FIELDS = {"upgrades", "growth_build", "variant", "stage_stats"}
+GROUP_FIELDS = {"upgrades", "growth_build", "variant", "runs", "players", "stage_stats"}
 GREYBOX_FIELDS = {"check", "value", "passed", "n", "source", "note"}
 SESSION_FIELDS = {"id", "date", "concept", "build", "players", "runs", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note"}
 TOP_FIELDS = {"playtests", "verdicts", "note"}
@@ -130,6 +134,12 @@ def check_stage_stats(s: dict, errors: list, warnings: list) -> bool:
         if "growth_build" in g and not _text(g["growth_build"]):
             _err(errors, "schema", where, f"{label}growth_build는 판 안 성장의 빌드 id입니다: {g['growth_build']!r}")
             ok = False
+        if "runs" in g and not is_int(g["runs"], 1):
+            _err(errors, "schema", where, f"{label}runs는 그 묶음의 판 수(1 이상의 정수)입니다(runlog가 씁니다): {g['runs']!r}")
+            ok = False
+        if "players" in g and not (isinstance(g["players"], list) and g["players"] and all(_text(p) for p in g["players"])):
+            _err(errors, "schema", where, f"{label}players는 그 묶음의 판을 한 사람 이름 배열입니다(runlog가 씁니다): {g['players']!r}")
+            ok = False
         variant = g.get("variant")
         if "variant" in g and not (isinstance(variant, dict) and variant
                                    and all(_text(k) and (_text(x) or (is_number(x) and not isinstance(x, bool))) for k, x in variant.items())):
@@ -139,10 +149,14 @@ def check_stage_stats(s: dict, errors: list, warnings: list) -> bool:
             _err(errors, "schema", where, f"{label}stage_stats(단계 기록 배열)가 필요합니다.")
             ok = False
             continue
-        ok = _check_records(g, label, s.get("runs"), where, errors, warnings) and ok
+        ok = _check_records(g, label, g["runs"] if is_int(g.get("runs"), 1) else s.get("runs"), where, errors, warnings) and ok
         for x in g["stage_stats"]:
             if isinstance(x, dict) and _text(x.get("stage")) and is_int(x.get("entered"), 0):
                 totals[x["stage"]] = totals.get(x["stage"], 0) + x["entered"]
+    counted = [g["runs"] for g in groups if is_int(g.get("runs"), 1)]
+    if counted and is_int(s.get("runs")) and sum(counted) > s["runs"]:
+        _err(errors, "schema", where, f"묶음의 runs를 합친 {sum(counted)}판이 세션의 판 수 {s['runs']}보다 큽니다.")
+        ok = False
     over = [k for k, v in totals.items() if is_int(s.get("runs")) and v > s["runs"]]
     if over:
         _err(errors, "schema", where, f"묶음을 합친 entered가 세션의 판 수 {s.get('runs')}보다 큰 단계: {', '.join(over)}")
@@ -249,6 +263,10 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
         elif "n" in o and not is_int(o["n"], 0):
             _err(errors, "schema", where, f"observations[{n}].n(표본 수)은 0 이상의 정수여야 합니다.")
             ok = False
+        elif COMPUTED in str(o.get("note") or "") and (not _text(o.get("source")) or _same_path(o["source"], s.get("logs"))):
+            warnings.append({"code": "computed_without_output", "where": where,
+                             "message": f"observations[{n}]는 계산한 값인데 source가 결과 파일이 아닙니다({o.get('source') or '없음'}). "
+                                        "판정 에이전트는 스크립트를 돌리지 못하므로, 계산 출력을 세션 폴더에 결과 파일로 남기고 source로 둡니다."})
     notes = s.get("notes", [])
     if not (isinstance(notes, list) and all(isinstance(x, dict) and x.get("kind") in NOTE_KINDS and _text(x.get("text")) for x in notes)):
         _err(errors, "schema", where, "notes는 {kind: observation(관찰) / preference(선호), text} 배열이어야 합니다.")
@@ -259,6 +277,8 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
         ok = False
     ok = check_stage_stats(s, errors, warnings) and ok
     ok = _check_greybox(s, where, errors) and ok
+    if ok:
+        _check_beyond_records(s, warnings)
     if ok and not obs and not s.get("stage_stats") and not s.get("groups") and not s.get("greybox"):
         warnings.append({"code": "session_without_observations", "where": where,
                          "message": "가설에 대한 관찰값이 없습니다. 이 세션은 어떤 가설의 증거도 되지 못합니다."})
@@ -303,16 +323,75 @@ def _hypothesis_ref(concept: str, hyp: str, where: str, concepts: dict, errors: 
     return False
 
 
+def _norm_path(raw: str) -> str:
+    return posixpath.normpath(raw.strip().replace("\\", "/"))
+
+
+def _same_path(raw: str, paths) -> bool:
+    """raw가 paths 중 하나와 같은 파일을 가리키는가. ./, 역슬래시, 앞뒤 공백은 같은 경로로 본다."""
+    return isinstance(paths, list) and _norm_path(raw) in {_norm_path(x) for x in paths if _text(x)}
+
+
+def _recorded(s: dict) -> tuple:
+    """판별 로그가 말하는 (판 수, 사람들): runlog가 묶음마다 쓴 runs와 players의 합. 모든 묶음에 있어야 센다. 없으면 None.
+    손으로 쓴 단계 기록(세션의 stage_stats)은 로그가 아니라서 세지 않는다."""
+    groups = s.get("groups") or []
+    runs = sum(g["runs"] for g in groups) if groups and all("runs" in g for g in groups) else None
+    players = {p.strip() for g in groups for p in g["players"]} if groups and all("players" in g for g in groups) else None
+    return runs, players
+
+
+def _check_beyond_records(s: dict, warnings: list) -> None:
+    """손으로 쓴 판 수·사람이 판별 로그 묶음보다 많으면 표본이 부풀 수 있다. 판정 표본은 로그를 센다(확인하면 세션 값을 믿는다)."""
+    runs, players = _recorded(s)
+    parts = []
+    if runs is not None and runs < s["runs"]:
+        parts.append(f"판 수 {josa(s['runs'], '이가')} 판별 로그 묶음의 {runs}판보다 많습니다")
+    extra = sorted({p.strip() for p in s["players"]} - players) if players is not None else []
+    if extra:
+        parts.append(f"판별 로그 묶음에 없는 사람이 있습니다: {', '.join(extra)}")
+    if parts:
+        warnings.append({"code": "session_beyond_records", "where": s["id"],
+                         "message": "; ".join(parts) + ". 판정 표본은 로그에 남은 판과 사람만 셉니다. 로그에 남기지 못한 판이나 사람이 맞으면 이 세션의 acknowledged에 이유를 적습니다."})
+
+
+def _counted(s: dict) -> tuple[int, set]:
+    """표본에 넣는 (판 수, 사람들). 판별 로그 묶음이 있으면 로그를 넘지 않는다. session_beyond_records를 확인한 세션은 세션 값을 쓴다."""
+    names = {p.strip() for p in s["players"]}
+    if ack_reason(s, "session_beyond_records"):
+        return s["runs"], names
+    runs, players = _recorded(s)
+    return (s["runs"] if runs is None else min(s["runs"], runs)), (names if players is None else players)
+
+
+def _check_files(s: dict, root: Path, warnings: list) -> None:
+    """세션이 가리키는 기록 파일(logs, source)이 프로젝트에 있는가. 경로처럼 보이는 것만 본다."""
+    cited = [(f"logs[{n}]", x) for n, x in enumerate(s.get("logs") or [])]
+    cited += [(f"observations[{n}].source", o.get("source")) for n, o in enumerate(s.get("observations") or [])]
+    cited += [(f"greybox[{n}].source", g.get("source")) for n, g in enumerate(s.get("greybox") or [])]
+    cited += [("stage_stats.source", x.get("source")) for h in _holders(s) for x in h.get("stage_stats") or []]
+    seen: set = set()
+    for label, raw in cited:
+        if not (_text(raw) and PATH_LIKE.search(raw.strip())) or _norm_path(raw) in seen:
+            continue
+        seen.add(_norm_path(raw))
+        path = Path(_norm_path(raw))
+        if not (path if path.is_absolute() else root / path).exists():
+            warnings.append({"code": "source_missing", "where": s["id"],
+                             "message": f"{label}의 기록 파일이 없습니다: {raw}. 경로는 프로젝트 폴더 기준입니다. 옮겼으면 경로를 고칩니다."})
+
+
 def _sample(sessions: list) -> dict:
-    """세션들을 합친 표본: 세션 수, 판 수, 사람 수(같은 이름은 한 사람)."""
-    return {"sessions": len(sessions), "runs": sum(s["runs"] for s in sessions), "players": len({p.strip() for s in sessions for p in s["players"]})}
+    """세션들을 합친 표본: 세션 수, 판 수, 사람 수(같은 이름은 한 사람). 판별 로그 묶음이 있으면 로그를 넘지 않는다."""
+    counted = [_counted(s) for s in sessions]
+    return {"sessions": len(sessions), "runs": sum(r for r, _ in counted), "players": len(set().union(*(p for _, p in counted)))}
 
 
 def _sample_text(sample: dict) -> str:
     return " · ".join(f"{sample[k]}{unit}" for k, unit in (("players", "명"), ("runs", "판")) if k in sample)
 
 
-def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool = False, refs: dict | None = None) -> dict:
+def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool = False, refs: dict | None = None, root: Path | None = None) -> dict:
     """concepts: concepts.hypothesis_index()의 결과. None이면 컨셉·가설 참조를 확인하지 못한 것으로 센다.
     refs: 단계 기록이 가리키는 id {stages, upgrades, enemies, builds, currencies}. 값이 None인 종류는 쓰면 미확인이다."""
     errors: list = []
@@ -333,6 +412,8 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
     missing_refs: set = set()
     for s in sessions.values():
         check_refs(s, refs, errors, warnings, missing_refs)
+        if root is not None:
+            _check_files(s, root, warnings)
         observed = [o["hypothesis"] for o in s.get("observations", [])]
         if concepts is None:
             unchecked += 1
