@@ -27,7 +27,7 @@ description: "Tags every tunable number in game design documents as assumed, com
 6. **사람의 판단은 `[가정]`이다.** 기획자가 의도적으로 정한 값도 검증 전에는 `[가정: 기획 의도]`로 표시한다. 의도를 존중하되 검증 상태와 섞지 않는다.
 7. **본문 수치도 태그한다.** 표 밖 문장의 조정할 수 있는 수치(예: `부화는 6초 [가정]`)에도 태그를 붙인다. 태그는 수치 바로 뒤, 다음 수치 전에 둔다. 검사기는 '숫자 + 단위'(초, %, 배, 개, 명, 건 등)마다 뒤따르는 태그가 있는지 보고, 없으면 경고한다. 컨셉 브리프의 판정 기준 문장(`failure_signal`, `success_criteria`)에서는 단위 없는 소수와 음수(`상관 0.2`, `-0.2`)도 수치로 본다. 한 줄의 태그 하나가 같은 줄의 다른 수치를 통과시키지 않는다(`5분 [가정], 3판 + 2명 [가정]`이면 `3판`을 경고). 태그 안의 숫자는 출처 설명으로 보고 검사하지 않는다. 단위가 없는 숫자는 찾지 못하는 추정 검사라 오류로 막지 않는다.
 8. **브리프의 판정 기준도 같다.** 컨셉 브리프(`design/concepts.json`)의 `failure_signal`, `success_criteria` 문장 안 수치에도 같은 태그를 쓴다. `check`가 같은 규칙으로 검사하고, `--fail-on-assumed`는 `[가정]`이 남은 브리프를 실패로 본다.
-9. **데이터 파일은 필드로 표시한다.** 아이템·영구 강화·적처럼 JSON/CSV 원본에 있는 수치는 md 태그 대신 항목의 `provenance` 필드(`assumed`/`computed`/`measured`)로 표시하고 `python3 .claude/skills/studio-data/scripts/studio.py check data/ --fail-on-assumed`로 검사한다([progression-economy](../progression-economy/SKILL.md)). 같은 수치를 md에 옮겨 적지 않는다.
+9. **데이터 파일은 필드로 표시한다.** 아이템·영구 강화·적처럼 JSON/CSV 원본에 있는 수치는 md 태그 대신 항목의 `provenance` 필드(`assumed`/`computed`/`measured`)로 표시하고 `python3 .claude/skills/studio-data/scripts/studio.py check data/ --fail-on-assumed`로 검사한다([progression-economy](../progression-economy/SKILL.md)). 같은 수치를 md에 옮겨 적지 않는다. 한 항목 안에서 값마다 출처가 다르면(처치 수 하나만 측정) `provenance.fields`에 칸 경로마다 적는다(`{"kills.crawler": {"kind": "measured", "source": …}}`). 항목 단위 출처는 나머지 칸의 출처다. 모든 수치 칸에 가정이 아닌 출처가 붙어야 게이트에서 빠지고, 그 전에는 게이트 줄에 `id(필드 1/4)`로 보인다.
 
 ## 검사
 

@@ -42,6 +42,7 @@
 | `game_build` | 아니오 | 프로토타입이 판 로그에 남긴 빌드 지문(예: `cfg721feeb5`). 가설의 `builds`는 `build`나 이 값과 맞춘다 |
 | `players` | 예 | 플레이한 사람 이름 배열. 같은 사람은 같은 이름으로 쓴다(사람 수를 센다). 근거 세션의 빌드가 섞이면 판정 줄에 `빌드 2개(…)`가 붙는다. 합쳐 세도 되는지 판정 `reason`에 적는다 |
 | `runs` | 예 | 이 세션의 판 수 합계 |
+| `notes[].hypotheses` | 아니오 | 그 메모가 가리키는 가설 id 배열. `deviation`에 적으면 그 가설의 판정에만 절차 이탈로 센다. 없으면 모든 판정에 센다. 없는 가설 id는 `unknown_hypothesis`다 |
 | `events` | 아니오 | 가설 `sample.events`의 사건을 이 세션에서 센 건수 `{사건 이름: 0 이상의 정수}`. 이름은 `sample.events`와 같게 쓴다. 적지 않은 세션은 그 사건을 0건으로 센다 |
 | `observations` | 아니오 | `[{hypothesis, value, metric, n, source, note}]`. `hypothesis`(가설 id)와 `value`(문자열 또는 수)가 필수. 없고 단계 기록도 없으면 경고. 스크립트로 계산한 값은 그 출력을 세션 폴더에 결과 파일로 남기고 `source`를 그 파일로, `note`를 `[계산: 스크립트]`로 적는다. `value`의 수는 결과 파일의 수를 그대로 옮긴다 |
 | `notes` | 아니오 | `[{kind: observation / preference / deviation, text}]`. `deviation`은 가설 `test`의 시험 절차를 어긴 일이다(정한 설정 순서를 지키지 않음, 중간 결과를 본 뒤 플레이함) |

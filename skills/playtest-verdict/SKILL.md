@@ -37,7 +37,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 시험 전에 가설마다 최소 표본(`"sample": {"players": 3, "runs": 15}`)과 기록할 값을 사용자와 정한다. 표본은 확정 판정에 필요한 사람 수와 판 수이고, 근거 세션을 합쳐 이보다 적으면 버팀·틀림 판정이 오류다(`verdict_sample_short`). 신호가 드문 사건(사망, 부화)의 건수에 기대면 그 최소 건수를 `sample.events`(`{"death_with_hatch": 6}`)에 적는다. 사건 수가 모자란 버팀은 오류다(`verdict_events_short`). `check`는 id나 표본이 없는 가설을 경고한다. 프로토타입이 기록할 값을 로그로 남기게 하면 옮겨 적는 실수가 줄어든다. 시험 조건(설정)이 여러 가지면 로그에 그 열을 두고 `runlog --group-by`로 나눠 모은다.
 
-표본을 줄이자는 말이 플레이 도중이나 뒤에 나오면 바로 고치지 않는다. 표본은 결과를 보기 전에 정한 값이다. 해 본 뒤에 줄이면 기록만 봐서는 "결과를 보고 멈춘 것"과 구별되지 않는다. 판정에는 새 기준 지문이 찍혀 `verdict_criteria_changed`도 나지 않는다. 먼저 줄이면 잃는 것을 보인다: 설정별 판 수, 사건 수, 지금 표본으로 낼 수 있는 판정(모자라면 모름뿐이다). 줄일지는 가설마다 사용자에게 묻는다. 한 가설 때문에 줄이자는 말을 다른 가설에 넓히지 않는다. 사용자가 줄이기로 한 가설만 결과 파일을 열기 전에 브리프부터 고친다. `sample`의 판 수와 함께 `test`·`failure_signal` 안의 같은 판 수("9판을 합쳐", "설정마다 3판")도 고친다. 그리고 `sample.reduced_from`에 줄이기 전 값과 때를 남긴다(`{"runs": 9, "after_run": 5, "before_results": true, "date": "2026-11-08"}`). 판정 줄에 `6/6판 (9판에서 줄임, 5판째 뒤)`처럼 보인다. 결과 파일을 연 뒤에 줄였으면 `before_results`를 `false`로 적는다. 그 가설은 버팀·틀림이 오류(`verdict_sample_reduced_after_results`)라 모름으로 둔다. 세션 메모에는 표본을 줄인 일을 가설 id와 함께 `deviation`으로 적는다: 몇 판째 뒤에 바꿨는지, 플레이한 사람과 기록하는 에이전트가 각각 요약 값을 보기 전인지 뒤인지.
+표본을 줄이자는 말이 플레이 도중이나 뒤에 나오면 바로 고치지 않는다. 표본은 결과를 보기 전에 정한 값이다. 해 본 뒤에 줄이면 기록만 봐서는 "결과를 보고 멈춘 것"과 구별되지 않는다. 판정에는 새 기준 지문이 찍혀 `verdict_criteria_changed`도 나지 않는다. 먼저 줄이면 잃는 것을 보인다: 설정별 판 수, 사건 수, 지금 표본으로 낼 수 있는 판정(모자라면 모름뿐이다). 줄일지는 가설마다 사용자에게 묻는다. 한 가설 때문에 줄이자는 말을 다른 가설에 넓히지 않는다. 사용자가 줄이기로 한 가설만 결과 파일을 열기 전에 브리프부터 고친다. `sample`의 판 수와 함께 `test`·`failure_signal` 안의 같은 판 수("9판을 합쳐", "설정마다 3판")도 고친다. 그리고 `sample.reduced_from`에 줄이기 전 값과 때를 남긴다(`{"runs": 9, "after_run": 5, "before_results": true, "date": "2026-11-08"}`). 판정 줄에 `6/6판 (9판에서 줄임, 5판째 뒤)`처럼 보인다. 결과 파일을 연 뒤에 줄였으면 `before_results`를 `false`로 적는다. 그 가설은 버팀·틀림이 오류(`verdict_sample_reduced_after_results`)라 모름으로 둔다. 세션 메모에는 표본을 줄인 일을 `deviation`으로 적고 `hypotheses`에 그 가설 id를 적는다(그 가설의 판정에만 절차 이탈로 센다): 몇 판째 뒤에 바꿨는지, 플레이한 사람과 기록하는 에이전트가 각각 요약 값을 보기 전인지 뒤인지. 사용자가 정하지 않은 축소(기록하던 에이전트가 고친 것)는 `reduced_from`으로 남기지 않는다. 결과를 보기 전의 기준으로 되돌리고, 지난 판정의 `cut_reason`과 세션 `deviation`에 그 일을 적는다.
 
 지표의 정의(구간 길이, 문턱, 무엇을 뺄지)는 가설의 `test`가 원본이다. 계산 스크립트에 같은 값을 상수로 두면, 결과 파일 첫머리에 계산에 쓴 정의를 찍게 한다. 한쪽만 바뀌어도 판정 에이전트가 `test`와 견줄 수 있다.
 
@@ -66,7 +66,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 ### 4. 측정값을 올린다
 
-관찰값을 **그대로** 옮긴 수치만 `[가정]`에서 `[측정: data/playtests.json#세션 id]`로 바꾼다. 데이터 파일(아이템·강화·적)은 `provenance`를 `{"kind": "measured", "source": "data/playtests.json#세션 id"}`로 둔다.
+관찰값을 **그대로** 옮긴 수치만 `[가정]`에서 `[측정: data/playtests.json#세션 id]`로 바꾼다. 데이터 파일(아이템·강화·적)은 `provenance`를 `{"kind": "measured", "source": "data/playtests.json#세션 id"}`로 둔다. 한 항목의 값 일부만 기록으로 뒷받침되면 항목 전체를 바꾸지 않고 `provenance.fields`에 그 값만 적는다(`{"kind": "assumed", "fields": {"kills.crawler": {"kind": "measured", "source": "data/playtests.json#pt_20261108_3"}}}`). 게이트 줄에 `zone_1(필드 1/4)`처럼 얼마나 왔는지 보이고, 모든 수치 칸에 가정이 아닌 출처가 붙으면 그 항목은 게이트에서 빠진다.
 
 - 평균·비율을 새로 계산한 값은 `[계산: 스크립트 또는 결과 파일]`이다. 계산한 스크립트가 없으면 올리지 않는다.
 - 판정 기준의 문턱값(예: `80% [가정]`)은 측정값이 아니다. 기획 판단이므로 `[가정]`으로 둔다.
@@ -74,7 +74,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 ### 5. 가정값을 보정한다
 
-세션에 단계 기록과 그때 가진 영구 강화를 적었으면 `calibrate`로 기획의 가정값과 비교한다. 평균을 손으로 내지 않는다. 프로토타입의 판별 로그(CSV)를 `runlog`로 모아 세션에 합친다(판 사이에 강화를 사서 상태가 바뀌어도 상태별 묶음으로 나온다). 형식과 읽는 법은 [references/calibration.md](references/calibration.md).
+세션에 단계 기록과 그때 가진 영구 강화를 적었으면 `calibrate`로 기획의 가정값과 비교한다. 평균을 손으로 내지 않는다. 프로토타입의 판별 로그(CSV)를 `runlog`로 모아 세션에 합친다(판 사이에 강화를 사서 상태가 바뀌어도 상태별 묶음으로 나온다). 시간이 다 되면 끝나는 단계(5분 회색 상자)는 `runlog --timed 단계`로 모은다. 빠뜨리면 calibrate가 늘 같은 길이를 비교한다. 형식과 읽는 법은 [references/calibration.md](references/calibration.md).
 
 단계 하나짜리 시험판(5분 회색 상자)도 비교할 수 있다. 판이 끝날 때의 레벨은 `level_end` 열로 남겨 다음 단계의 `level_at`과 견준다. 처치는 실패한 판까지 센 처치 속도(`kill_rate`)로 본다. 시간이 다 되면 끝나는 단계는 기록에 `"timed": true`를 적는다. 시험 조건이 여러 가지면 `--variant 열=값`으로 조건마다 본다. 넘긴 판이 적은 값은 "참고"로 나오므로 그 값으로 원본을 고치지 않는다.
 

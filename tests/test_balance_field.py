@@ -64,7 +64,7 @@ class FewClearedRuns(Workspace):
 
     def test_hints_are_not_counted_as_off_277(self):
         self.sessions(self.run_session(stage_stats=[{"stage": "zone_2", "entered": 9, "cleared": 1, "duration": 360, "kills": {"frost_wolf": 70}}]))
-        self.assertRegex(printed(cal.calibrate(self.root)), r"건 중 0건이 20% 넘게 다름\(넘긴 판이 적어 참고로 둔 4건 제외\)")   # 처치 4종이 모두 다르다
+        self.assertRegex(printed(cal.calibrate(self.root)), r"건 중 0건이 20% 넘게 다름\(넘긴 판이 적거나 조건마다 달라 참고로 둔 4건 제외\)")   # 처치 4종이 모두 다르다
 
     def test_three_of_nine_is_still_a_hint_277(self):
         self.sessions(self.run_session(stage_stats=[{"stage": "zone_2", "entered": 9, "cleared": 3, "kills": {"frost_wolf": 70}}]))

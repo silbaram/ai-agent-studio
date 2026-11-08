@@ -294,6 +294,9 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
     if not (isinstance(notes, list) and all(isinstance(x, dict) and x.get("kind") in NOTE_KINDS and _text(x.get("text")) for x in notes)):
         _err(errors, "schema", where, "notes는 {kind: observation(관찰) / preference(선호) / deviation(절차 이탈), text} 배열이어야 합니다.")
         ok = False
+    elif any("hypotheses" in x and not (isinstance(x["hypotheses"], list) and x["hypotheses"] and all(_text(h) for h in x["hypotheses"])) for x in notes):
+        _err(errors, "schema", where, "notes의 hypotheses는 그 메모가 가리키는 가설 id 배열입니다(절차 이탈을 그 가설의 판정에만 셉니다).")
+        ok = False
     logs = s.get("logs", [])
     if not (isinstance(logs, list) and all(_text(x) for x in logs)):
         _err(errors, "schema", where, "logs는 기록 파일 경로(문자열) 배열이어야 합니다.")
@@ -569,7 +572,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         if root is not None:
             _check_files(s, root, warnings)
             _check_values(s, root, warnings, numbers)
-        observed = [o["hypothesis"] for o in s.get("observations", [])]
+        observed = [o["hypothesis"] for o in s.get("observations", [])] + [h for x in s.get("notes") or [] for h in x.get("hypotheses") or []]
         if concepts is None:
             unchecked += 1
         elif s["concept"] not in concepts:
@@ -644,7 +647,8 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
             _err(errors, "verdict_sample_reduced_after_results", where,
                  f"{RESULT_LABEL[v['result']]} 판정의 가설은 결과 파일을 연 뒤에 표본을 줄였습니다(sample.reduced_from). "
                  "결과를 보고 기준을 바꾼 것과 구별되지 않으므로 버팀·틀림이 아니라 unknown(모름)으로 둡니다. 원래 표본을 채우면 다시 판정할 수 있습니다.")
-        deviations = sum(1 for s in found for x in s.get("notes") or [] if x.get("kind") == "deviation")
+        deviations = sum(1 for s in found for x in s.get("notes") or []   # 가설을 적은 절차 이탈은 그 가설에만 센다
+                         if x.get("kind") == "deviation" and v["hypothesis"] in (x.get("hypotheses") or [v["hypothesis"]]))
         verdicts[where] = {"result": v["result"], "status": status, "reason": v["reason"], "sample": have, "need": need,
                            "deviations": deviations, "criteria": criteria, "proposed_result": v.get("proposed_result"), "next_needs": v.get("next_needs"),
                            "sample_text": _sample_line(have, need, deviations, list(dict.fromkeys(s.get("game_build") or s["build"] for s in seen)))}

@@ -1110,7 +1110,8 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
     if unscored:
         missing.add("scores")
     summary = c.summary_counts(entries)
-    summary["unverified"] += [f"{lid}.{x['id']}" for lid, x in sourced if lid not in summary["unverified"] and c.provenance_kind(x) == "assumed"]
+    gated = {u.split("(", 1)[0] for u in summary["unverified"]}   # 값마다 출처를 일부 적은 레벨은 "l1(필드 1/2)"로 올라 있다
+    summary["unverified"] += [f"{lid}.{x['id']}" for lid, x in sourced if lid not in gated and c.provenance_kind(x) == "assumed"]
     budget = data.get("threat_budget")
     if isinstance(budget, dict) and c.provenance_kind(budget) in ("assumed", "unspecified"):
         summary["unverified"] = ["threat_budget(위협도 예산)"] + summary["unverified"]

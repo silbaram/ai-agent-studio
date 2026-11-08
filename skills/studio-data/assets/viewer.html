@@ -520,9 +520,31 @@ function statusPill(e) {
   return el("span", { class: "pill st-" + s, text: LABEL.status[s] || s });
 }
 
+// 값마다 적은 출처(provenance.fields). 검사기(common.field_coverage, effective_kind)와 같은 규칙이다
+const PROV_META = new Set(["id", "name", "effect", "intent", "status", "provenance", "acknowledged", "note"]);
+const PROV_NAMES = { 가정: "assumed", 계산: "computed", 측정: "measured" };
+function numericLeaves(v, prefix) {
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    return Object.entries(v).flatMap(([k, x]) => (k.startsWith("_") || (!prefix && PROV_META.has(k)) ? [] : numericLeaves(x, prefix ? prefix + "." + k : k)));
+  }
+  if (Array.isArray(v)) return v.flatMap((x, n) => numericLeaves(x, prefix + "." + n));
+  return typeof v === "number" ? [prefix] : [];
+}
+function fieldCoverage(e) {
+  const f = e.provenance && e.provenance.fields;
+  if (!f || typeof f !== "object" || Array.isArray(f) || !Object.keys(f).length) return null;
+  const kindOf = (x) => (x && PROV_NAMES[x.kind]) || (x && x.kind);
+  const sourced = Object.keys(f).filter((k) => ["computed", "measured"].includes(kindOf(f[k])));
+  const leaves = numericLeaves(e, "");
+  const covered = leaves.filter((leaf) => sourced.some((k) => leaf === k || leaf.startsWith(k + "."))).length;
+  return { covered, total: leaves.length, measured: sourced.some((k) => kindOf(f[k]) === "measured") };
+}
 function sourcePill(e) {
-  const p = (e.provenance && e.provenance.kind) || "unspecified";
-  return el("span", { class: "pill pv-" + p, title: e.provenance ? [e.provenance.source, e.provenance.note].filter(Boolean).join(" · ") : "", text: LABEL.prov[p] || p });
+  let p = (e.provenance && (PROV_NAMES[e.provenance.kind] || e.provenance.kind)) || "unspecified";
+  const cover = fieldCoverage(e);
+  if (cover && ["assumed", "unspecified"].includes(p) && cover.total && cover.covered === cover.total) p = cover.measured ? "measured" : "computed";
+  const part = cover && cover.covered < cover.total ? ` (필드 ${cover.covered}/${cover.total})` : "";
+  return el("span", { class: "pill pv-" + p, title: e.provenance ? [e.provenance.source, e.provenance.note].filter(Boolean).join(" · ") : "", text: (LABEL.prov[p] || p) + part });
 }
 
 // 항목과 그 안의 행(항목.행)에 걸린 경고. 전투 단계의 적, 레벨의 조우처럼 경고가 행에 걸린 탭의 "문제만 보기"가 쓴다
