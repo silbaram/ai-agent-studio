@@ -28,7 +28,7 @@ SOURCE_READ_LIMIT = 5_000_000
 STAGE_FIELDS = {"stage", "entered", "cleared", "level", "level_end", "duration", "timed", "kills", "kill_rate", "played_length", "income", "source", "note"}
 GROUP_FIELDS = {"upgrades", "growth_build", "variant", "runs", "players", "stage_stats"}
 GREYBOX_FIELDS = {"check", "value", "passed", "n", "source", "note"}
-SESSION_FIELDS = {"id", "date", "concept", "build", "players", "runs", "events", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note"}
+SESSION_FIELDS = {"id", "date", "concept", "build", "game_build", "players", "runs", "events", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note"}
 TOP_FIELDS = {"playtests", "verdicts", "note"}
 REF_LABEL = {"stages": "전투 단계", "upgrades": "영구 강화", "enemies": "적", "builds": "판 안 성장 빌드", "currencies": "재화", "greybox": "그레이박스 확인"}
 UNCHECKED_REASON = {
@@ -260,6 +260,9 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
         if not _text(s.get(f)):
             _err(errors, "schema", where, f"{josa(f, '이가')} 비어 있습니다." + (" 빌드는 커밋 해시나 빌드 이름입니다." if f == "build" else ""))
             ok = False
+    if "game_build" in s and not _text(s["game_build"]):
+        _err(errors, "schema", where, f"game_build는 프로토타입이 판 로그에 남긴 빌드 지문입니다(예: cfg721feeb5): {s['game_build']!r}")
+        ok = False
     players = s.get("players")
     if not (isinstance(players, list) and players and all(_text(p) for p in players)):
         _err(errors, "schema", where, "players는 플레이한 사람 이름(문자열)이 1개 이상인 배열이어야 합니다.")
@@ -326,6 +329,12 @@ def check_verdict(v, n: int, errors: list) -> str | None:
         ok = False
     if "criteria" in v and not (isinstance(v["criteria"], str) and CRITERIA.match(v["criteria"])):
         _err(errors, "schema", where, f"criteria(판정 기준 지문)는 소문자 16진수 8자입니다. 지금 지문은 check가 알려 줍니다: {v['criteria']!r}")
+        ok = False
+    if "cut_reason" in v and not (_text(v["cut_reason"]) and v.get("status") == "cut"):
+        _err(errors, "schema", where, "cut_reason은 지난 판정(status cut)에 지운 날짜와 까닭을 적는 글입니다. 기준을 고쳐 지웠으면 바뀐 기준 문장도 적습니다.")
+        ok = False
+    if "next_needs" in v and not _text(v["next_needs"]):
+        _err(errors, "schema", where, "next_needs는 다음 시험 전에 풀 것을 적는 글입니다(비우지 않습니다).")
         ok = False
     if "proposed_result" in v and v["proposed_result"] not in RESULTS:
         _err(errors, "schema", where, f"proposed_result(판정 에이전트가 낸 결과)는 {', '.join(RESULTS)} 중 하나입니다: {v['proposed_result']!r}")
@@ -511,6 +520,10 @@ def _against(have: dict, need: dict | None, key: str, unit: str) -> str:
 def _sample_line(have: dict, need: dict | None, deviations: int, builds: list) -> str:
     """판정의 표본 글: 근거 세션 수, 판·사람(최소 표본과 나란히), 사건 수, 절차 이탈, 섞인 빌드. check 출력과 뷰어가 같은 글을 쓴다."""
     parts = [f"세션 {have['sessions']}", _against(have, need, "runs", "판"), _against(have, need, "players", "명")]
+    reduced = (need or {}).get("reduced_from")
+    if reduced:   # 줄인 표본이면 줄이기 전 값과 때를 함께 보인다
+        before = ", ".join(f"{reduced[k]}{u}" for k, u in (("runs", "판"), ("players", "명")) if k in reduced)
+        parts[1] += f" ({before}에서 줄임, {reduced['after_run']}판째 뒤" + ("" if reduced["before_results"] else ", 결과를 본 뒤") + ")"
     if len(builds) > 1:
         parts.append(f"빌드 {len(builds)}개({', '.join(builds)})")
     if have.get("events"):
@@ -567,6 +580,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
             _check_event_names(s, concepts[s["concept"]], warnings)
 
     verdicts: dict = {}
+    left: dict = {}   # 지난 판정이 남긴 '다음 시험 전에 풀 것' {가설: 글}. 새 판정이 나오기 전까지 보인다
     status_counts = {st: 0 for st in STATUSES + ("unspecified",)}
     for n, v in enumerate(raw_verdicts):
         where = check_verdict(v, n, errors)
@@ -575,6 +589,8 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         status = v.get("status") or "unspecified"
         status_counts[status] += 1
         if status == "cut":
+            if _text(v.get("next_needs")):
+                left[where] = v["next_needs"]
             continue  # 지난 판정은 기록으로만 남긴다
         if where in verdicts:
             _err(errors, "duplicate_verdict", where, "삭제(cut)되지 않은 판정이 둘 이상입니다. 지난 판정은 status를 cut으로 두고 남깁니다.")
@@ -617,10 +633,21 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
             _err(errors, "verdict_events_short", where,
                  f"버팀 판정의 근거 사건 수({_events_text(short, need['events'])})가 가설의 최소 사건 수보다 적습니다. "
                  "사건에 기대는 쪽 신호를 가리지 못했으면 버팀이 아니라 unknown(모름)입니다. 세션마다 그 세션에서 센 건수를 events에 적습니다(세지 않은 세션은 0으로 셉니다).")
+        allowed = concepts[v["concept"]].get("builds", {}).get(v["hypothesis"]) if concepts is not None else None
+        wrong = [s["id"] for s in seen if allowed and s["build"] not in allowed and s.get("game_build") not in allowed]
+        if v["result"] in DECIDED and wrong:
+            _err(errors, "verdict_session_wrong_build", where,
+                 f"{RESULT_LABEL[v['result']]} 판정의 근거 세션 {', '.join(wrong)}의 빌드가 가설이 세는 빌드({', '.join(allowed)})가 아닙니다. "
+                 "세션의 build(커밋)나 game_build(판 로그의 빌드 지문)를 확인합니다. 다른 빌드의 기록이면 근거에서 뺍니다.")
+        reduced = (need or {}).get("reduced_from")
+        if v["result"] in DECIDED and reduced and not reduced["before_results"]:
+            _err(errors, "verdict_sample_reduced_after_results", where,
+                 f"{RESULT_LABEL[v['result']]} 판정의 가설은 결과 파일을 연 뒤에 표본을 줄였습니다(sample.reduced_from). "
+                 "결과를 보고 기준을 바꾼 것과 구별되지 않으므로 버팀·틀림이 아니라 unknown(모름)으로 둡니다. 원래 표본을 채우면 다시 판정할 수 있습니다.")
         deviations = sum(1 for s in found for x in s.get("notes") or [] if x.get("kind") == "deviation")
         verdicts[where] = {"result": v["result"], "status": status, "reason": v["reason"], "sample": have, "need": need,
-                           "deviations": deviations, "criteria": criteria, "proposed_result": v.get("proposed_result"),
-                           "sample_text": _sample_line(have, need, deviations, list(dict.fromkeys(s["build"] for s in seen)))}
+                           "deviations": deviations, "criteria": criteria, "proposed_result": v.get("proposed_result"), "next_needs": v.get("next_needs"),
+                           "sample_text": _sample_line(have, need, deviations, list(dict.fromkeys(s.get("game_build") or s["build"] for s in seen)))}
 
     unverified: list = []
     refuted: list = []
@@ -640,6 +667,9 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                                      "message": "선택(approved)한 컨셉의 가설이 틀림으로 확정됐습니다. 이 가설에 기대는 다음 단계로 가지 않습니다. "
                                                 "가설이 기대는 규칙 하나를 바꿔 다시 시험하거나(브리프의 prototype과 가설을 고치고 다시 판정) 컨셉을 되돌릴지 사용자와 정합니다. "
                                                 "가설 기준을 고치거나 다시 판정하거나 컨셉 상태를 바꾸면 사라집니다."})
+    next_needs = {w: {"text": x["next_needs"], "cut": False} for w, x in verdicts.items() if x["next_needs"] and x["result"] == "unknown"}
+    next_needs.update({w: {"text": text, "cut": True} for w, text in left.items()
+                       if w not in next_needs and not (w in verdicts and verdicts[w]["result"] in DECIDED)})
     counts = {r: sum(1 for x in verdicts.values() if x["result"] == r) for r in RESULTS}
     reason = None
     if unchecked:
@@ -652,6 +682,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         "verdicts": verdicts,
         "unverified": unverified,
         "refuted": refuted,
+        "next_needs": next_needs,
         "unchecked": unchecked + len(missing_refs),
         "unchecked_reason": reason,
         "unchecked_refs": sorted(missing_refs),
@@ -666,6 +697,8 @@ def print_extra(result: dict) -> None:
         if v.get("proposed_result") not in (None, v["result"]):
             state += f", 판정 에이전트는 {RESULT_LABEL[v['proposed_result']]}"   # 사용자가 제안을 모름으로 낮춰 확정했다
         print(f"{where}: {RESULT_LABEL[v['result']]} ({state}) · 관찰한 근거 {v['sample_text']}")
+    for where, x in result.get("next_needs", {}).items():
+        print(f"다음 시험 전에 풀 것({where}): {x['text']}" + (" (지난 판정)" if x["cut"] else ""))
     if result["unchecked_reason"]:
         print(f"컨셉·가설 참조 미확인({UNCHECKED_REASON.get(result['unchecked_reason'], '')}): {result['unchecked'] - len(result['unchecked_refs'])}건")
     if result["unchecked_refs"]:

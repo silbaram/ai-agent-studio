@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import unicodedata
 
 from . import provenance
@@ -135,7 +136,9 @@ def check_concept(c: dict, where: str, errors: list, warnings: list, ctx: dict |
     return ok
 
 
-SAMPLE_KEYS = ("players", "runs", "events")
+SAMPLE_KEYS = ("players", "runs", "events", "reduced_from")
+DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+REDUCED_KEYS = ("players", "runs", "after_run", "before_results", "date")
 CRITERIA_KEYS = ("claim", "failure_signal", "test", "sample")  # 판정 기준. 이 칸이 바뀌면 지난 판정은 지금 기준의 판정이 아니다
 
 
@@ -151,6 +154,25 @@ def sample_problem(v) -> str | None:
     ev = v.get("events")
     if "events" in v and not (isinstance(ev, dict) and ev and all(isinstance(k, str) and ID_PATTERN.match(k) and is_int(x, 1) for k, x in ev.items())):
         return "sample.events는 {사건 이름(소문자·숫자·밑줄): 1 이상의 정수} 객체입니다"
+    if "reduced_from" in v:
+        return _reduced_problem(v)
+    return None
+
+
+def _reduced_problem(v: dict) -> str | None:
+    """표본을 줄인 기록 {players·runs: 줄이기 전 값, after_run: 몇 판째 뒤에 줄였나, before_results: 결과 파일을 열기 전인가, date}."""
+    r = v["reduced_from"]
+    bad = sorted(str(k) for k in r if k not in REDUCED_KEYS) if isinstance(r, dict) else []
+    if bad:
+        return (f"sample.reduced_from에 알 수 없는 키 {', '.join(bad)}.{''.join(_did_you_mean(k, REDUCED_KEYS) for k in bad)} "
+                f"쓸 수 있는 키는 {', '.join(REDUCED_KEYS)}입니다")
+    if not (isinstance(r, dict) and isinstance(r.get("before_results"), bool)
+            and is_int(r.get("after_run"), 0) and isinstance(r.get("date"), str) and DATE.match(r["date"])
+            and any(k in r for k in ("players", "runs")) and all(is_int(r[k], 1) for k in ("players", "runs") if k in r)):
+        return ("sample.reduced_from은 {runs 또는 players: 줄이기 전 값, after_run: 몇 판째 뒤에 줄였나(0 이상), "
+                "before_results: 결과 파일을 열기 전에 줄였나(true/false), date: YYYY-MM-DD}입니다")
+    if not any(k in v and r[k] > v[k] for k in ("players", "runs") if k in r):
+        return "sample.reduced_from의 값이 지금 표본보다 커야 합니다(줄이기 전 값을 적습니다)"
     return None
 
 
@@ -158,7 +180,7 @@ def read_sample(v) -> dict | None:
     """가설의 최소 표본 {players, runs, events}: 확정 판정에 필요한 사람 수, 판 수, 사건 수(세션을 합친 값). 형식이 틀리면 None."""
     if sample_problem(v) is not None:
         return None
-    return {k: (dict(v[k]) if k == "events" else v[k]) for k in SAMPLE_KEYS if k in v}
+    return {k: (dict(v[k]) if k in ("events", "reduced_from") else v[k]) for k in SAMPLE_KEYS if k in v}
 
 
 def _nfc(v):
@@ -172,9 +194,12 @@ def _nfc(v):
 
 
 def criteria_stamp(h: dict) -> str:
-    """판정 기준의 지문(주장, 틀렸다는 신호, 확인 방법, 최소 표본). 판정의 criteria에 남기면 판정 뒤에 기준이 바뀐 것을 안다.
+    """판정 기준의 지문(주장, 틀렸다는 신호, 확인 방법, 최소 표본, 적었으면 세는 빌드). 판정의 criteria에 남기면 판정 뒤에 기준이 바뀐 것을 안다.
     키 순서와 유니코드 정규화(NFC)가 다른 것은 바뀐 것으로 보지 않는다."""
-    body = json.dumps({k: _nfc(h.get(k)) for k in CRITERIA_KEYS}, ensure_ascii=False, sort_keys=True)
+    fields = {k: _nfc(h.get(k)) for k in CRITERIA_KEYS}
+    if "builds" in h:   # 세는 빌드도 기준이다. 결과를 본 뒤 좁히면 지난 판정이 지금 기준의 판정이 아니다(없는 가설의 지문은 그대로 둔다)
+        fields["builds"] = _nfc(h["builds"])
+    body = json.dumps(fields, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(body.encode("utf-8")).hexdigest()[:8]
 
 
@@ -216,6 +241,9 @@ def check_brief(c: dict, where: str, errors: list, warnings: list | None = None)
             warnings.append({"code": "hypothesis_sample_missing", "where": where,
                              "message": f"brief.hypotheses[{n}]({h.get('id') or '이름 없음'})에 최소 표본(sample: {{players, runs}})이 없습니다. "
                                         "판정에 필요한 사람 수와 판 수를 플레이 전에 정해 둡니다."})
+        if "builds" in h and not (isinstance(h["builds"], list) and h["builds"] and all(_text(x) for x in h["builds"])):
+            errors.append({"code": "schema", "where": where,
+                           "message": f"brief.hypotheses[{n}].builds는 이 가설이 세는 빌드(세션의 build나 game_build) 문자열 배열입니다: {h['builds']!r}"})
         hid = h.get("id")
         if hid is None:
             warnings.append({"code": "hypothesis_id_missing", "where": where,
@@ -389,7 +417,8 @@ def hypothesis_index(data: dict) -> dict:
         named = [h for h in hyps if isinstance(h, dict) and isinstance(h.get("id"), str)]
         samples = {h["id"]: read_sample(h.get("sample")) for h in named if read_sample(h.get("sample"))}
         criteria = {h["id"]: criteria_stamp(h) for h in named}
-        out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids, "samples": samples, "criteria": criteria}
+        builds = {h["id"]: list(h["builds"]) for h in named if isinstance(h.get("builds"), list) and h["builds"] and all(_text(x) for x in h["builds"])}
+        out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids, "samples": samples, "criteria": criteria, "builds": builds}
     return out
 
 

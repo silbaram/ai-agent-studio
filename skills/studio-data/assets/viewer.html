@@ -213,7 +213,7 @@ const LABEL = {
           fixed_axis_mismatch: "고정 축과 다름", unknown_policy: "모르는 전략", untagged_number: "태그 없는 수치",
           item_unchecked: "아이템 미확인", requirement_unchecked: "선행 조건 미확인",
           unknown_concept: "없는 컨셉", unknown_hypothesis: "없는 가설", verdict_without_evidence: "근거 세션 없음",
-          unknown_session: "없는 세션", session_concept_mismatch: "다른 컨셉 세션", observation_missing: "관찰값 없음", verdict_sample_short: "최소 표본에 못 미친 판정", source_missing: "없는 기록 파일", computed_without_output: "결과 파일 없는 계산값", session_beyond_records: "기록보다 많은 판·사람", verdict_criteria_missing: "기준 지문 없는 판정", verdict_criteria_changed: "기준이 바뀐 판정", verdict_events_short: "사건 수가 모자란 버팀", value_not_in_source: "결과 파일에 없는 값", approved_concept_refuted: "틀림으로 확정된 가설", unknown_event: "가설에 없는 사건", player_name_variants: "대소문자만 다른 이름", verdict_overrides_proposal: "제안을 바꾼 판정",
+          unknown_session: "없는 세션", session_concept_mismatch: "다른 컨셉 세션", observation_missing: "관찰값 없음", verdict_sample_short: "최소 표본에 못 미친 판정", source_missing: "없는 기록 파일", computed_without_output: "결과 파일 없는 계산값", session_beyond_records: "기록보다 많은 판·사람", verdict_criteria_missing: "기준 지문 없는 판정", verdict_criteria_changed: "기준이 바뀐 판정", verdict_events_short: "사건 수가 모자란 버팀", value_not_in_source: "결과 파일에 없는 값", approved_concept_refuted: "틀림으로 확정된 가설", unknown_event: "가설에 없는 사건", player_name_variants: "대소문자만 다른 이름", verdict_overrides_proposal: "제안을 바꾼 판정", verdict_session_wrong_build: "가설이 세지 않는 빌드", verdict_sample_reduced_after_results: "결과를 본 뒤 줄인 표본",
           duplicate_verdict: "판정 중복", session_without_observations: "관찰 없는 세션",
           missing_stat: "스탯 없음", negative_defense: "음수 방어", unknown_enemy: "없는 적", unknown_upgrade: "없는 강화",
           cut_referenced: "삭제 항목 참조", zero_damage: "피해 0", target_out_of_range: "목표 이탈", stage_without_enemies: "적 없는 단계",
@@ -225,7 +225,7 @@ const LABEL = {
           reward_missing: "보상 없음", unknown_recipe: "없는 합성", unknown_enhance: "없는 강화", price_missing: "가격 없음",
           unaffordable: "살 수 없음", currency_piles_up: "재화 남음", rarity_empty: "희귀도 비어 있음", price_source_invalid: "가격 출처 오류",
           unknown_stage: "없는 단계", unknown_choice: "없는 선택지", build_dominated: "빌드가 밀림", level_decreases: "레벨 감소",
-          build_invalid: "빌드 스탯 오류", stat_not_in_combat: "전투에 안 쓰는 스탯", stat_not_found: "역할 스탯 이름 오타",
+          build_invalid: "빌드 스탯 오류", stat_not_in_combat: "전투에 안 쓰는 스탯", pick_no_effect: "효과 없는 첫 선택", stat_not_found: "역할 스탯 이름 오타",
           level_missing: "레벨 없는 단계", duplicate_purchase: "중복 구매", enhance_gap: "강화 단계 어긋남", weights_ignored: "가중치 무시",
           meta_income_differs: "메타 설정과 수입 다름", meta_order_differs: "메타 설정과 순서 다름", kill_not_in_stage: "전투 단계 밖 처치",
           stage_counts_mismatch: "단계 판 수 어긋남", unknown_reference: "지금 데이터에 없는 id",
@@ -1168,7 +1168,9 @@ function renderPlaytests(ds, idx) {
         el("td", {}, el("span", { class: "pill st-" + st, text: LABEL.verdictStatus[st] || st })),
         el("td", { class: "mono" }, Array.isArray(v.sessions) && v.sessions.length ? v.sessions.join(", ") : dash()),
         el("td", {}, sample ? computed[where].sample_text : dash(ds.report ? "–" : "서버 모드")),   // check의 판정 줄과 같은 글
-        el("td", { class: "text" }, v.reason || dash()));
+        el("td", { class: "text" }, v.reason || dash(),
+          v.next_needs ? el("div", { class: "muted", text: "다음 시험 전에 풀 것: " + v.next_needs }) : null,
+          v.cut_reason ? el("div", { class: "muted", text: "지운 까닭: " + v.cut_reason }) : null));
     });
   const gate = ds.report && ds.report.unverified && ds.report.unverified.length
     ? el("div", { class: "group-note", text: "확정된 버팀·틀림이 아닌 가설: " + ds.report.unverified.join(", ") }) : null;
