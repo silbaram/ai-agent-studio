@@ -136,6 +136,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table levels
 
 - `greybox_failed`: 레벨을 고치거나, 기대가 틀렸다면 근거와 함께 범위를 고친다. 다음 빌드에서 고치기로 했으면 레벨의 `acknowledged`에 항목 id로 적는다.
 - 통과하지 않은 항목은 `--fail-on-assumed`에서 걸린다. 확인하지 않은 레벨을 확정하지 않기 위해서다.
+- 목록을 하나도 적지 않았는데 그 레벨의 단계를 플레이한 기록이 있으면 참고 줄 "그레이박스 확인 항목이 없습니다"가 나온다. 플레이가 끝나 버리기 전에 항목을 적는다. 처치 시간이 단계 길이를 넘는다는 경고(`kill_time_over_length`)가 난 단계는 분당 처치를 항목으로 둔다. 계산이 가장 자신 없는 곳이기 때문이다.
 
 ### 같은 사실의 원본
 

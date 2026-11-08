@@ -1184,7 +1184,8 @@ function renderPlaytests(ds, idx) {
             String(o && o.value !== undefined ? o.value : "?") + (o && o.n !== undefined ? ` (n=${o.n})` : ""),
             o && o.metric ? el("div", { class: "muted", text: o.metric }) : null))) : dash("관찰값 없음");
       const stageItems = (list) => (Array.isArray(list) ? list : []).map((x) => el("li", {}, el("span", { class: "mono", text: ((x && x.stage) || "?") + ": " }),
-        `${x && x.cleared}/${x && x.entered}판 통과` + (x && x.level !== undefined ? ` · 레벨 ${fmt(x.level)}` : "") + (x && x.duration !== undefined ? ` · 길이 ${fmt(x.duration)}` : "")));
+        `${x && x.cleared}/${x && x.entered}판 통과` + (x && x.level !== undefined ? ` · 레벨 ${fmt(x.level)}` : "") + (x && x.level_end !== undefined ? ` · 끝 레벨 ${fmt(x.level_end)}` : "")
+        + (x && x.duration !== undefined ? ` · 길이 ${fmt(x.duration)}` : "") + (x && x.timed === true ? " · 시간 제한" : "")));
       const groupItems = (Array.isArray(e.groups) ? e.groups : []).filter((g) => g && typeof g === "object").flatMap((g) => [
         el("li", { class: "muted", text: "강화: " + (Array.isArray(g.upgrades) && g.upgrades.length ? g.upgrades.join(", ") : "없음") }), ...stageItems(g.stage_stats)]);
       const greyItems = (Array.isArray(e.greybox) ? e.greybox : []).filter((x) => x && typeof x === "object").map((x) => el("li", {}, el("span", { class: "mono", text: `그레이박스 ${x.check}: ` }),

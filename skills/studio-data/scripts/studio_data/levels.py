@@ -933,11 +933,16 @@ def _greybox_rows(lv: dict, log: dict | None, seen: set, errors: list, warnings:
     return rows
 
 
-def _greybox_note(rows: list, log: dict | None) -> list:
-    """확인 목록을 어디까지 해 봤는가. 목록을 쓰지 않는 게임에는 말하지 않는다."""
+def _greybox_note(rows: list, log: dict | None, played: dict | None = None) -> list:
+    """확인 목록을 어디까지 해 봤는가. 목록을 쓰지 않는 게임에는 말하지 않는다. 다만 목록 없이 그 단계를 플레이한 기록이 있으면 알린다."""
     items = [x for lv in rows for x in lv["greybox"]]
     if not items:
-        return []
+        hit = [f"{lv['id']}({lv['stage']}, 세션 {played[lv['stage']]}개)" for lv in rows if lv["stage"] in (played or {})]
+        if not hit:
+            return []
+        return [f"그레이박스 확인 항목이 없습니다: 플레이 기록이 있는 레벨 {', '.join(hit)}. 확인할 값(분당 처치, 처음 죽은 시각 등)을 "
+                "levels.json의 greybox에 적으면 플레이 기록의 greybox와 이어져 판정됩니다. 처치 시간이 단계 길이를 넘는다는 경고"
+                "(kill_time_over_length)가 난 단계면 분당 처치를 항목으로 둡니다."]
     counts = {k: sum(x["status"] == k for x in items) for k in GREYBOX_LABEL}
     text = f"그레이박스 확인: {len(items)}개 · " + " · ".join(f"{GREYBOX_LABEL[k]} {n}" for k, n in counts.items() if n)
     bare = [lv["id"] for lv in rows if not lv["greybox"]]
@@ -977,10 +982,11 @@ def _notes(budget, cfg, rows: list, kill_check: str | None, gaps: list) -> list:
 
 def validate(data: dict, enemies: dict | None = None, threat: dict | None = None, combat: dict | None = None, economy: dict | None = None,
              kill_times: dict | None = None, kill_hits: dict | None = None, enemy_curve: dict | None = None, purchases: dict | None = None,
-             greybox_log: dict | None = None) -> dict:
+             greybox_log: dict | None = None, played_stages: dict | None = None) -> dict:
     """enemies: 함께 읽은 적의 {id: 항목}, threat: 적의 위협도 {id: 값}(적 검사와 같은 값), combat·economy: 전투 계산·재화 흐름 파일 내용.
     kill_times·kill_hits: 전투 계산의 처치 시간과 타수 {단계: {적: 값}}, enemy_curve: 스탯 예산의 적 곡선. 참고 값이라 없어도 미확인이 아니다.
     purchases: 재화 흐름이 계산한 구매 {id: 행}, greybox_log: 플레이 기록의 그레이박스 확인 {항목 id: 날짜순 기록}.
+    played_stages: 플레이 기록의 단계 기록 {단계 id: 세션 수}. 확인 항목이 없는 레벨의 단계를 플레이했으면 알린다.
     적이나 전투 계산이 없으면 미확인으로 센다. 재화 흐름은 조우가 구매를 가리킬 때만 미확인이고, 그 밖에는 있을 때만 맞춰 본다."""
     errors: list = []
     warnings: list = []
@@ -1125,7 +1131,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
         "kill_measure": "hits" if any(s["kill_hits"] is not None for s in stage_rows) and all(s["kill_time"] is None for s in stage_rows) else "time",
         "run_threat": round(sum(threats), 4) if threats and None not in threats and not dropped and not empty else None,
         "notes": _notes(budget, cfg, stage_rows, _kill_check_note(listed, by_stage, links, economy, counted, dropped, astray),
-                        _gap_notes(stage_rows, economy, unit, enemy_curve)) + pace_notes + walk_notes + _greybox_note(rows, greybox_log),
+                        _gap_notes(stage_rows, economy, unit, enemy_curve)) + pace_notes + walk_notes + _greybox_note(rows, greybox_log, played_stages),
         "pacing": {"used": _pace_used(data, ordered), "time_unit": unit, "carry_levels": settings["carry_levels"], "strong_at": round(settings["strong_at"], 4),
                    "order": [lv["id"] for lv in ordered], **pacing},
         "encounters": computed,
