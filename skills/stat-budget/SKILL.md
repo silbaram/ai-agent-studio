@@ -47,7 +47,7 @@ description: "Sets stat budget curves per tier, zone, or level with per-stat cos
 
 ### 3. 벗어난 항목을 읽는다
 
-- `over_budget` / `under_budget`: 기대 예산의 허용 범위를 벗어났다. 의도한 예외(초반 함정 아이템, 특수한 정예)면 **그 항목의** `acknowledged`에 `{"over_budget": "이유"}`를 적는다. 사용자 확인 없이 혼자 적지 않는다.
+- `over_budget` / `under_budget`: 기대 예산의 허용 범위를 벗어났다. 의도한 예외(초반 함정 아이템, 특수한 정예)면 **그 항목의** `acknowledged`에 `{"over_budget": "이유"}`를 적는다. 사용자 확인 없이 혼자 적지 않는다. 사용자가 그 값을 정했거나 경고 처리를 맡겼으면 확인으로 본다. 이유에 누가 언제 정했는지(날짜)를 적고 확인한 것을 보고한다. 예: `"사용자 결정(2026-11-07): 시작 무기 초당 발사 1.5"`.
 - `stat_without_cost`: 원가가 없는 스탯이 있어 비교하지 못했다. 원가를 정하거나, 예산 밖 효과라면 그 항목에 `unique_effect: true`를 붙인다.
 - `unique_effect` 아이템은 비교에서 빠진다("판정 제외").
 - 숫자를 손으로 맞춰 곡선 안에 넣지 않는다. 바꿨다면 무엇을 왜 바꿨는지와 전·후 비율을 남긴다.

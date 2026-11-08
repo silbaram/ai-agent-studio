@@ -354,7 +354,7 @@ class SourceFiles(unittest.TestCase):
         self.root = Path(self.tmp.name)
         (self.root / "playtests/pt_a").mkdir(parents=True)
         for name in ("runs.csv", "summary.txt"):
-            (self.root / "playtests/pt_a" / name).write_text("x", encoding="utf-8")
+            (self.root / "playtests/pt_a" / name).write_text("1단계 33%\n", encoding="utf-8")   # 결과 파일에 옮긴 값이 있어야 한다(264번)
 
     def check(self, logs=("playtests/pt_a/runs.csv",), **over):
         s = session(logs=list(logs), **over)

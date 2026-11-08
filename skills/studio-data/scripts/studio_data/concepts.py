@@ -6,6 +6,10 @@
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import unicodedata
+
 from . import provenance
 from .common import ID_PATTERN, STATUSES, check_identity, is_active, is_int, josa
 from .common import did_you_mean as _did_you_mean
@@ -131,15 +135,47 @@ def check_concept(c: dict, where: str, errors: list, warnings: list, ctx: dict |
     return ok
 
 
-SAMPLE_KEYS = ("players", "runs")
+SAMPLE_KEYS = ("players", "runs", "events")
+CRITERIA_KEYS = ("claim", "failure_signal", "test", "sample")  # 판정 기준. 이 칸이 바뀌면 지난 판정은 지금 기준의 판정이 아니다
+
+
+def sample_problem(v) -> str | None:
+    """가설 최소 표본의 형식 문제. 맞으면 None."""
+    if not (isinstance(v, dict) and v):
+        return "sample은 {players: 사람 수, runs: 판 수, events: {사건 이름: 건수}} 중 하나 이상을 적은 객체입니다"
+    bad = sorted(str(k) for k in v if k not in SAMPLE_KEYS)
+    if bad:
+        return f"sample에 알 수 없는 키 {', '.join(bad)}.{''.join(_did_you_mean(k, SAMPLE_KEYS) for k in bad)} 쓸 수 있는 키는 {', '.join(SAMPLE_KEYS)}입니다"
+    if any(not is_int(v[k], 1) for k in ("players", "runs") if k in v):
+        return "sample의 players와 runs는 1 이상의 정수입니다"
+    ev = v.get("events")
+    if "events" in v and not (isinstance(ev, dict) and ev and all(isinstance(k, str) and ID_PATTERN.match(k) and is_int(x, 1) for k, x in ev.items())):
+        return "sample.events는 {사건 이름(소문자·숫자·밑줄): 1 이상의 정수} 객체입니다"
+    return None
 
 
 def read_sample(v) -> dict | None:
-    """가설의 최소 표본 {players, runs}: 확정 판정에 필요한 사람 수와 판 수(세션을 합친 값). 형식이 틀리면 None."""
-    if not (isinstance(v, dict) and v and set(v) <= set(SAMPLE_KEYS)
-            and all(is_int(x, 1) for x in v.values())):
+    """가설의 최소 표본 {players, runs, events}: 확정 판정에 필요한 사람 수, 판 수, 사건 수(세션을 합친 값). 형식이 틀리면 None."""
+    if sample_problem(v) is not None:
         return None
-    return {k: v[k] for k in SAMPLE_KEYS if k in v}
+    return {k: (dict(v[k]) if k == "events" else v[k]) for k in SAMPLE_KEYS if k in v}
+
+
+def _nfc(v):
+    if isinstance(v, str):
+        return unicodedata.normalize("NFC", v)
+    if isinstance(v, dict):
+        return {k: _nfc(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_nfc(x) for x in v]
+    return v
+
+
+def criteria_stamp(h: dict) -> str:
+    """판정 기준의 지문(주장, 틀렸다는 신호, 확인 방법, 최소 표본). 판정의 criteria에 남기면 판정 뒤에 기준이 바뀐 것을 안다.
+    키 순서와 유니코드 정규화(NFC)가 다른 것은 바뀐 것으로 보지 않는다."""
+    body = json.dumps({k: _nfc(h.get(k)) for k in CRITERIA_KEYS}, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:8]
 
 
 def check_brief(c: dict, where: str, errors: list, warnings: list | None = None) -> None:
@@ -173,9 +209,9 @@ def check_brief(c: dict, where: str, errors: list, warnings: list | None = None)
              f"brief.hypotheses[{n}]에 claim, failure_signal(틀렸다는 신호), test가 필요합니다.")
         if not isinstance(h, dict):
             continue
-        if "sample" in h and read_sample(h["sample"]) is None:
-            errors.append({"code": "schema", "where": where,
-                           "message": f"brief.hypotheses[{n}].sample은 {{players: 사람 수, runs: 판 수}} 중 하나 이상을 1 이상의 정수로 씁니다: {h['sample']!r}"})
+        problem = sample_problem(h["sample"]) if "sample" in h else None
+        if problem:
+            errors.append({"code": "schema", "where": where, "message": f"brief.hypotheses[{n}]: {problem}: {h['sample']!r}"})
         elif "sample" not in h:
             warnings.append({"code": "hypothesis_sample_missing", "where": where,
                              "message": f"brief.hypotheses[{n}]({h.get('id') or '이름 없음'})에 최소 표본(sample: {{players, runs}})이 없습니다. "
@@ -274,6 +310,22 @@ def check_structure(active: list[dict], warnings: list, fixed: dict | None = Non
             "fixed_axes": dict(sorted(fixed.items()))}
 
 
+def _approved_criteria(valid: list) -> dict:
+    """선택한 컨셉의 가설별 기준 지문 {컨셉.가설: 지문}. 판정 에이전트가 판정할 때 읽은 기준을 판정에 남기려고 쓴다."""
+    out = {}
+    for c in valid:
+        hyps = (c.get("brief") or {}).get("hypotheses") if c.get("status") == "approved" and isinstance(c.get("brief"), dict) else None
+        for h in hyps if isinstance(hyps, list) else []:
+            if isinstance(h, dict) and isinstance(h.get("id"), str):
+                out[f"{c['id']}.{h['id']}"] = criteria_stamp(h)
+    return out
+
+
+def print_extra(report: dict) -> None:
+    if report.get("criteria"):
+        print("판정 기준 지문: " + " · ".join(f"{k} {v}" for k, v in report["criteria"].items()))
+
+
 def validate(data: dict) -> dict:
     errors: list = []
     warnings: list = []
@@ -312,6 +364,7 @@ def validate(data: dict) -> dict:
         "count": len(valid),
         "status_counts": status_counts,
         "approved": sorted(c["id"] for c in valid if c.get("status") == "approved"),
+        "criteria": _approved_criteria(valid),
         "unverified": unverified,
         "stress_summary": {c["id"]: {r: sum(1 for s in c.get("stress", []) if s.get("result") == r) for r in POLICY_RESULTS} for c in valid},
         **structure,
@@ -321,7 +374,7 @@ def validate(data: dict) -> dict:
 
 
 def hypothesis_index(data: dict) -> dict:
-    """플레이 기록 검사용: {컨셉 id: {approved, hypotheses: [가설 id 또는 None, ...]}}. 형식이 틀린 항목은 건너뛴다.
+    """플레이 기록 검사용: {컨셉 id: {approved, hypotheses: [가설 id 또는 None, ...], samples, criteria(가설별 기준 지문)}}. 형식이 틀린 항목은 건너뛴다.
     concepts 배열 자체가 없으면 None(읽지 못함)을 돌려준다. 빈 결과로 돌려주면 모든 참조가 '없는 컨셉'으로 연쇄 보고된다."""
     if not isinstance(data.get("concepts"), list):
         return None
@@ -332,9 +385,10 @@ def hypothesis_index(data: dict) -> dict:
         hyps = (c.get("brief") or {}).get("hypotheses") if isinstance(c.get("brief"), dict) else None
         hyps = hyps if isinstance(hyps, list) else []
         ids = [h.get("id") if isinstance(h, dict) and isinstance(h.get("id"), str) else None for h in hyps]
-        samples = {h["id"]: read_sample(h.get("sample")) for h in hyps
-                   if isinstance(h, dict) and isinstance(h.get("id"), str) and read_sample(h.get("sample"))}
-        out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids, "samples": samples}
+        named = [h for h in hyps if isinstance(h, dict) and isinstance(h.get("id"), str)]
+        samples = {h["id"]: read_sample(h.get("sample")) for h in named if read_sample(h.get("sample"))}
+        criteria = {h["id"]: criteria_stamp(h) for h in named}
+        out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids, "samples": samples, "criteria": criteria}
     return out
 
 

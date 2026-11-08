@@ -184,7 +184,7 @@ const LABEL = {
   result: { dominates: "지배", competitive: "대등", loses: "짐", unknown: "미확인" },
   verdict: { holds: "버팀", refuted: "틀림", unknown: "모름" },
   verdictStatus: { proposed: "판정 제안", approved: "판정 확정", cut: "지난 판정", unspecified: "상태 미지정" },
-  note: { observation: "관찰", preference: "선호" },
+  note: { observation: "관찰", preference: "선호", deviation: "절차 이탈" },
   form: { flat: "고정값 감산", ratio: "비율", level_ratio: "레벨 비율", percent: "직접 퍼센트" },
   formText: { flat: "공격 − 방어 × factor (최소 min_damage)", ratio: "공격 × k / (k + 방어)", level_ratio: "공격 × k / (k + 방어), k = a × level + b", percent: "공격 × (1 − min(방어, cap) / 100)" },
   metric: { hits_to_kill: "처치 타수", time_to_kill: "처치 시간(초)", hits_to_die: "버티는 타수", time_to_die: "버티는 시간(초)" },
@@ -213,7 +213,7 @@ const LABEL = {
           fixed_axis_mismatch: "고정 축과 다름", unknown_policy: "모르는 전략", untagged_number: "태그 없는 수치",
           item_unchecked: "아이템 미확인", requirement_unchecked: "선행 조건 미확인",
           unknown_concept: "없는 컨셉", unknown_hypothesis: "없는 가설", verdict_without_evidence: "근거 세션 없음",
-          unknown_session: "없는 세션", session_concept_mismatch: "다른 컨셉 세션", observation_missing: "관찰값 없음", verdict_sample_short: "최소 표본에 못 미친 판정", source_missing: "없는 기록 파일", computed_without_output: "결과 파일 없는 계산값", session_beyond_records: "기록보다 많은 판·사람",
+          unknown_session: "없는 세션", session_concept_mismatch: "다른 컨셉 세션", observation_missing: "관찰값 없음", verdict_sample_short: "최소 표본에 못 미친 판정", source_missing: "없는 기록 파일", computed_without_output: "결과 파일 없는 계산값", session_beyond_records: "기록보다 많은 판·사람", verdict_criteria_missing: "기준 지문 없는 판정", verdict_criteria_changed: "기준이 바뀐 판정", verdict_events_short: "사건 수가 모자란 버팀", value_not_in_source: "결과 파일에 없는 값", approved_concept_refuted: "틀림으로 확정된 가설", unknown_event: "가설에 없는 사건",
           duplicate_verdict: "판정 중복", session_without_observations: "관찰 없는 세션",
           missing_stat: "스탯 없음", negative_defense: "음수 방어", unknown_enemy: "없는 적", unknown_upgrade: "없는 강화",
           cut_referenced: "삭제 항목 참조", zero_damage: "피해 0", target_out_of_range: "목표 이탈", stage_without_enemies: "적 없는 단계",
@@ -1165,11 +1165,13 @@ function renderPlaytests(ds, idx) {
         el("td", {}, el("span", { class: "pill vd-" + v.result, text: LABEL.verdict[v.result] || String(v.result) })),
         el("td", {}, el("span", { class: "pill st-" + st, text: LABEL.verdictStatus[st] || st })),
         el("td", { class: "mono" }, Array.isArray(v.sessions) && v.sessions.length ? v.sessions.join(", ") : dash()),
-        el("td", {}, sample ? `세션 ${sample.sessions} · ${sample.runs}판 · ${sample.players}명` : dash(ds.report ? "–" : "서버 모드")),
+        el("td", {}, sample ? computed[where].sample_text : dash(ds.report ? "–" : "서버 모드")),   // check의 판정 줄과 같은 글
         el("td", { class: "text" }, v.reason || dash()));
     });
   const gate = ds.report && ds.report.unverified && ds.report.unverified.length
     ? el("div", { class: "group-note", text: "확정된 버팀·틀림이 아닌 가설: " + ds.report.unverified.join(", ") }) : null;
+  const refutedNote = ds.report && ds.report.refuted && ds.report.refuted.length
+    ? el("div", { class: "group-note", text: "틀림으로 확정된 가설(선택한 컨셉): " + ds.report.refuted.join(", ") }) : null;
   // 상태 필터는 판정에만 적용한다. 세션에는 상태가 없다.
   const srows = sessions.filter((e) => matches(ds, { ...e, status: ui(ds).status || undefined }, idx.byEntry[e.id]))
     .sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.id).localeCompare(String(b.id)))
@@ -1206,7 +1208,7 @@ function renderPlaytests(ds, idx) {
     el("section", { class: "panel", id: "group-all" },
       el("div", { class: "ph" }, el("h2", {}, "가설 판정", el("span", { class: "muted", text: `${vrows.length} / ${verdicts.length}` }),
         el("span", { class: "group-meta", text: "기록만 근거로 합니다. 재미를 점수로 매기지 않습니다. 확정은 사용자가 합니다." }))),
-      gate, ...other,
+      gate, refutedNote, ...other,
       table(["가설", "판정", "상태", "근거 세션", "표본", "이유"], vrows, "판정이 아직 없습니다.")),
     el("section", { class: "panel" },
       el("div", { class: "ph" }, el("h2", {}, "세션", el("span", { class: "muted", text: `${srows.length} / ${sessions.length}` }))),

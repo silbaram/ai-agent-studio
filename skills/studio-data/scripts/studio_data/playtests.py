@@ -11,20 +11,24 @@ import posixpath
 import re
 from pathlib import Path
 
-from .common import STATUSES, ack_reason, check_identity, did_you_mean, is_int, is_number, unknown_keys_text, josa
+from .common import ID_PATTERN, STATUSES, ack_reason, check_identity, did_you_mean, is_int, is_number, unknown_keys_text, josa
 from .common import add_issue as _err
 
 RESULTS = ("holds", "refuted", "unknown")
 RESULT_LABEL = {"holds": "버팀", "refuted": "틀림", "unknown": "모름"}
 DECIDED = ("holds", "refuted")
-NOTE_KINDS = ("observation", "preference")
+NOTE_KINDS = ("observation", "preference", "deviation")  # deviation: 가설 test의 시험 절차를 어긴 일(순서, 중간 결과를 본 뒤 플레이 등)
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 PATH_LIKE = re.compile(r"^(?!.*://).*\.[A-Za-z][A-Za-z0-9]{0,4}$")  # 확장자로 끝나는 source만 파일로 본다. URL, 말, 앵커(#), 판 번호(v1.2)는 보지 않는다
 COMPUTED = "[계산"
+CRITERIA = re.compile(r"^[0-9a-f]{8}$")
+NUMBER = re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")  # 낱말에 붙은 수(pt_2, v1.2)는 보지 않는다. 0-60은 0과 60이다. 1e-05는 수 하나다
+DATE_TIME = re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?")  # 관찰값의 날짜·시각은 수로 보지 않는다
+SOURCE_READ_LIMIT = 5_000_000
 STAGE_FIELDS = {"stage", "entered", "cleared", "level", "duration", "kills", "income", "source", "note"}
 GROUP_FIELDS = {"upgrades", "growth_build", "variant", "runs", "players", "stage_stats"}
 GREYBOX_FIELDS = {"check", "value", "passed", "n", "source", "note"}
-SESSION_FIELDS = {"id", "date", "concept", "build", "players", "runs", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note"}
+SESSION_FIELDS = {"id", "date", "concept", "build", "players", "runs", "events", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note"}
 TOP_FIELDS = {"playtests", "verdicts", "note"}
 REF_LABEL = {"stages": "전투 단계", "upgrades": "영구 강화", "enemies": "적", "builds": "판 안 성장 빌드", "currencies": "재화", "greybox": "그레이박스 확인"}
 UNCHECKED_REASON = {
@@ -252,6 +256,10 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
     if not is_int(runs, 1):
         _err(errors, "schema", where, f"runs(판 수)는 1 이상의 정수여야 합니다: {runs!r}")
         ok = False
+    ev = s.get("events")
+    if "events" in s and not (isinstance(ev, dict) and all(isinstance(k, str) and ID_PATTERN.match(k) and is_int(x, 0) for k, x in ev.items())):
+        _err(errors, "schema", where, "events는 {사건 이름(소문자·숫자·밑줄): 이 세션에서 센 건수(0 이상의 정수)} 객체입니다. 이름은 가설 sample.events와 같게 씁니다.")
+        ok = False
     obs = s.get("observations", [])
     if not isinstance(obs, list):
         _err(errors, "schema", where, "observations는 배열이어야 합니다.")
@@ -269,7 +277,7 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
                                         "판정 에이전트는 스크립트를 돌리지 못하므로, 계산 출력을 세션 폴더에 결과 파일로 남기고 source로 둡니다."})
     notes = s.get("notes", [])
     if not (isinstance(notes, list) and all(isinstance(x, dict) and x.get("kind") in NOTE_KINDS and _text(x.get("text")) for x in notes)):
-        _err(errors, "schema", where, "notes는 {kind: observation(관찰) / preference(선호), text} 배열이어야 합니다.")
+        _err(errors, "schema", where, "notes는 {kind: observation(관찰) / preference(선호) / deviation(절차 이탈), text} 배열이어야 합니다.")
         ok = False
     logs = s.get("logs", [])
     if not (isinstance(logs, list) and all(_text(x) for x in logs)):
@@ -304,7 +312,28 @@ def check_verdict(v, n: int, errors: list) -> str | None:
     if not (isinstance(sessions, list) and all(_text(x) for x in sessions)):
         _err(errors, "schema", where, "sessions는 세션 id(문자열) 배열이어야 합니다.")
         ok = False
+    if "criteria" in v and not (isinstance(v["criteria"], str) and CRITERIA.match(v["criteria"])):
+        _err(errors, "schema", where, f"criteria(판정 기준 지문)는 소문자 16진수 8자입니다. 지금 지문은 check가 알려 줍니다: {v['criteria']!r}")
+        ok = False
     return where if ok else None
+
+
+def _check_criteria(v: dict, where: str, concepts: dict | None, warnings: list) -> str:
+    """판정의 기준 지문(criteria)을 지금 가설 기준과 견준다. ok / missing(지문 없음) / changed(판정 뒤에 기준이 바뀜)."""
+    current = concepts[v["concept"]].get("criteria", {}).get(v["hypothesis"]) if concepts is not None else None
+    if not current:
+        return "ok"
+    if "criteria" not in v:
+        warnings.append({"code": "verdict_criteria_missing", "where": where,
+                         "message": "판정에 기준 지문이 없어 판정 뒤에 기준(claim, failure_signal, test, sample)이 바뀌어도 알 수 없습니다. 확정해도 게이트(--fail-on-assumed)를 넘지 못합니다. "
+                                    f"판정 에이전트가 돌려준 지문을 적습니다. 판정한 뒤 가설을 고치지 않았으면 지금 지문을 적어도 됩니다: \"criteria\": \"{current}\"."})
+        return "missing"
+    if v["criteria"] == current:
+        return "ok"
+    warnings.append({"code": "verdict_criteria_changed", "where": where,
+                     "message": "판정 뒤에 가설 기준(claim, failure_signal, test, sample)이 바뀌었습니다. 지금 기준으로 다시 판정하고 이 판정은 cut으로 둡니다. "
+                                f"뜻이 같은 고침(맞춤법 등)이면 사용자와 확인한 뒤 criteria를 고칩니다(지금 지문: {current}). 확정 판정이어도 게이트를 넘지 못합니다."})
+    return "changed"
 
 
 def _hypothesis_ref(concept: str, hyp: str, where: str, concepts: dict, errors: list) -> bool:
@@ -381,6 +410,72 @@ def _check_files(s: dict, root: Path, warnings: list) -> None:
                              "message": f"{label}의 기록 파일이 없습니다: {raw}. 경로는 프로젝트 폴더 기준입니다. 옮겼으면 경로를 고칩니다."})
 
 
+def _check_event_names(s: dict, info: dict, warnings: list) -> None:
+    """세션 events의 사건 이름이 그 컨셉의 어느 가설 sample.events에도 없으면 그 건수는 어떤 판정에도 세지 않는다(오타)."""
+    known = {name for smp in info.get("samples", {}).values() for name in smp.get("events") or {}}
+    for name in s.get("events") or {}:
+        if name not in known:
+            hint = did_you_mean(name, known) if known else f" {s['concept']}의 가설에 sample.events가 없습니다."
+            warnings.append({"code": "unknown_event", "where": s["id"],
+                             "message": f"events의 사건 {josa(name, '이가')} 가설 sample.events에 없습니다.{hint} 이 건수는 어느 판정에도 세지 않습니다. 이름을 sample.events와 맞춥니다."})
+
+
+def _result_numbers(path: Path, cache: dict):
+    """결과 파일의 수(값) 집합. 파일마다 한 번만 읽는다. 읽지 못하거나 너무 크면 None."""
+    if path not in cache:
+        try:
+            ok = path.is_file() and path.stat().st_size <= SOURCE_READ_LIMIT
+            cache[path] = {float(x) for x in NUMBER.findall(path.read_text(encoding="utf-8", errors="replace"))} if ok else None
+        except OSError:
+            cache[path] = None
+    return cache[path]
+
+
+def _check_values(s: dict, root: Path, warnings: list, cache: dict) -> None:
+    """계산한 관찰값의 수가 결과 파일(source)에 글자 그대로 있는가. 결과 파일을 열지 않고 옮겨 적으면 틀린 수가 들어간다.
+    수는 값으로 맞춘다(1과 1.0은 같다). 원본 기록을 가리키면 computed_without_output이, 없는 파일이면 source_missing이 말한다."""
+    for n, o in enumerate(s.get("observations") or []):
+        src = o.get("source")
+        if COMPUTED not in str(o.get("note") or "") or not (_text(src) and PATH_LIKE.search(src.strip())) or _same_path(src, s.get("logs")):
+            continue
+        path = Path(_norm_path(src))
+        have = _result_numbers(path if path.is_absolute() else root / path, cache)
+        if have is None:
+            continue
+        missing = [x for x in dict.fromkeys(NUMBER.findall(DATE_TIME.sub(" ", str(o.get("value"))))) if float(x) not in have]
+        if missing:
+            warnings.append({"code": "value_not_in_source", "where": s["id"],
+                             "message": f"observations[{n}]의 값에 결과 파일 {src}에 없는 수가 있습니다: {', '.join(missing)}. "
+                                        "결과 파일의 수를 반올림하거나 고치지 않고 그대로 옮깁니다. 문턱값은 value가 아니라 판정 reason에 씁니다."})
+
+
+def _events(sessions: list, names) -> dict:
+    """사건별 {count: 근거 세션이 센 건수 합, missing: 그 사건을 세지 않은 세션 수}."""
+    out = {}
+    for name in names:
+        counted = [s["events"][name] for s in sessions if name in (s.get("events") or {})]
+        out[name] = {"count": sum(counted), "missing": len(sessions) - len(counted)}
+    return out
+
+
+def _events_text(have: dict, need: dict) -> str:
+    return ", ".join(f"{name} {e['count']}/{need[name]}" + (f"(세지 않은 세션 {e['missing']}개)" if e["missing"] else "") for name, e in have.items())
+
+
+def _against(have: dict, need: dict | None, key: str, unit: str) -> str:
+    return f"{have[key]}/{need[key]}{unit}" if need and key in need else f"{have[key]}{unit}"
+
+
+def _sample_line(have: dict, need: dict | None, deviations: int) -> str:
+    """판정의 표본 글: 근거 세션 수, 판·사람(최소 표본과 나란히), 사건 수, 절차 이탈. check 출력과 뷰어가 같은 글을 쓴다."""
+    parts = [f"세션 {have['sessions']}", _against(have, need, "runs", "판"), _against(have, need, "players", "명")]
+    if have.get("events"):
+        parts.append("사건 " + _events_text(have["events"], need["events"]))
+    if deviations:
+        parts.append(f"절차 이탈 {deviations}건")
+    return " · ".join(parts)
+
+
 def _sample(sessions: list) -> dict:
     """세션들을 합친 표본: 세션 수, 판 수, 사람 수(같은 이름은 한 사람). 판별 로그 묶음이 있으면 로그를 넘지 않는다."""
     counted = [_counted(s) for s in sessions]
@@ -408,12 +503,14 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         _err(errors, "schema", "verdicts", "verdicts는 배열이어야 합니다.")
         raw_verdicts = []
     sessions = {s["id"]: s for _, s in check_identity(raw, "playtests", errors) if check_session(s, errors, warnings)}
+    numbers: dict = {}   # 결과 파일마다 한 번 읽은 수
     unchecked = 0
     missing_refs: set = set()
     for s in sessions.values():
         check_refs(s, refs, errors, warnings, missing_refs)
         if root is not None:
             _check_files(s, root, warnings)
+            _check_values(s, root, warnings, numbers)
         observed = [o["hypothesis"] for o in s.get("observations", [])]
         if concepts is None:
             unchecked += 1
@@ -422,6 +519,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         else:
             for h in dict.fromkeys(observed):
                 _hypothesis_ref(s["concept"], h, s["id"], concepts, errors)
+            _check_event_names(s, concepts[s["concept"]], warnings)
 
     verdicts: dict = {}
     status_counts = {st: 0 for st in STATUSES + ("unspecified",)}
@@ -440,6 +538,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
             unchecked += 1
         elif not _hypothesis_ref(v["concept"], v["hypothesis"], where, concepts, errors):
             continue
+        criteria = _check_criteria(v, where, concepts, warnings)
         cited = v.get("sessions", [])
         if v["result"] in DECIDED and not cited:
             _err(errors, "verdict_without_evidence", where,
@@ -461,13 +560,23 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         seen = [s for s in found if any(o["hypothesis"] == v["hypothesis"] for o in s.get("observations", []))]
         have = _sample(seen)   # 그 가설을 관찰한 근거 세션만 센다. 출력과 게이트가 같은 값을 쓴다
         need = concepts[v["concept"]].get("samples", {}).get(v["hypothesis"]) if concepts is not None else None
-        if v["result"] in DECIDED and seen and need and any(have[k] < need[k] for k in need):   # 관찰값이 없으면 observation_missing이 말한다
+        if need and "events" in need:
+            have["events"] = _events(seen, need["events"])
+        if v["result"] in DECIDED and seen and need and any(have[k] < need[k] for k in ("players", "runs") if k in need):   # 관찰값이 없으면 observation_missing이 말한다
             _err(errors, "verdict_sample_short", where,
                  f"{RESULT_LABEL[v['result']]} 판정의 근거 표본({_sample_text(have)})이 가설의 최소 표본({_sample_text(need)})보다 적습니다. "
                  "세션을 더 하거나 unknown(모름)으로 둡니다. 표본을 바꾸려면 브리프의 sample을 사용자와 고칩니다.")
-        verdicts[where] = {"result": v["result"], "status": status, "reason": v["reason"], "sample": have}
+        short = {k: e for k, e in have.get("events", {}).items() if e["count"] < need["events"][k]}
+        if v["result"] == "holds" and seen and short:   # 틀림은 사건에 기대지 않는 다른 쪽 신호로 낼 수 있어 막지 않는다
+            _err(errors, "verdict_events_short", where,
+                 f"버팀 판정의 근거 사건 수({_events_text(short, need['events'])})가 가설의 최소 사건 수보다 적습니다. "
+                 "사건에 기대는 쪽 신호를 가리지 못했으면 버팀이 아니라 unknown(모름)입니다. 세션마다 그 세션에서 센 건수를 events에 적습니다(세지 않은 세션은 0으로 셉니다).")
+        deviations = sum(1 for s in found for x in s.get("notes") or [] if x.get("kind") == "deviation")
+        verdicts[where] = {"result": v["result"], "status": status, "reason": v["reason"], "sample": have, "need": need,
+                           "deviations": deviations, "criteria": criteria, "sample_text": _sample_line(have, need, deviations)}
 
     unverified: list = []
+    refuted: list = []
     if concepts is not None:
         for cid, info in sorted(concepts.items()):
             if not info["approved"]:
@@ -475,8 +584,15 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
             for i, h in enumerate(info["hypotheses"]):
                 key = f"{cid}.{h}" if h else f"{cid}.brief.hypotheses[{i}]"
                 got = verdicts.get(key)
-                if not (got and got["result"] in DECIDED and got["status"] == "approved"):
+                decided = bool(got) and got["result"] in DECIDED and got["status"] == "approved"
+                if not decided or got["criteria"] != "ok":   # 지문이 없거나 기준이 바뀐 확정 판정은 지금 기준의 판정인지 모른다
                     unverified.append(key)
+                if decided and got["result"] == "refuted" and got["criteria"] != "changed":   # 기준을 고쳤으면 다시 시험하는 중이다
+                    refuted.append(key)
+                    warnings.append({"code": "approved_concept_refuted", "where": key,
+                                     "message": "선택(approved)한 컨셉의 가설이 틀림으로 확정됐습니다. 이 가설에 기대는 다음 단계로 가지 않습니다. "
+                                                "가설이 기대는 규칙 하나를 바꿔 다시 시험하거나(브리프의 prototype과 가설을 고치고 다시 판정) 컨셉을 되돌릴지 사용자와 정합니다. "
+                                                "가설 기준을 고치거나 다시 판정하거나 컨셉 상태를 바꾸면 사라집니다."})
     counts = {r: sum(1 for x in verdicts.values() if x["result"] == r) for r in RESULTS}
     reason = None
     if unchecked:
@@ -488,6 +604,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         "result_counts": counts,
         "verdicts": verdicts,
         "unverified": unverified,
+        "refuted": refuted,
         "unchecked": unchecked + len(missing_refs),
         "unchecked_reason": reason,
         "unchecked_refs": sorted(missing_refs),
@@ -498,9 +615,8 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
 
 def print_extra(result: dict) -> None:
     for where, v in result["verdicts"].items():
-        s = v["sample"]
         state = "확정" if v["status"] == "approved" else "제안"
-        print(f"{where}: {RESULT_LABEL[v['result']]} ({state}) · 관찰한 근거 세션 {s['sessions']} · {s['runs']}판 · {s['players']}명")
+        print(f"{where}: {RESULT_LABEL[v['result']]} ({state}) · 관찰한 근거 {v['sample_text']}")
     if result["unchecked_reason"]:
         print(f"컨셉·가설 참조 미확인({UNCHECKED_REASON.get(result['unchecked_reason'], '')}): {result['unchecked'] - len(result['unchecked_refs'])}건")
     if result["unchecked_refs"]:

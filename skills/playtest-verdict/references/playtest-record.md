@@ -25,7 +25,8 @@
   ],
   "verdicts": [
     { "concept": "ripening_gems", "hypothesis": "density_timing", "result": "holds",
-      "sessions": ["pt_20261105_1"], "reason": "1배·2배에서 같은 단계 비율이 80% [가정] 미만", "status": "proposed" }
+      "sessions": ["pt_20261105_1"], "reason": "1배·2배에서 같은 단계 비율이 80% [가정] 미만",
+      "criteria": "9c41e07a", "status": "proposed" }
   ]
 }
 ```
@@ -40,14 +41,19 @@
 | `build` | 예 | 빌드를 다시 만들 수 있는 이름. 보통 커밋 해시 |
 | `players` | 예 | 플레이한 사람 이름 배열. 같은 사람은 같은 이름으로 쓴다(사람 수를 센다) |
 | `runs` | 예 | 이 세션의 판 수 합계 |
-| `observations` | 아니오 | `[{hypothesis, value, metric, n, source, note}]`. `hypothesis`(가설 id)와 `value`(문자열 또는 수)가 필수. 없고 단계 기록도 없으면 경고. 스크립트로 계산한 값은 그 출력을 세션 폴더에 결과 파일로 남기고 `source`를 그 파일로, `note`를 `[계산: 스크립트]`로 적는다 |
-| `notes` | 아니오 | `[{kind: observation / preference, text}]` |
+| `events` | 아니오 | 가설 `sample.events`의 사건을 이 세션에서 센 건수 `{사건 이름: 0 이상의 정수}`. 이름은 `sample.events`와 같게 쓴다. 적지 않은 세션은 그 사건을 0건으로 센다 |
+| `observations` | 아니오 | `[{hypothesis, value, metric, n, source, note}]`. `hypothesis`(가설 id)와 `value`(문자열 또는 수)가 필수. 없고 단계 기록도 없으면 경고. 스크립트로 계산한 값은 그 출력을 세션 폴더에 결과 파일로 남기고 `source`를 그 파일로, `note`를 `[계산: 스크립트]`로 적는다. `value`의 수는 결과 파일의 수를 그대로 옮긴다 |
+| `notes` | 아니오 | `[{kind: observation / preference / deviation, text}]`. `deviation`은 가설 `test`의 시험 절차를 어긴 일이다(정한 설정 순서를 지키지 않음, 중간 결과를 본 뒤 플레이함) |
 | `logs` | 아니오 | 원본 기록 파일 경로 배열(프로젝트 폴더 기준). 계산 결과 파일은 넣지 않는다 |
 | `stage_stats`, `upgrades`, `growth_build`, `groups` | 아니오 | 단계별 판 수와 평균 레벨·길이·처치·수입, 그때 가진 영구 강화, 판 안 성장 빌드, 강화 상태별 묶음. 묶음에는 강화 밖의 시험 조건 `variant`(`{로그 열: 값}`, `runlog --group-by`가 쓴다)와 그 묶음의 판 수 `runs`, 그 묶음을 한 사람 `players`(둘 다 runlog가 쓴다)를 달 수 있다. 가정값을 보정할 때 쓴다([calibration](calibration.md)) |
 | `greybox` | 아니오 | 레벨의 그레이박스 확인 기록 `[{check, value, passed, n, source, note}]`. `check`는 `levels.json`의 항목 id다. 재었으면 `value`(수), 재지 못하면 `passed`(true나 false)를 적는다. 둘 중 하나는 필요하다. `n`은 해 본 판 수로 1 이상이다. 해 보지 않았으면 기록을 적지 않는다. 날짜순 마지막 기록이 판정이 된다. 같은 날짜면 세션 id의 순번순이다. 항목 id의 오타는 기록을 버리므로 오류다. 비슷한 이름이 없는 id는 지운 항목의 기록으로 보고 경고한다 |
 | `acknowledged` | 아니오 | 확인을 마친 경고 `{경고 코드: 이유}` |
 
-`value`에는 해석이 아니라 본 것을 적는다. "개선됨" 대신 "42% → 18%". 사람마다 다르면 사람별로 적는다.
+`value`에는 해석이 아니라 본 것을 적는다. "개선됨" 대신 "42% → 18%". 사람마다 다르면 사람별로 적는다. 문턱값(`-0.2 [가정]`)은 `value`가 아니라 판정의 `reason`에 적는다.
+
+### 여러 세션을 합친 값
+
+판을 합쳐 다시 계산해야 하는 지표(구간 안 상관, 전체 비율)를 여러 세션에 걸쳐 모았으면, 세션별 결과를 평균 내지 않는다. 근거 세션의 원본 로그를 모두 넣어 한 번 계산하고 결과 파일을 마지막 세션 폴더에 둔다. 관찰값은 마지막 세션에 적고 `note`에 합친 세션 id를 적는다(`[계산: game/summarize.py] pt_a + pt_b 합침`). 판정의 `sessions`에는 합친 세션을 모두 적는다. 앞 세션의 기록은 고치지 않는다.
 
 ## 판정 (`verdicts`)
 
@@ -58,8 +64,9 @@
 | `reason` | 예 | 관찰값을 `failure_signal`에 어떻게 적용했는지. 모름이면 무엇이 부족한지 |
 | `sessions` | 버팀·틀림이면 예 | 근거 세션 id 배열. 그 세션에 이 가설의 관찰값이 있어야 한다 |
 | `status` | 아니오 | `proposed`(판정 에이전트 제안) / `approved`(사용자 확인) / `cut`(지난 판정) |
+| `criteria` | 아니오 | 판정할 때의 가설 기준 지문(소문자 16진수 8자). `claim`, `failure_signal`, `test`, `sample`로 낸다. `check`가 선택한 컨셉의 가설마다 `판정 기준 지문:` 줄로 보이고, 판정 에이전트가 판정에 담아 돌려준다. 없으면 확정해도 게이트를 넘지 못한다 |
 
-가설 하나에 `cut`이 아닌 판정은 하나만 둔다. 다시 판정하면 지난 것을 `cut`으로 남긴다.
+가설 하나에 `cut`이 아닌 판정은 하나만 둔다. 다시 판정하면 지난 것을 먼저 `cut`으로 바꾸고 같은 편집에서 새 판정을 넣는다. `cut`인 판정의 `criteria`는 보지 않는다.
 
 ### 판정
 
@@ -67,7 +74,7 @@
 |---|---|
 | `holds` | 관찰값이 있고, `failure_signal`이 나오지 않았다 |
 | `refuted` | 관찰값에서 `failure_signal`이 나왔다 |
-| `unknown` | 관찰값이 없다 / 표본이 가설의 `sample`(없으면 `test`에 적은 계획)보다 적다 / 신호가 나왔는지 기록으로 가릴 수 없다 |
+| `unknown` | 관찰값이 없다 / 표본이 가설의 `sample`(없으면 `test`에 적은 계획)보다 적다 / 사건 수가 `sample.events`보다 적어 그 사건에 기대는 신호를 가릴 수 없다 / 신호가 나왔는지 기록으로 가릴 수 없다 |
 
 판정 기준(`failure_signal`의 문턱값)은 판정하면서 바꾸지 않는다. 바꿔야 한다면 판정과 별도로 브리프를 고치고, 그 사실을 보고한다.
 
@@ -83,6 +90,12 @@
 | `observation_missing` | 오류 | 버팀·틀림인데 근거 세션에 그 가설의 관찰값이 없음 |
 | `duplicate_verdict` | 오류 | 한 가설에 `cut`이 아닌 판정이 둘 이상 |
 | `verdict_sample_short` | 오류 | 버팀·틀림인데, 그 가설을 관찰한 근거 세션을 합친 사람 수나 판 수가 가설의 `sample`보다 적음. 제안(`proposed`)이어도 오류다. `sample`이 없는 가설은 보지 않는다. runlog가 쓴 묶음(모든 묶음에 `runs`나 `players`가 있음)이 있는 세션은 묶음의 판 수 합과 사람을 넘겨 세지 않는다. 손으로 쓴 단계 기록은 로그가 아니라 세지 않는다 |
+| `verdict_events_short` | 오류 | 버팀인데, 근거 세션의 `events`를 합친 사건 수가 가설의 `sample.events`보다 적음. 세지 않은 세션은 0건이다. 틀림은 사건에 기대지 않는 쪽 신호로 낼 수 있어 막지 않고 판정 줄에 보인다 |
+| `verdict_criteria_missing` | 경고 | `cut`이 아닌 판정에 `criteria`가 없음. 확정 판정이어도 `--fail-on-assumed`를 넘지 못한다. 메시지가 지금 지문을 알려 주지만, 판정한 뒤 가설을 고치지 않았을 때만 그 값을 적는다 |
+| `unknown_event` | 경고 | 세션 `events`의 사건 이름이 그 컨셉의 어느 가설 `sample.events`에도 없음(오타). 그 건수는 어떤 판정에도 세지 않는다. 비슷한 이름을 알려 준다 |
+| `verdict_criteria_changed` | 경고 | 판정 뒤에 가설 기준이 바뀜. 지금 기준으로 다시 판정하고 지난 것은 `cut`으로 둔다. 확정 판정이어도 `--fail-on-assumed`를 넘지 못한다. 뜻이 같은 고침이면 사용자와 확인한 뒤 `criteria`를 새 지문으로 고친다 |
+| `approved_concept_refuted` | 경고 | 선택(approved)한 컨셉의 가설이 틀림으로 확정됨. 가설 기준을 고치거나, 다시 판정하거나, 컨셉 상태를 바꾸면 사라진다 |
+| `value_not_in_source` | 경고 | `[계산: …]` 관찰값의 `value`에 있는 수가 `source` 결과 파일에 없음. 수는 값으로 맞춘다(1과 1.0은 같다). 낱말에 붙은 수(`pt_2`, `v1.2`)는 보지 않는다 |
 | `session_beyond_records` | 경고 | 세션의 `runs`가 묶음 `runs`의 합보다 많거나, `players`에 묶음의 `players`에 없는 사람이 있음. 표본은 로그에 남은 판과 사람만 센다. 로그에 남기지 못한 판·사람이 맞으면 세션의 `acknowledged`에 이유를 적고, 그러면 세션 값을 센다 |
 | `source_missing` | 경고 | `logs`나 `source`의 파일이 프로젝트에 없음. 확장자로 끝나는 것만 파일로 본다(URL, `#` 앵커, 말은 보지 않는다). `./`와 역슬래시는 같은 경로로 읽고, 경로는 프로젝트 폴더(`data/playtests.json`이면 그 위 폴더) 기준이다 |
 | `computed_without_output` | 경고 | 관찰값의 `note`가 `[계산: …]`인데 `source`가 없거나 `logs`의 원본 기록임(`./`, 역슬래시, 앞뒤 공백이 달라도 같은 파일로 본다). 계산 출력을 결과 파일로 남겨 `source`로 둔다. 결과 파일은 `logs`에 넣지 않는다 |
@@ -90,5 +103,5 @@
 | `stage_counts_mismatch`, `unknown_reference` | 경고 | 단계 기록의 판 수가 이어지지 않음, 지금 데이터에 없는 id([calibration](calibration.md)) |
 
 - 컨셉 데이터를 함께 넘기지 않으면 컨셉·가설 참조를 확인하지 못해 `INCOMPLETE`다. 프로젝트 폴더(`check .`)로 검사한다.
-- `--fail-on-assumed`는 선택(approved)한 컨셉의 가설 중 **확정(approved)된 버팀·틀림**이 아닌 것이 있으면 실패한다. 제안 판정과 모름은 확정이 아니다.
+- `--fail-on-assumed`는 선택(approved)한 컨셉의 가설 중 **확정(approved)된 버팀·틀림**이 아닌 것이 있으면 실패한다. 제안 판정, 모름, 기준 지문이 없거나 기준이 바뀐 판정은 확정이 아니다. 틀림으로 확정된 가설이 있어도 실패한다(그 위에서 다음 단계로 가지 않는다).
 - 검사기는 판정이 맞는지 판단하지 않는다. 검사 통과를 판정의 정당성으로 보고하지 않는다.
