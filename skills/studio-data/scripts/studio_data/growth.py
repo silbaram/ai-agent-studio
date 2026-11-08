@@ -15,6 +15,7 @@ from .common import add_issue as _err, did_you_mean
 
 PICKS = ("priority", "spread")
 DEFAULT_TRIALS = 1000
+SINGLE_STAGE_PICKS = 10   # 단계가 하나뿐이라 단계 안 레벨업 수를 모를 때, max_picks가 없는 선택지를 볼 횟수
 MAX_TRIALS = 20000  # 검사·뷰어 갱신마다 다시 돌므로 상한을 둔다
 DEFAULT_SEED = 7
 UNCHECKED_REASON = {
@@ -235,6 +236,8 @@ def validate(data: dict, combat: dict | None = None, items: dict | None = None, 
     active_choices = [ch for ch in choices if c.is_active(ch)]
     active_builds = [b for b in builds if c.is_active(b)]
     report_builds: dict = {}
+    pick_effects: list = []
+    identical: list = []
     base_rows: list = []
     combat_only: list = []
     unchecked_kinds: list = []
@@ -306,6 +309,10 @@ def validate(data: dict, combat: dict | None = None, items: dict | None = None, 
                         continue
                     report_builds[b["id"]] = {"stages": stages, "rows": rows}
                 combat_only = _dominance(report_builds, off_combat, warnings)
+                roles = base_settings_roles(combat)
+                chance = {roles[r] for r in ("crit_chance", "crit_multiplier") if r in roles}
+                pick_effects = _pick_effects(usable, order, level_at, prep, known - chance, warnings)
+                identical = _identical_builds(report_builds, usable, known)
     if settings is not None and not unchecked_kinds and not errors and not report_builds:
         unchecked_kinds.append("nothing")  # 계산한 빌드가 없으면 통과가 아니다(모두 삭제, 비교할 단계 없음)
     used = {ch for info in report_builds.values() for st in info["stages"].values() for ch in st["picks"]}
@@ -325,11 +332,76 @@ def validate(data: dict, combat: dict | None = None, items: dict | None = None, 
         "base_rows": [r for r in base_rows if r["stage"] in order],
         "unused_choices": [ch["id"] for ch in active_choices if report_builds and ch["id"] not in used],
         "combat_only_dominated": combat_only,
+        "pick_effects": pick_effects,
+        "identical_builds": identical,
         "unchecked": len(unchecked_kinds),
         "unchecked_kinds": unchecked_kinds,
         "errors": errors,
         "warnings": warnings,
     }
+
+
+def _row_of(rows: list, enemy: str) -> dict:
+    return next(r for r in rows if r["enemy"] == enemy)
+
+
+def _pick_effects(choices: list[dict], order: list[str], level_at: dict, prep: dict, known: set, warnings: list) -> list[dict]:
+    """선택지마다 그 단계의 기준 장비에 그 선택만 k번(단계 안 레벨업 수까지) 더했을 때, 적마다 처치·버팀이 처음 나아지는 선택 횟수.
+    단계 안 레벨업 수는 다음 단계의 레벨 − 이 단계의 레벨(마지막 단계는 앞 단계와 같은 간격)이다.
+    첫 단계에서 첫 선택이 일반 적(없으면 모든 적)의 처치·버팀을 하나도 바꾸지 못하면 pick_no_effect로 알린다. 타수가 정수라 생기는 문턱이다.
+    뒤 단계는 앞 단계까지의 성장을 넣지 않은 기준 장비로 본 값이라 경고하지 않고 표에만 둔다.
+    known: 볼 스탯. 치명타처럼 확률로 효과가 나는 스탯은 빼고 넘긴다(기대값 모델의 문턱일 뿐 실제로는 판마다 조금씩 효과가 난다)."""
+    out = []
+    for i, sid in enumerate(order):
+        level = level_at[sid]
+        # 단계 안 레벨업 수: 다음 단계까지, 마지막 단계는 앞 단계와 같은 간격. 단계가 하나뿐이면 모른다(None): max_picks까지 본다
+        window = level_at[order[i + 1]] - level if i + 1 < len(order) else (level - level_at[order[i - 1]] if i else None)
+        base, _ = cb.evaluate(prep, sid, {})
+        if (window is not None and window < 1) or not base:
+            continue
+        normal = [r["enemy"] for r in base if r["rank"] == "normal"]
+        crowd, who = (normal, "일반 적") if normal else ([r["enemy"] for r in base], "모든 적")
+        for ch in choices:
+            if not any(k in known for k in ch["stats"]):
+                continue   # 전투가 쓰지 않는 선택지는 stat_not_in_combat이 말한다
+            steps = [base]
+            limit = min(window, ch.get("max_picks", window)) if window is not None else ch.get("max_picks", SINGLE_STAGE_PICKS)
+            for k in range(1, limit + 1):
+                got, _ = cb.evaluate(prep, sid, {s: v * k for s, v in ch["stats"].items()})
+                if got is None:
+                    break
+                steps.append(got)
+            first = {r["enemy"]: next((k for k in range(1, len(steps)) if _better_or_equal(_row_of(steps[k], r["enemy"]), r)[1]), None) for r in base}
+            out.append({"stage": sid, "choice": ch["id"], "window": window, "first": first,
+                        "hits_to_kill": {e: [_row_of(s, e)["hits_to_kill"] for s in steps] for e in first},
+                        "hits_to_die": {e: [_row_of(s, e)["hits_to_die"] for s in steps] for e in first}})
+            if i == 0 and all(first[e] != 1 for e in crowd):   # 뒤 단계는 앞 단계의 성장을 넣지 않은 값이라 표로만 보인다
+                span = f"레벨업 {len(steps) - 1}번" if window is not None else f"선택 {len(steps) - 1}번"
+                told = ", ".join(f"{e} {first[e]}번째" if first[e] else f"{e} {span} 안에서 없음" for e in crowd)
+                _err(warnings, "pick_no_effect", ch["id"],
+                     f"{sid}에서 {c.josa(ch['id'], '을를')} 처음 고를 때 {who}의 처치·버팀이 바뀌지 않습니다(그 단계의 기준 장비에 이 선택만 더함). "
+                     f"처음 바뀌는 선택: {told}. 타수가 정수라 생기는 문턱입니다. 한 번 고를 때의 수치를 키우거나 적의 체력을 문턱에 맞춥니다. "
+                     "의도면 이 선택지의 acknowledged에 이유를 적습니다.", owner=ch["id"])
+    return out
+
+
+def _identical_builds(builds: dict, choices: list[dict], known: set) -> list[dict]:
+    """한 단계에서 스탯이 같아진 빌드들. 전투 선택지를 모두 최대로 고르면 빌드 정책과 관계없이 같아진다.
+    max_picks: 전투 선택지의 max_picks 합(하나라도 없으면 None), levelups: 그 단계에 들어설 때까지의 레벨업 수."""
+    caps = [ch.get("max_picks") for ch in choices if any(k in known for k in ch["stats"])]
+    cap = sum(caps) if caps and all(x is not None for x in caps) else None
+    out = []
+    stage_ids = list(dict.fromkeys(sid for info in builds.values() for sid in info["stages"]))
+    for sid in stage_ids:
+        groups: dict = {}
+        for bid, info in builds.items():
+            st = info["stages"].get(sid)
+            if st is not None:
+                groups.setdefault((st["level"], tuple(sorted(st["bonus"].items()))), []).append(bid)
+        for (level, bonus), ids in groups.items():
+            if len(ids) > 1 and bonus:   # 아직 아무것도 고르지 않은 첫 단계는 당연히 같다
+                out.append({"stage": sid, "builds": ids, "max_picks": cap, "levelups": level - 1})
+    return out
 
 
 def base_settings_roles(combat: dict) -> dict:
@@ -388,6 +460,10 @@ def print_extra(result: dict) -> None:
             print(f"빌드 {bid} · {sid} (레벨 {st['level']}): {bonus}")
     if result["unused_choices"]:
         print("어느 빌드도 고르지 않은 선택지: " + ", ".join(result["unused_choices"]))
+    for x in result.get("identical_builds", []):
+        cap = f"전투 선택지 max_picks 합 {x['max_picks']}" if x["max_picks"] is not None else "max_picks가 없는 전투 선택지가 있음"
+        print(f"같은 스탯이 된 빌드: {x['stage']}에서 {', '.join(x['builds'])} ({cap} · 그 단계까지 레벨업 {x['levelups']}번). "
+              "선택지를 다 고르면 빌드 정책이 달라도 같아집니다")
     for x in result.get("combat_only_dominated", []):
         picks = ", ".join(f"{ch} 평균 {_fmt(n)}회" for ch, n in x["off_combat_picks"].items())
         print(f"전투 계산상 밀림: {x['build']} < {x['winner']} (전투 밖 선택지 {picks}의 가치는 계산하지 않음)")
@@ -408,6 +484,14 @@ def table(data: dict, result: dict, ids: list[str] | None = None) -> str:
             bonus = " · ".join(f"{k} +{_fmt(v)}" for k, v in st["bonus"].items()) or "–"
             rows.append("| " + " | ".join((bid, r["stage"], str(st["level"]), bonus, r["enemy"], _fmt(r["hits_to_kill"]), _fmt(r["time_to_kill"]),
                                             _fmt(r["hits_to_die"]), _fmt(r["time_to_die"]))) + " |")
+    if result.get("pick_effects"):
+        rows += ["", "선택지 효과(그 단계의 기준 장비에 그 선택만 0번부터 단계 안 레벨업 수까지 더함. 앞 단계의 성장은 넣지 않음):", "",
+                 "| 단계 | 선택지 | 단계 안 레벨업 | 적 | 처치 타수 | 버티는 타수 | 처음 바뀌는 선택 |", "|---|---|---|---|---|---|---|"]
+        for x in result["pick_effects"]:
+            for e, k in x["first"].items():
+                arrow = lambda vals: " → ".join(_fmt(v) for v in vals)  # noqa: E731
+                rows.append("| " + " | ".join((x["stage"], x["choice"], "–" if x["window"] is None else str(x["window"]), e, arrow(x["hits_to_kill"][e]), arrow(x["hits_to_die"][e]),
+                                                f"{k}번째" if k else "없음")) + " |")
     rows += ["", "선택지 제시는 시드를 고정한 반복 시뮬레이션의 평균입니다. 기대값 계산이며 실제 난이도나 재미를 판정하지 않습니다."]
     return "\n".join(rows)
 

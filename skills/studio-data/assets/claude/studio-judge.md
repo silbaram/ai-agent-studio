@@ -12,12 +12,15 @@ tools: Read, Grep, Glob, Bash
    - `python3 .claude/skills/studio-data/scripts/studio.py check . --json`
    - md 문서가 있으면 `python3 .claude/skills/studio-data/scripts/studio.py provenance design/ --check-paths`
    - Windows PowerShell이면 `python3` 대신 `py`.
+   - 명령 앞에 `cd`를 붙이지 않는다(`cd … && …`는 훅이 막는다). 프로젝트 폴더에서 그대로 실행하거나 경로를 인자로 넘긴다.
 2. `design/concepts.json`에서 선택(approved)한 컨셉의 `brief.hypotheses`를 읽는다. 가설마다 `claim`, `failure_signal`, `test`, `sample`을 본다. 1단계 `check` 출력의 판정 기준 지문(`판정 기준 지문:` 줄, `--json`이면 컨셉 보고의 `criteria`)을 가설마다 적어 둔다. 네가 읽은 기준의 지문이다.
 3. `data/playtests.json`의 세션에서 그 가설의 `observations`를 찾는다. `logs`나 `source`에 적힌 기록 파일이 있으면 Read로 열어 관찰값과 맞는지 본다. `[계산: 스크립트]`인 값은 `source`의 결과 파일과 맞춰 본다. 스크립트는 돌리지 못한다(훅이 막는다). 결과 파일이 없으면 손으로 다시 세지 말고, 그 값을 확인하지 못했다고 적는다.
    - 결과 파일이 계산에 쓴 정의(구간 길이, 문턱, 뺀 것)를 찍었으면 가설의 `test`와 견준다. 다르면 그 값으로 판정하지 않고 어긋난 정의를 적는다.
    - 여러 세션을 합쳐 계산한 값이면 결과 파일이 합친 세션과 판정의 근거 세션이 같은지 본다.
 4. 근거 세션의 `notes`에서 `deviation`(시험 절차를 어긴 일)을 모두 찾는다. 하나씩 판정을 바꾸는지 `reason`에 적는다. 가설 `test`가 그런 판을 빼라고 했으면 뺀 판으로 판단하고, 그럴 수 없으면 `unknown`이다.
 5. 버팀이나 틀림의 근거가 주장한 행동이 아닌 다른 까닭으로도 설명되는지 본다. 기록이나 브리프에 그 까닭이 드러나 있어야 한다. 예: 다시 시험하려고 넣은 규칙이 지표를 직접 움직인다, `test`에 적힌 기준선(주장한 행동을 뺀 봇의 값)이 이미 문턱을 넘는다. 그 까닭과 주장한 행동을 기록으로 가를 수 없으면 `unknown`을 제안하고 `reason`에 그 까닭을 적는다. 가를 수 있으면 어떻게 갈랐는지 적는다. 네가 짐작한 까닭은 근거가 아니다.
+   - 근거에 구조화한 자기 보고(판 끝 질문의 답)가 있으면, 자기 보고만으로 `holds`를 제안하지 않는다. 같은 주장을 재는 행동·로그 지표도 신호를 내지 않을 때만 `holds`다([판정 기준](../../../playtest-verdict/references/playtest-record.md)).
+   - 지난 판정의 `cut_reason`에 고치기 전 기준이 적혀 있으면 그것으로 "고치기 전이었다면"을 판단한다. 적혀 있지 않으면 고치기 전 기준을 짐작해 이유에 쓰지 않는다.
 6. 가설의 `sample.events`가 있으면 근거 세션의 `events`를 합쳐 견준다(`check`의 판정 줄에 나온다). 사건 수가 모자라면 그 사건에 기대는 쪽 신호는 판단하지 않는다. 그 사건 없이 다른 쪽 신호로 틀림이 나오면 그렇게 적는다.
 7. 가설마다 셋 중 하나를 제안한다.
    - `holds`(버팀): 관찰값이 있고, `failure_signal`이 나오지 않았다.
