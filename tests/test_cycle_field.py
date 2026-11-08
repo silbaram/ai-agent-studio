@@ -185,8 +185,8 @@ class RuleReferences(Project):
         self.linked("add-tempo", "tempo", proposal="## Why\n\n`combat_input.dodge_cost`를 바꾼다.\n")
         self.assertEqual(self.codes(), ["rule_of_unlinked_system"])
 
-    def test_file_names_paths_and_unknown_rules_are_not_rule_references_232(self):
-        spec = "참고: `tempo.json`, design/combat_input.parry_window, `combat_input.nope`, combat_input.parry_window.md\n"
+    def test_file_names_and_paths_are_not_rule_references_232(self):
+        spec = "참고: `tempo.json`, design/combat_input.parry_window, combat_input.parry_window.md\n"   # 없는 규칙 id는 252번부터 unknown_rule이다
         self.linked("add-tempo", "tempo", spec=spec)
         self.assertEqual(self.codes(), [])
 

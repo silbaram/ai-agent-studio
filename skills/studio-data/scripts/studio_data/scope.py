@@ -26,7 +26,11 @@ PAIR = re.compile(r"^([a-z0-9_]+): ([0-9a-f]{8})$")
 SKIP_SPECS = re.compile(r"^skip_specs:\s*true\s*$", re.MULTILINE)
 SYSTEMS_FILE = Path("design/systems.json")
 CHANGES = Path("openspec/changes")
-RULE_REF = re.compile(r"(?<![A-Za-z0-9_./\\-])([a-z0-9_]+)\.([a-z0-9_]+)(?![A-Za-z0-9_/\\-]|\.[A-Za-z0-9])")  # gems.ripen. id 규칙(ID_PATTERN)과 같은 글자. 경로·파일 이름은 뺀다
+RULE_REF = re.compile(r"(?<![A-Za-z0-9_./\\-])([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)(?![A-Za-z0-9_/\\-]|\.[A-Za-z0-9])")  # gems.ripen. 대문자로 써도 같은 규칙이다. 경로는 뺀다
+FILE_EXTENSIONS = {"json", "md", "csv", "tsv", "txt", "log", "yaml", "yml", "toml", "ini", "cfg", "py", "js", "mjs", "ts", "tsx", "jsx", "html", "htm", "css",
+                   "gd", "tscn", "tres", "cs", "cpp", "h", "hpp", "lua", "rs", "go", "java", "png", "jpg", "jpeg", "gif", "svg", "webp", "wav", "ogg", "mp3", "zip"}  # gems.json은 규칙이 아니다
+LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
+NON_GOALS = re.compile(r"^\s*(?:#+\s*|\*\*)?\s*non[- ]?goals\b", re.IGNORECASE)   # design.md의 "## Non-Goals"나 "**Non-Goals:**"
 MEASURED = ("proposal.md", "tasks.md")  # 무엇을 만들지 적는 문서. design.md는 Non-Goals에 범위 밖을 적는 자리라 재지 않는다
 
 
@@ -121,18 +125,64 @@ def _check_texts(change: Path, texts: list[tuple[Path, str]], items: list, error
             _err(errors, "out_of_scope_in_spec", where, f"브리프가 범위 밖이라고 한 항목이 변경에 있습니다: {item}. 변경에서 빼거나, 브리프를 바꿀지 사용자에게 묻습니다.")
 
 
+def _non_goal_rules(change: Path, systems: dict) -> set:
+    """design.md의 Non-Goals에 적은 규칙(시스템, 규칙). "## Non-Goals" 제목이면 다음 제목 전까지,
+    "**Non-Goals:**" 같은 이름표면 바로 뒤의 목록(항목과 들여 쓴 줄)까지만 읽는다. 목록 뒤 문단은 Non-Goals가 아니다."""
+    path = change / "design.md"
+    if not path.is_file():
+        return set()
+    found, mode = set(), None   # None(밖) / "heading" / "list"
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if NON_GOALS.match(line):
+            mode = "heading" if line.lstrip().startswith("#") else "list"
+            continue
+        if mode and line.lstrip().startswith("#"):
+            mode = None
+        elif mode == "list" and line.strip() and not (LIST_ITEM.match(line) or line[:1] in (" ", "\t")):
+            mode = None
+        if mode:
+            found |= {(sid, rid) for sid, rid in _rule_refs(line, systems) if rid in _rule_ids(systems[sid])}
+    return found
+
+
+def _rule_ids(system: dict) -> set:
+    return {r.get("id") for r in system.get("rules", []) if isinstance(r, dict)}
+
+
+def _rule_refs(line: str, systems: dict) -> list:
+    """줄에서 설계에 있는 시스템의 시스템.규칙 표기. 대문자로 써도 같은 id다. 파일 이름(gems.json)은 뺀다."""
+    out = []
+    for sid, rid in RULE_REF.findall(line):
+        sid, rid = sid.lower(), rid.lower()
+        if sid in systems and rid not in FILE_EXTENSIONS:
+            out.append((sid, rid))
+    return out
+
+
 def _check_rule_refs(change: Path, texts: list[tuple[Path, str]], systems: dict, declared: dict, errors: list) -> None:
-    """명세가 가리키는 규칙(시스템.규칙)의 시스템이 변경에 이어졌는가. 잇지 않으면 그 규칙이 바뀌어도 design_changed가 나지 않는다.
-    시스템과 규칙이 모두 설계에 있는 표기만 본다. 없는 규칙은 파일 이름과 가리지 못해 재지 않는다."""
+    """명세가 가리키는 규칙(시스템.규칙)이 설계에 있는가, 그 시스템이 변경에 이어졌는가, design.md의 Non-Goals에 적은 규칙은 아닌가.
+    잇지 않으면 그 규칙이 바뀌어도 design_changed가 나지 않는다. 설계에 있는 시스템 뒤의 표기만 본다."""
+    excluded = _non_goal_rules(change, systems)
     for path, text in texts:
         for number, line in _measured_lines(text):
-            for sid, rid in RULE_REF.findall(line):
-                s = systems.get(sid)
-                if s is None or sid in declared or rid not in {r.get("id") for r in s.get("rules", []) if isinstance(r, dict)}:
-                    continue
+            for sid, rid in _rule_refs(line, systems):
+                s = systems[sid]
                 where = f"{change.name}/{path.relative_to(change).as_posix()}:{number}"
+                if rid not in _rule_ids(s):
+                    close = c.closest(rid, _rule_ids(s) - {None})
+                    if close:   # 비슷한 규칙이 없으면 데이터 칸(weapons.fire_rate)일 수 있어 막지 않는다
+                        _err(errors, "unknown_rule", where, f"시스템 설계에 없는 규칙입니다: {sid}.{rid}. '{close}'의 오타인가요? "
+                                                            "규칙 id는 design/systems.json에 있는 것만 씁니다. 새 규칙이 필요하면 설계에 먼저 적습니다.")
+                    continue
+                if (sid, rid) in excluded:
+                    _err(errors, "rule_in_non_goals", where, f"design.md의 Non-Goals에 적은 규칙을 가리킵니다: {sid}.{rid}. 이번에 하지 않을 일이면 그 줄을 뺍니다. "
+                                                             "하기로 바뀌었으면 Non-Goals에서 빼고, 범위가 넓어지는지 사용자에게 묻습니다.")
+                    continue
+                if not declared or sid in declared:
+                    continue
                 if _buildable(s):
-                    fix = f"이 변경이 그 시스템도 다루면 studio.py scope --link {change.name} {' '.join(sorted({*declared, sid}))}로 잇고, 아니면 그 줄을 뺍니다."
+                    fix = (f"proposal에 그 시스템이 없거나 브리프의 prototype.scope 밖이면 그 줄을 뺍니다. 이 변경이 그 시스템도 다루기로 했으면 "
+                           f"studio.py scope --link {change.name} {' '.join(sorted({*declared, sid}))}로 잇습니다.")
                 else:   # 이을 수 없는 시스템이다. --link가 거부한다
                     fix = (f"그 시스템은 이번에 만들지 않습니다(범위 {s['scope']}, 상태 {s.get('status', '없음')}). 그 줄을 빼고, 하지 않을 일이면 design.md의 "
                            "Non-Goals에 적습니다. 만들어야 하면 범위를 바꿀지 사용자에게 묻습니다.")
@@ -161,8 +211,7 @@ def _check_change(change: Path, design: dict, errors: list) -> None:
     measured = [change / n for n in MEASURED if (change / n).is_file()] + specs
     texts = [(path, path.read_text(encoding="utf-8", errors="replace")) for path in measured]   # 훅이 편집마다 부르므로 한 번만 읽는다
     _check_texts(change, texts, design["out_of_scope"], errors)
-    if declared:
-        _check_rule_refs(change, texts, systems, declared, errors)
+    _check_rule_refs(change, texts, systems, declared, errors)   # 잇지 않은 변경은 change_without_system이 말하므로 이음은 보지 않는다
 
 
 def check(root: Path) -> dict:

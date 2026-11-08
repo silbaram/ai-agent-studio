@@ -39,7 +39,7 @@
 | `date` | 예 | 달력에 있는 `YYYY-MM-DD` 날짜 |
 | `concept` | 예 | 시험한 컨셉 id (`design/concepts.json`) |
 | `build` | 예 | 빌드를 다시 만들 수 있는 이름. 보통 커밋 해시 |
-| `players` | 예 | 플레이한 사람 이름 배열. 같은 사람은 같은 이름으로 쓴다(사람 수를 센다) |
+| `players` | 예 | 플레이한 사람 이름 배열. 같은 사람은 같은 이름으로 쓴다(사람 수를 센다). 근거 세션의 빌드가 섞이면 판정 줄에 `빌드 2개(…)`가 붙는다. 합쳐 세도 되는지 판정 `reason`에 적는다 |
 | `runs` | 예 | 이 세션의 판 수 합계 |
 | `events` | 아니오 | 가설 `sample.events`의 사건을 이 세션에서 센 건수 `{사건 이름: 0 이상의 정수}`. 이름은 `sample.events`와 같게 쓴다. 적지 않은 세션은 그 사건을 0건으로 센다 |
 | `observations` | 아니오 | `[{hypothesis, value, metric, n, source, note}]`. `hypothesis`(가설 id)와 `value`(문자열 또는 수)가 필수. 없고 단계 기록도 없으면 경고. 스크립트로 계산한 값은 그 출력을 세션 폴더에 결과 파일로 남기고 `source`를 그 파일로, `note`를 `[계산: 스크립트]`로 적는다. `value`의 수는 결과 파일의 수를 그대로 옮긴다 |
@@ -92,6 +92,7 @@
 | `verdict_sample_short` | 오류 | 버팀·틀림인데, 그 가설을 관찰한 근거 세션을 합친 사람 수나 판 수가 가설의 `sample`보다 적음. 제안(`proposed`)이어도 오류다. `sample`이 없는 가설은 보지 않는다. runlog가 쓴 묶음(모든 묶음에 `runs`나 `players`가 있음)이 있는 세션은 묶음의 판 수 합과 사람을 넘겨 세지 않는다. 손으로 쓴 단계 기록은 로그가 아니라 세지 않는다 |
 | `verdict_events_short` | 오류 | 버팀인데, 근거 세션의 `events`를 합친 사건 수가 가설의 `sample.events`보다 적음. 세지 않은 세션은 0건이다. 틀림은 사건에 기대지 않는 쪽 신호로 낼 수 있어 막지 않고 판정 줄에 보인다 |
 | `verdict_criteria_missing` | 경고 | `cut`이 아닌 판정에 `criteria`가 없음. 확정 판정이어도 `--fail-on-assumed`를 넘지 못한다. 메시지가 지금 지문을 알려 주지만, 판정한 뒤 가설을 고치지 않았을 때만 그 값을 적는다 |
+| `player_name_variants` | 경고 | 앞 세션(날짜순)과 대소문자·공백만 다른 이름. 표본은 두 사람으로 센다. 다른 사람이 맞으면 세션의 `acknowledged`에 이유를 적는다 |
 | `unknown_event` | 경고 | 세션 `events`의 사건 이름이 그 컨셉의 어느 가설 `sample.events`에도 없음(오타). 그 건수는 어떤 판정에도 세지 않는다. 비슷한 이름을 알려 준다 |
 | `verdict_criteria_changed` | 경고 | 판정 뒤에 가설 기준이 바뀜. 지금 기준으로 다시 판정하고 지난 것은 `cut`으로 둔다. 확정 판정이어도 `--fail-on-assumed`를 넘지 못한다. 뜻이 같은 고침이면 사용자와 확인한 뒤 `criteria`를 새 지문으로 고친다 |
 | `approved_concept_refuted` | 경고 | 선택(approved)한 컨셉의 가설이 틀림으로 확정됨. 가설 기준을 고치거나, 다시 판정하거나, 컨셉 상태를 바꾸면 사라진다 |

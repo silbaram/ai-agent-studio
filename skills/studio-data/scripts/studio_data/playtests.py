@@ -410,6 +410,20 @@ def _check_files(s: dict, root: Path, warnings: list) -> None:
                              "message": f"{label}의 기록 파일이 없습니다: {raw}. 경로는 프로젝트 폴더 기준입니다. 옮겼으면 경로를 고칩니다."})
 
 
+def _check_name_variants(sessions: dict, warnings: list) -> None:
+    """대소문자·공백만 다른 이름(self와 Self )은 사람 수를 따로 센다. 날짜순으로 처음 쓴 이름과 다르게 쓴 세션을 알린다."""
+    first: dict = {}
+    for s in sorted(sessions.values(), key=lambda x: (x["date"], x["id"])):
+        for name in s["players"]:
+            key = " ".join(name.split()).casefold()
+            seen = first.setdefault(key, (name, s["id"]))
+            if seen[0] != name:
+                other = "같은 세션의" if seen[1] == s["id"] else f"앞 세션 {seen[1]}의"
+                warnings.append({"code": "player_name_variants", "where": s["id"],
+                                 "message": f"players의 이름이 {other} 이름과 대소문자·공백만 다릅니다: {name!r}, {seen[0]!r}. 표본은 두 사람으로 셉니다. "
+                                            "같은 사람이면 같은 이름으로 씁니다. 다른 사람이 맞으면 이 세션의 acknowledged에 이유를 적습니다."})
+
+
 def _check_event_names(s: dict, info: dict, warnings: list) -> None:
     """세션 events의 사건 이름이 그 컨셉의 어느 가설 sample.events에도 없으면 그 건수는 어떤 판정에도 세지 않는다(오타)."""
     known = {name for smp in info.get("samples", {}).values() for name in smp.get("events") or {}}
@@ -466,9 +480,11 @@ def _against(have: dict, need: dict | None, key: str, unit: str) -> str:
     return f"{have[key]}/{need[key]}{unit}" if need and key in need else f"{have[key]}{unit}"
 
 
-def _sample_line(have: dict, need: dict | None, deviations: int) -> str:
-    """판정의 표본 글: 근거 세션 수, 판·사람(최소 표본과 나란히), 사건 수, 절차 이탈. check 출력과 뷰어가 같은 글을 쓴다."""
+def _sample_line(have: dict, need: dict | None, deviations: int, builds: list) -> str:
+    """판정의 표본 글: 근거 세션 수, 판·사람(최소 표본과 나란히), 사건 수, 절차 이탈, 섞인 빌드. check 출력과 뷰어가 같은 글을 쓴다."""
     parts = [f"세션 {have['sessions']}", _against(have, need, "runs", "판"), _against(have, need, "players", "명")]
+    if len(builds) > 1:
+        parts.append(f"빌드 {len(builds)}개({', '.join(builds)})")
     if have.get("events"):
         parts.append("사건 " + _events_text(have["events"], need["events"]))
     if deviations:
@@ -504,6 +520,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         raw_verdicts = []
     sessions = {s["id"]: s for _, s in check_identity(raw, "playtests", errors) if check_session(s, errors, warnings)}
     numbers: dict = {}   # 결과 파일마다 한 번 읽은 수
+    _check_name_variants(sessions, warnings)
     unchecked = 0
     missing_refs: set = set()
     for s in sessions.values():
@@ -573,7 +590,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                  "사건에 기대는 쪽 신호를 가리지 못했으면 버팀이 아니라 unknown(모름)입니다. 세션마다 그 세션에서 센 건수를 events에 적습니다(세지 않은 세션은 0으로 셉니다).")
         deviations = sum(1 for s in found for x in s.get("notes") or [] if x.get("kind") == "deviation")
         verdicts[where] = {"result": v["result"], "status": status, "reason": v["reason"], "sample": have, "need": need,
-                           "deviations": deviations, "criteria": criteria, "sample_text": _sample_line(have, need, deviations)}
+                           "deviations": deviations, "criteria": criteria, "sample_text": _sample_line(have, need, deviations, list(dict.fromkeys(s["build"] for s in seen)))}
 
     unverified: list = []
     refuted: list = []
