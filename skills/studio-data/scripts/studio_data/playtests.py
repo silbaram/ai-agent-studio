@@ -315,7 +315,20 @@ def check_verdict(v, n: int, errors: list) -> str | None:
     if "criteria" in v and not (isinstance(v["criteria"], str) and CRITERIA.match(v["criteria"])):
         _err(errors, "schema", where, f"criteria(판정 기준 지문)는 소문자 16진수 8자입니다. 지금 지문은 check가 알려 줍니다: {v['criteria']!r}")
         ok = False
+    if "proposed_result" in v and v["proposed_result"] not in RESULTS:
+        _err(errors, "schema", where, f"proposed_result(판정 에이전트가 낸 결과)는 {', '.join(RESULTS)} 중 하나입니다: {v['proposed_result']!r}")
+        ok = False
     return where if ok else None
+
+
+def _check_override(v: dict, where: str, errors: list) -> None:
+    """사용자는 제안을 모름으로 낮춰 확정할 수 있다. 버팀·틀림으로 올리거나 둘을 바꾸려면 다시 판정한다."""
+    proposed = v.get("proposed_result")
+    if proposed is None or proposed == v["result"] or v["result"] == "unknown":
+        return
+    _err(errors, "verdict_overrides_proposal", where,
+         f"판정 에이전트의 제안은 {RESULT_LABEL[proposed]}, 적힌 결과는 {RESULT_LABEL[v['result']]}입니다. "
+         "제안을 모름으로 낮추는 것만 사용자가 바꿔 확정할 수 있습니다. 버팀·틀림으로 바꾸려면 바꾸려는 까닭을 판정 에이전트에게 주고 다시 판정합니다.")
 
 
 def _check_criteria(v: dict, where: str, concepts: dict | None, warnings: list) -> str:
@@ -332,6 +345,7 @@ def _check_criteria(v: dict, where: str, concepts: dict | None, warnings: list) 
         return "ok"
     warnings.append({"code": "verdict_criteria_changed", "where": where,
                      "message": "판정 뒤에 가설 기준(claim, failure_signal, test, sample)이 바뀌었습니다. 지금 기준으로 다시 판정하고 이 판정은 cut으로 둡니다. "
+                                "다시 시험하려고 기준을 바꿨으면 새 기록을 기다리지 말고 지금 cut으로 둡니다(지우지 않습니다). "
                                 f"뜻이 같은 고침(맞춤법 등)이면 사용자와 확인한 뒤 criteria를 고칩니다(지금 지문: {current}). 확정 판정이어도 게이트를 넘지 못합니다."})
     return "changed"
 
@@ -468,12 +482,14 @@ def _events(sessions: list, names) -> dict:
     out = {}
     for name in names:
         counted = [s["events"][name] for s in sessions if name in (s.get("events") or {})]
-        out[name] = {"count": sum(counted), "missing": len(sessions) - len(counted)}
+        out[name] = {"count": sum(counted), "missing": len(sessions) - len(counted), "counted": len(counted)}
     return out
 
 
 def _events_text(have: dict, need: dict) -> str:
-    return ", ".join(f"{name} {e['count']}/{need[name]}" + (f"(세지 않은 세션 {e['missing']}개)" if e["missing"] else "") for name, e in have.items())
+    """세지 않은 세션은 0건으로 센다. 근거 세션이 하나도 세지 않았으면 0건이 아니라 미집계로 쓴다(나중에 sample.events를 더한 경우)."""
+    return ", ".join(f"{name} {'미집계' if e['missing'] and not e['counted'] else e['count']}/{need[name]}"
+                     + (f"(세지 않은 세션 {e['missing']}개)" if e["missing"] else "") for name, e in have.items())
 
 
 def _against(have: dict, need: dict | None, key: str, unit: str) -> str:
@@ -556,6 +572,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         elif not _hypothesis_ref(v["concept"], v["hypothesis"], where, concepts, errors):
             continue
         criteria = _check_criteria(v, where, concepts, warnings)
+        _check_override(v, where, errors)
         cited = v.get("sessions", [])
         if v["result"] in DECIDED and not cited:
             _err(errors, "verdict_without_evidence", where,
@@ -590,7 +607,8 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                  "사건에 기대는 쪽 신호를 가리지 못했으면 버팀이 아니라 unknown(모름)입니다. 세션마다 그 세션에서 센 건수를 events에 적습니다(세지 않은 세션은 0으로 셉니다).")
         deviations = sum(1 for s in found for x in s.get("notes") or [] if x.get("kind") == "deviation")
         verdicts[where] = {"result": v["result"], "status": status, "reason": v["reason"], "sample": have, "need": need,
-                           "deviations": deviations, "criteria": criteria, "sample_text": _sample_line(have, need, deviations, list(dict.fromkeys(s["build"] for s in seen)))}
+                           "deviations": deviations, "criteria": criteria, "proposed_result": v.get("proposed_result"),
+                           "sample_text": _sample_line(have, need, deviations, list(dict.fromkeys(s["build"] for s in seen)))}
 
     unverified: list = []
     refuted: list = []
@@ -633,6 +651,8 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
 def print_extra(result: dict) -> None:
     for where, v in result["verdicts"].items():
         state = "확정" if v["status"] == "approved" else "제안"
+        if v.get("proposed_result") not in (None, v["result"]):
+            state += f", 판정 에이전트는 {RESULT_LABEL[v['proposed_result']]}"   # 사용자가 제안을 모름으로 낮춰 확정했다
         print(f"{where}: {RESULT_LABEL[v['result']]} ({state}) · 관찰한 근거 {v['sample_text']}")
     if result["unchecked_reason"]:
         print(f"컨셉·가설 참조 미확인({UNCHECKED_REASON.get(result['unchecked_reason'], '')}): {result['unchecked'] - len(result['unchecked_refs'])}건")
