@@ -73,7 +73,7 @@ class Enhancement(unittest.TestCase):
                 self.assertEqual(codes(validate(data(enhance=[track(levels, **over)]))["errors"]), ["schema"])
 
     def test_enhanced_item_overtaking_the_next_tier_is_warned(self):
-        r = validate(data(enhance=[track([{"cost": 1, "bonus_pct": 1.5}])]))   # a1 25 > 티어 2 기대 20 × 1.2
+        r = validate(data(enhance=[track([{"cost": 1, "bonus_pct": 1.5}])]))   # a1·a2 25 > 티어 2 기대 20 × 1.2
         self.assertEqual(codes(r["warnings"]), ["enhance_overtakes_tier"])
         r = validate(data(enhance=[track([{"cost": 1, "bonus_pct": 1.0}])]))   # 20 = 20, 티어 2는 다음 티어가 없어 비교하지 않는다
         self.assertEqual(r["warnings"], [])

@@ -313,10 +313,16 @@ def validate(data: dict, items: dict | None = None, drop_tables: dict | None = N
             nxt = bg.expected_budget(item_spec, e, at + 1)
             if nxt and b * (1 + top) > nxt * (1 + tol):
                 info["overtakes"].append(i)
-        if info["overtakes"]:
+        over, ack = info["overtakes"], (t.get("acknowledged") or {}).get("enhance_overtakes_tier") if isinstance(t.get("acknowledged"), dict) else None
+        head = f"최고 단계(+{len(t['levels'])}, 기본의 {1 + top:.0%})까지 강화하면 다음 {by}의 기대 예산을 넘는 아이템"
+        if isinstance(ack, dict):   # 아이템별 확인이 있으면 아이템마다 낸다. 확인하지 않은 아이템만 경고로 남는다
+            for i in over:
+                _err(warnings, "enhance_overtakes_tier", t["id"], f"{head}: {i}", owner=t["id"], part=i)
+        elif over:   # 아이템이 많아도 강화 하나에 경고 하나
             _err(warnings, "enhance_overtakes_tier", t["id"],
-                 f"최고 단계(+{len(t['levels'])}, 기본의 {1 + top:.0%})까지 강화하면 다음 {by}의 기대 예산을 넘는 아이템: "
-                 + ", ".join(info["overtakes"][:6]) + (" …" if len(info["overtakes"]) > 6 else ""), owner=t["id"])
+                 f"{head}: " + ", ".join(over[:6]) + (f" 외 {len(over) - 6}개" if len(over) > 6 else "")
+                 + f". 의도면 이 강화의 acknowledged에 아이템별로 적습니다(예: {{\"enhance_overtakes_tier\": {{\"{over[0]}\": 이유}}}}). 문자열 이유 하나는 모든 아이템을 덮습니다.",
+                 owner=t["id"])
 
     recipe_info: dict = {}
     edges: dict = {}

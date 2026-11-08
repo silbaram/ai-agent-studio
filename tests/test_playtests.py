@@ -121,11 +121,14 @@ class References(unittest.TestCase):
 
 class Gate(unittest.TestCase):
     def test_only_confirmed_holds_or_refuted_counts_as_decided(self):
-        both = [verdict(), verdict(hypothesis="tempo_choice", result="refuted", status="approved")]
+        stamps = ctx()["parry_tempo"]["criteria"]   # 지문이 없는 확정 판정은 게이트를 넘지 못한다
+        both = [verdict(criteria=stamps["learn_timing"]), verdict(hypothesis="tempo_choice", result="refuted", status="approved", criteria=stamps["tempo_choice"])]
         s = session(observations=[{"hypothesis": "learn_timing", "value": "a"}, {"hypothesis": "tempo_choice", "value": "b"}])
         self.assertEqual(validate([s], both)["unverified"], [])
         proposed = [verdict(status="proposed"), both[1]]
         self.assertEqual(validate([s], proposed)["unverified"], ["parry_tempo.learn_timing"])
+        unstamped = [verdict(), both[1]]
+        self.assertEqual(validate([s], unstamped)["unverified"], ["parry_tempo.learn_timing"])
         unknown = [verdict(result="unknown"), both[1]]
         self.assertEqual(validate([s], unknown)["unverified"], ["parry_tempo.learn_timing"])
 

@@ -20,7 +20,7 @@ from pathlib import Path
 from . import budget, calibrate, claude, combat, concepts, crafting, datasets, economy, enemies, growth, items, levels, meta_sim, playtests, provenance, scope, systems, upgrades, viewer
 from . import common as c
 
-EXTRA_PRINTERS = {"items": items.print_extra, "upgrades": upgrades.print_extra, "enemies": enemies.print_extra,
+EXTRA_PRINTERS = {"concepts": concepts.print_extra, "items": items.print_extra, "upgrades": upgrades.print_extra, "enemies": enemies.print_extra,
                   "combat": combat.print_extra, "budget": budget.print_extra, "crafting": crafting.print_extra,
                   "economy": economy.print_extra, "growth": growth.print_extra, "levels": levels.print_extra, "playtests": playtests.print_extra, "systems": systems.print_extra}
 TABLE_PRINTERS = {"concepts": concepts.table, "combat": combat.table, "budget": budget.table, "crafting": crafting.table,
@@ -29,6 +29,17 @@ COUNT_PRINTERS = {"concepts": concepts.print_counts, "combat": combat.print_coun
                   "crafting": crafting.print_counts, "economy": economy.print_counts, "growth": growth.print_counts,
                   "levels": levels.print_counts, "playtests": playtests.print_counts, "systems": systems.print_counts}
 GATE_LABELS = {"playtests": "판정이 확정되지 않은 가설(버팀·틀림 확정이 아님): ", "levels": "출처가 가정이거나 비어 있는 항목과 통과하지 않은 그레이박스 확인: "}
+GATE_DEFAULT = "출처가 가정이거나 비어 있는 항목: "
+REFUTED_GATE = "틀림으로 확정된 가설(선택한 컨셉): "
+
+
+def _gate_lines(d: dict) -> list:
+    """--fail-on-assumed가 막는 (설명, 항목들) 줄. 선택한 컨셉의 가설이 틀림으로 확정됐으면 그 위에서 다음 단계로 가지 않는다."""
+    r = d["report"]
+    lines = [(GATE_LABELS.get(d["kind"], GATE_DEFAULT), r["unverified"])] if r.get("unverified") else []
+    if r.get("refuted"):
+        lines.append((REFUTED_GATE, r["refuted"]))
+    return lines
 
 
 def _missing(paths: list[str]) -> list[str]:
@@ -121,8 +132,11 @@ def cmd_check(args) -> int:
     warnings = sum(len(r["warnings"]) for r in reports)
     acknowledged = sum(len(r.get("acknowledged", [])) for r in reports)
     unchecked = sum(r.get("unchecked", 0) for r in reports)
-    gated = {d["path"]: d["report"]["unverified"] for d in entries
-             if d["ok"] and args.fail_on_assumed and d["report"].get("unverified")}
+    gated = {}
+    for d in entries if args.fail_on_assumed else []:
+        lines = _gate_lines(d) if d["ok"] else []
+        if lines:
+            gated[d["path"]] = lines
     assumed_configs = datasets.unverified_configs([Path(p) for p in args.paths]) if args.fail_on_assumed else []
     failed = (bool(errors) or (args.strict and bool(warnings)) or bool(gated) or bool(assumed_configs)
               or ((args.strict or args.fail_on_assumed) and bool(unchecked)))
@@ -164,8 +178,8 @@ def cmd_check(args) -> int:
                 EXTRA_PRINTERS[d["kind"]](r)
             if args.table and d["kind"] in TABLE_PRINTERS and (table_kinds is None or d["kind"] in table_kinds):
                 print(TABLE_PRINTERS[d["kind"]](d["data"], r, ids))
-            if d["path"] in gated:
-                print("gate: " + GATE_LABELS.get(d["kind"], "출처가 가정이거나 비어 있는 항목: ") + ", ".join(gated[d["path"]]))
+            for label, items in gated.get(d["path"], []):
+                print("gate: " + label + ", ".join(items))
             if d["kind"] in COUNT_PRINTERS:
                 COUNT_PRINTERS[d["kind"]](r)
             else:

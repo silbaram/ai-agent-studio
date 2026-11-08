@@ -47,7 +47,7 @@
             "test": "그레이박스 적 1종·패턴 3개, 3명에게 5판씩", "sample": { "players": 3, "runs": 15 } },
           { "id": "tempo_choice", "claim": "템포 상승이 회피보다 패링을 고르게 만든다",
             "failure_signal": "패링 성공률이 높은 사람도 회피를 70% [가정] 이상 고른다",
-            "test": "같은 프로토타입에서 판마다 패링·회피 입력 수를 센다", "sample": { "players": 3, "runs": 15 } }
+            "test": "같은 프로토타입에서 판마다 패링·회피 입력 수를 센다. 템포가 가장 높을 때 고른 횟수(top_tempo_choice)를 따로 센다", "sample": { "players": 3, "runs": 15, "events": { "top_tempo_choice": 20 } } }
         ],
         "prototype": { "kind": "graybox", "scope": "방 1개, 적 1종, 패턴 3개, 템포 3단계. 그래픽·메뉴·저장 제외",
                        "duration_days": 3, "success_criteria": "3명 [가정] 중 2명 [가정] 이상에서 5판 [가정] 동안 피격률이 줄고 패링 선택 비율이 오른다" },
