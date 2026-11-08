@@ -25,7 +25,7 @@ CRITERIA = re.compile(r"^[0-9a-f]{8}$")
 NUMBER = re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")  # 낱말에 붙은 수(pt_2, v1.2)는 보지 않는다. 0-60은 0과 60이다. 1e-05는 수 하나다
 DATE_TIME = re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?")  # 관찰값의 날짜·시각은 수로 보지 않는다
 SOURCE_READ_LIMIT = 5_000_000
-STAGE_FIELDS = {"stage", "entered", "cleared", "level", "duration", "kills", "income", "source", "note"}
+STAGE_FIELDS = {"stage", "entered", "cleared", "level", "level_end", "duration", "timed", "kills", "kill_rate", "played_length", "income", "source", "note"}
 GROUP_FIELDS = {"upgrades", "growth_build", "variant", "runs", "players", "stage_stats"}
 GREYBOX_FIELDS = {"check", "value", "passed", "n", "source", "note"}
 SESSION_FIELDS = {"id", "date", "concept", "build", "players", "runs", "events", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note"}
@@ -87,13 +87,25 @@ def _check_records(holder: dict, label: str, runs, where: str, errors: list, war
         if "level" in x and not (is_number(x["level"]) and x["level"] >= 1):
             _err(errors, "schema", where, f"{at}: level은 1 이상의 수입니다(그 단계에 들어설 때의 평균 레벨): {x['level']!r}")
             ok = False
+        if "level_end" in x and not (is_number(x["level_end"]) and x["level_end"] >= 1):
+            _err(errors, "schema", where, f"{at}: level_end는 1 이상의 수입니다(그 단계를 넘긴 판이 단계를 끝낼 때의 평균 레벨): {x['level_end']!r}")
+            ok = False
         if "duration" in x and not (is_number(x["duration"]) and x["duration"] > 0):
             _err(errors, "schema", where, f"{at}: duration은 0보다 큰 수입니다: {x['duration']!r}")
+            ok = False
+        if "timed" in x and not isinstance(x["timed"], bool):
+            _err(errors, "schema", where, f"{at}: timed는 true/false입니다(시간이 다 되면 끝나는 단계): {x['timed']!r}")
             ok = False
         for key in ("kills", "income"):
             if key in x and not _amounts(x[key]):
                 _err(errors, "schema", where, f"{at}: {josa(key, '은는')} {{id: 0 이상의 판 평균}}입니다.")
                 ok = False
+        if "played_length" in x and not (is_number(x["played_length"]) and x["played_length"] > 0):
+            _err(errors, "schema", where, f"{at}: played_length는 0보다 큰 수입니다(kill_rate를 낸 판들의 길이 합): {x['played_length']!r}")
+            ok = False
+        if "kill_rate" in x and not _amounts(x["kill_rate"]):
+            _err(errors, "schema", where, f"{at}: kill_rate는 {{적 id: 들어간 판 전체의 길이 1당 처치 수}}입니다.")
+            ok = False
     if ok:
         for a, b in zip(stats, stats[1:]):
             if b["entered"] > a["cleared"]:
@@ -182,7 +194,7 @@ def _used_refs(s: dict) -> dict:
         build = h.get("growth_build", s.get("growth_build"))
         out["stages"] += [x["stage"] for x in stats]
         out["upgrades"] += h.get("upgrades", [])
-        out["enemies"] += [k for x in stats for k in x.get("kills", {})]
+        out["enemies"] += [k for x in stats for key in ("kills", "kill_rate") for k in x.get(key, {})]
         out["builds"] += [build] if build else []
         out["currencies"] += [k for x in stats for k in x.get("income", {})]
     return out

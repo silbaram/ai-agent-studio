@@ -26,7 +26,8 @@ DEFAULT_TOLERANCE = 0.2
 Z95 = 1.96
 SKILL_POINTS = [NormalDist().inv_cdf((i + 0.5) / 9) for i in range(9)]  # 실력 분포를 같은 확률의 9칸으로 나눈 값
 CHI2_95 = {1: 3.84, 2: 5.99, 3: 7.81, 4: 9.49}  # 맞춘 값 수별 95% 기준. 가능도 비 검정으로 기록이 지금 값과 구분되는지 본다
-KIND_LABEL = {"level": "레벨", "duration": "길이", "kills": "처치", "income": "수입"}
+KIND_LABEL = {"level": "레벨", "level_end": "끝 레벨", "duration": "길이", "kills": "처치", "kill_rate": "길이 1당 처치", "income": "수입"}
+FEW_CLEARED = 3   # 넘긴 판이 이보다 적거나 들어간 판의 절반보다 적으면 넘긴 판의 평균은 살아남은 판으로 치우친 참고 값이다
 VERDICT_LABEL = {"inside": "구간 안", "model_easier": "모델이 쉬움", "model_harder": "모델이 어려움"}
 
 
@@ -219,9 +220,20 @@ def _mean(pairs: list):
     return round(sum(v * w for v, w in pairs) / total, 4) if total else None
 
 
-def _row(kind: str, stage: str, item, assumed, measured, n: int, where: str, tolerance: float) -> dict:
+def _row(kind: str, stage: str, item, assumed, measured, n: int, where: str, tolerance: float, entered: int | None = None,
+         survivors: bool = False) -> dict:
+    """entered: 넘긴 판으로 잰 값이면 그 단계에 들어간 판 수. 넘긴 판이 적으면 few(참고)로 둔다.
+    survivors: 가정 자체가 넘긴 판의 값(다음 단계에 들어설 때의 레벨)이면 비율로는 치우치지 않으므로 판 수만 본다."""
     off = measured != assumed if not assumed else abs(measured - assumed) > tolerance * abs(assumed) + 1e-9
-    return {"kind": kind, "stage": stage, "item": item, "assumed": assumed, "measured": measured, "n": n, "off": off, "where": where}
+    few = entered is not None and (n < FEW_CLEARED or (not survivors and 2 * n < entered))
+    return {"kind": kind, "stage": stage, "item": item, "assumed": assumed, "measured": measured, "n": n, "off": off, "where": where,
+            "entered": entered, "few": few}
+
+
+def _entered(records: list, key: str) -> int:
+    """그 값을 잴 수 있었던 기록들이 들어간 판 수. 넘긴 판이 없는 기록은 값을 적을 수 없어도 센다(모두 실패한 묶음).
+    넘긴 판이 있는데 값을 적지 않은 기록(그 값을 남기지 않는 세션)은 세지 않는다."""
+    return sum(x["entered"] for x in records if key in x or not x["cleared"])
 
 
 def _economy_by_stage(entries: list) -> dict:
@@ -243,10 +255,11 @@ def compare(entries: list, sessions: list, tolerance: float, notes: list) -> lis
     growth = next((d["data"] for d in entries if d["ok"] and d["kind"] == "growth"), None)
     settings = gr.read_settings(growth, []) if growth else None
     level_at = (settings or {}).get("level_at", {})
+    order = list(level_at)
     econ = _economy_by_stage(entries)
     stages = list(dict.fromkeys(x["stage"] for s in sessions for x in s["stage_stats"]))
     rows = []
-    no_level, no_econ = [], []
+    no_level, no_econ, no_next, timed, same = [], [], [], [], []
     for stage in stages:
         recs = [x for s in sessions for x in s["stage_stats"] if x["stage"] == stage]
         levels = [(x["level"], x["entered"]) for x in recs if "level" in x and x["entered"]]
@@ -254,32 +267,59 @@ def compare(entries: list, sessions: list, tolerance: float, notes: list) -> lis
             rows.append(_row("level", stage, None, level_at[stage], _mean(levels), sum(w for _, w in levels), f"growth.json growth.level_at.{stage}", tolerance))
         elif levels:
             no_level.append(stage)
-        parts = econ.get(stage)
         full = [x for x in recs if x["cleared"]]
-        if not parts and any(k in x for x in full for k in ("duration", "kills", "income")):
+        ends = [(x["level_end"], x["cleared"]) for x in full if "level_end" in x]
+        if ends:   # 넘긴 판이 단계를 끝낼 때의 레벨은 다음 단계에 들어설 때의 레벨이다(다음 단계의 기록이 없는 시험판도 잰다)
+            nxt = order[order.index(stage) + 1] if stage in order and order.index(stage) + 1 < len(order) else None
+            if nxt is None:
+                no_next.append(stage)
+            else:
+                rows.append(_row("level_end", stage, None, level_at[nxt], _mean(ends), sum(w for _, w in ends), f"growth.json growth.level_at.{nxt}", tolerance,
+                                 _entered(recs, "level_end"), survivors=True))
+        parts = econ.get(stage)
+        if not parts and (any(k in x for x in full for k in ("duration", "kills", "income")) or any("kill_rate" in x for x in recs)):
             no_econ.append(stage)
-        if not parts or not full:
+        if not parts:
             continue
         first = parts[0][0]["id"]
+        length = sum(st["duration"] for _, st in parts)
+        assumed: dict = {}
+        for raw, _ in parts:
+            for k, v in (raw.get("kills") or {}).items():
+                assumed[k] = assumed.get(k, 0) + v
+        paced = [x for x in recs if "kill_rate" in x and x["entered"]]
+        if paced and length:   # 들어간 판 전체의 처치 속도. 넘긴 판이 적어도 잴 수 있다
+            for enemy in dict.fromkeys(list(assumed) + [k for x in paced for k in x["kill_rate"]]):
+                pairs = [(x["kill_rate"].get(enemy, 0), x.get("played_length", x["entered"])) for x in paced]   # 길이로 가중하면 처치 합 ÷ 길이 합이다
+                rows.append(_row("kill_rate", stage, enemy, round(assumed.get(enemy, 0) / length, 4), _mean(pairs), sum(x["entered"] for x in paced),
+                                 f"economy.json stages.{first}.kills.{enemy}", tolerance))
+        if not full:
+            continue
         durations = [(x["duration"], x["cleared"]) for x in full if "duration" in x]
-        if durations:
-            rows.append(_row("duration", stage, None, sum(st["duration"] for _, st in parts), _mean(durations), sum(w for _, w in durations),
-                             f"economy.json stages.{first}.duration", tolerance))
+        if durations and any(x.get("timed") for x in recs):
+            timed.append(stage)
+        elif durations:
+            rows.append(_row("duration", stage, None, length, _mean(durations), sum(w for _, w in durations),
+                             f"economy.json stages.{first}.duration", tolerance, _entered(recs, "duration")))
+            if all(d == length for d, _ in durations):
+                same.append(stage)
         kills = [x for x in full if "kills" in x]
         if kills:
-            assumed: dict = {}
-            for raw, _ in parts:
-                for k, v in (raw.get("kills") or {}).items():
-                    assumed[k] = assumed.get(k, 0) + v
             for enemy in dict.fromkeys(list(assumed) + [k for x in kills for k in x["kills"]]):
                 pairs = [(x["kills"].get(enemy, 0), x["cleared"]) for x in kills]
                 rows.append(_row("kills", stage, enemy, assumed.get(enemy, 0), _mean(pairs), sum(w for _, w in pairs),
-                                 f"economy.json stages.{first}.kills.{enemy}", tolerance))
+                                 f"economy.json stages.{first}.kills.{enemy}", tolerance, _entered(recs, "kills")))
         incomes = [x for x in full if "income" in x]
         for cur in dict.fromkeys(k for x in incomes for k in x["income"]):
             pairs = [(x["income"].get(cur, 0), x["cleared"]) for x in incomes]
             rows.append(_row("income", stage, cur, sum(st["income"].get(cur, 0) for _, st in parts), _mean(pairs), sum(w for _, w in pairs),
-                             f"economy.json stages.{first} 수입({cur})", tolerance))
+                             f"economy.json stages.{first} 수입({cur})", tolerance, _entered(recs, "income")))
+    if timed:
+        notes.append(f"단계 {', '.join(timed)}: 시간이 다 되면 끝나는 단계(timed)라 길이는 늘 같아 비교하지 않았습니다. 처치는 처치 속도(kill_rate)로 봅니다.")
+    if same:   # 시간 제한 단계인지는 기록만으로 알 수 없다(합성 기록이나 정수로 찍은 길이도 같아진다). 적게 한다
+        notes.append(f"단계 {', '.join(same)}: 넘긴 판의 길이가 모두 가정과 같습니다. 시간이 다 되면 끝나는 단계면 그 단계 기록에 \"timed\": true를 적습니다. 그러면 길이를 비교하지 않습니다.")
+    if no_next:
+        notes.append(f"단계 {', '.join(no_next)}의 끝 레벨을 비교하지 못했습니다(판 안 성장의 level_at에 다음 단계가 없음).")
     if no_level:
         why = "판 안 성장 데이터가 없거나 그 설정에 오류가 있어" if settings is None else "판 안 성장의 level_at에 없어"
         notes.append(f"단계 {', '.join(no_level)}의 레벨을 비교하지 못했습니다({why}).")
@@ -316,6 +356,35 @@ def _points(cfg: dict, sessions: list, notes: list) -> list:
     return out
 
 
+LARGE_CHANGE = 4   # 제안이 지금 값의 이 배수를 넘거나(또는 1/배수 밑) 바뀌면 모델이 담지 못하는 것을 값이 메우는지 의심한다
+
+
+def _fit_warnings(cfg: dict, points: list, result: dict) -> list:
+    """맞춘 등급의 even_margin은 그 등급의 적이 있는 모든 단계에 쓰인다. 기록이 없는 단계와, 지금 값과 크게 다른 제안을 알린다."""
+    e = result["even_margin"]
+    fitted = [r for r, ok in e["fitted"].items() if ok]
+    if not fitted:
+        return []
+    try:
+        rows = mm.stage_rows(cfg, [])
+    except ConfigError:
+        rows = {}
+    recorded = {p["stage"] for p in points}
+    out = []
+    for rank in fitted:
+        others = [sid for sid, got in rows.items() if sid not in recorded and any(x.get("rank") == rank for x in got)]
+        if others:
+            out.append(f"맞춘 등급 {rank}의 even_margin은 기록이 없는 단계({', '.join(others)})의 예측도 바꿉니다. "
+                       "그 단계를 플레이한 기록이 생기기 전에는 옮기지 않거나, 옮긴 뒤 그 단계의 목표를 다시 봅니다.")
+        now, new = mm.margin_reference(e["current"], rank), e["suggested"][rank]
+        ratio = new / now if now else math.inf
+        if ratio >= LARGE_CHANGE or ratio <= 1 / LARGE_CHANGE:
+            out.append(f"등급 {rank}의 even_margin 제안이 지금 값의 {ratio:.2g}배입니다(지금 {now:g} → 제안 {new:g}). "
+                       "모델이 담지 못하는 것(적이 쌓임, 이동, 앞 단계에서 잃은 체력)을 이 값이 대신 메우는 것일 수 있습니다. "
+                       "옮기기 전에 처치 시간이 단계 길이를 넘는지(kill_time_over_length)와 처치 속도(kill_rate)를 먼저 봅니다.")
+    return out
+
+
 def survival_report(cfg: dict, sessions: list, notes: list) -> dict | None:
     points = _points(cfg, sessions, notes)
     if not points:
@@ -323,6 +392,7 @@ def survival_report(cfg: dict, sessions: list, notes: list) -> dict | None:
     skill, spread, survival = cfg["player"]["skill"], cfg["player"]["skill_spread"], cfg["survival"]
     result = fit(points, survival, skill, spread)
     notes += result.pop("notes")
+    notes += _fit_warnings(cfg, points, result)
     better = {**survival, "slope": result["slope"]["suggested"], "even_margin": result["even_margin"]["suggested"]}
     stages = []
     for stage in cfg["_combat"]["stages"]:
@@ -353,8 +423,19 @@ def _inputs(entries: list, used: list) -> list:
             for d in entries if d["ok"] and d["kind"] in kinds] + used
 
 
-def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOLERANCE) -> dict:
-    """path: 프로젝트·데이터 폴더(가정값 비교만) 또는 시뮬레이터 설정 파일(전투 계산 모델, 통과율 비교와 제안까지). 파일을 고치지 않는다."""
+def _same_value(have, want) -> bool:
+    """시험 조건 값이 같은가. 둘 다 수로 읽히면 수로(1, 1.0, "1"은 같다), 아니면 글자 그대로 맞춘다. 참·거짓 값은 기록 검사가 막는다."""
+    if have is None:
+        return False
+    try:
+        return math.isclose(float(have), float(want))
+    except (TypeError, ValueError):
+        return str(have) == str(want)
+
+
+def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOLERANCE, variant: dict | None = None) -> dict:
+    """path: 프로젝트·데이터 폴더(가정값 비교만) 또는 시뮬레이터 설정 파일(전투 계산 모델, 통과율 비교와 제안까지). 파일을 고치지 않는다.
+    variant: {열: 값}. 주면 그 시험 조건의 묶음(runlog --group-by가 단 variant)만 쓴다. 값은 글자로 맞춘다(1과 "1"은 같다)."""
     path = Path(path)
     if tolerance < 0:
         raise ConfigError(f"--tolerance는 0 이상의 비율입니다: {tolerance:g}")
@@ -388,18 +469,26 @@ def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOL
         values = list(dict.fromkeys(s.get(key) for s in chosen))
         if len(values) > 1:
             notes.append(f"{c.josa(label, '이가')} 다른 세션을 합쳐 계산했습니다({', '.join(map(str, values))}). 한쪽만 보려면 --sessions로 고릅니다.")
-    variants: dict = {}
-    for s in chosen:
-        for g in s.get("groups") or []:
-            for col, value in (g.get("variant") or {}).items():
-                variants.setdefault(col, {})[str(value)] = None
-    for col, values in variants.items():
-        if len(values) > 1:
-            notes.append(f"시험 조건이 다른 묶음을 합쳐 계산했습니다({col}: {', '.join(values)}). 조건마다 따로 비교하지 않습니다. 조건별 판 수와 통과는 세션의 묶음(groups)에서 봅니다.")
     ids = {s["id"] for s in chosen}
     broken_counts = dict.fromkeys(w["where"] for d in logs for w in d["report"]["warnings"] if w["code"] == "stage_counts_mismatch" and w["where"] in ids)
     notes += [f"세션 {sid}: 판 수가 단계 사이에 이어지지 않습니다. 기록을 확인하세요(그대로 계산했습니다)." for sid in broken_counts]
     records = [r for s in chosen for r in _expanded(s)]
+    variants: dict = {}
+    for r in records:
+        for col, value in (r.get("variant") or {}).items():
+            variants.setdefault(col, {})[str(value)] = None
+    if variant:
+        wanted = " · ".join(f"{k}={v}" for k, v in variant.items())
+        kept = [r for r in records if all(_same_value((r.get("variant") or {}).get(k), v) for k, v in variant.items())]
+        if not kept:
+            have = "; ".join(f"{col}: {', '.join(values)}" for col, values in variants.items()) or "묶음에 variant가 없음(runlog --group-by로 나눕니다)"
+            raise ConfigError(f"시험 조건 {wanted}인 묶음이 없습니다. 기록의 시험 조건: {have}.")
+        notes.append(f"시험 조건 {wanted}인 묶음만 썼습니다({len(kept)}/{len(records)}묶음).")
+        records = kept
+        variants = {col: {str(v): None for v in dict.fromkeys((r.get("variant") or {}).get(col) for r in records) if v is not None} for col in variants}
+    for col, values in variants.items():
+        if len(values) > 1:
+            notes.append(f"시험 조건이 다른 묶음을 합쳐 계산했습니다({col}: {', '.join(values)}). 조건마다 따로 비교하지 않습니다. 조건별로 보려면 --variant {col}=값으로 고릅니다.")
     survival = survival_report(cfg, records, notes) if cfg else None
     if cfg is not None and survival is None:
         raise ConfigError("통과율을 비교할 기록이 없습니다(" + " ".join(notes) + "). 가정값 비교만 하려면 프로젝트 폴더를 넘기세요.")
@@ -417,9 +506,9 @@ def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOL
 
 # ---------- 판별 로그 ----------
 RUN_REQUIRED = ("run", "stage", "cleared")
-RUN_COLUMNS = (*RUN_REQUIRED, "upgrades", "growth_build", "player", "level", "duration")
+RUN_COLUMNS = (*RUN_REQUIRED, "upgrades", "growth_build", "player", "level", "level_end", "duration")
 RUN_PREFIXES = ("kills.", "income.")
-RUN_HELP = "열: run, stage, cleared(1/0), upgrades, growth_build, player, level, duration, kills.<적>, income.<재화>. 쓰지 않는 열은 이름 앞에 _를 붙입니다."
+RUN_HELP = "열: run, stage, cleared(1/0), upgrades, growth_build, player, level, level_end, duration, kills.<적>, income.<재화>. 쓰지 않는 열은 이름 앞에 _를 붙입니다."
 CLEARED = {"1": True, "true": True, "yes": True, "0": False, "false": False, "no": False}
 
 
@@ -491,6 +580,7 @@ def summarize_runs(path, group_by: str | None = None) -> dict:
         if run["failed"]:
             raise ConfigError(f"{n}번째 줄: 판 {c.josa(rid, '은는')} 앞 단계에서 실패했는데 단계 {c.josa(stage, '이가')} 이어집니다.")
         rec = {"stage": stage, "cleared": flag, "level": _log_number(row.get("level"), "level", n),
+               "level_end": _log_number(row.get("level_end"), "level_end", n),
                "duration": _log_number(row.get("duration"), "duration", n), "kills": {}, "income": {}}
         for k, v in row.items():
             if k.startswith(RUN_PREFIXES):
@@ -514,11 +604,20 @@ def summarize_runs(path, group_by: str | None = None) -> dict:
             full = [x for x in recs if x["cleared"]]
             item: dict = {"stage": stage, "entered": len(recs), "cleared": len(full)}
             levels = [x["level"] for x in recs if x["level"] is not None]
+            ends = [x["level_end"] for x in full if x["level_end"] is not None]
             durations = [x["duration"] for x in full if x["duration"] is not None]
             if levels:
                 item["level"] = _whole(sum(levels) / len(levels))
+            if ends:
+                item["level_end"] = _whole(sum(ends) / len(ends))   # 넘긴 판이 다음 단계에 들어설 때의 레벨
             if durations:
                 item["duration"] = _whole(sum(durations) / len(durations))
+            paced = [x for x in recs if x["kills"] and x["duration"]]   # 실패한 판도 센다. 넘긴 판만 세면 살아남은 판으로 치우친다
+            if paced:
+                length = sum(x["duration"] for x in paced)
+                item["kill_rate"] = {k: round(sum(x["kills"].get(k, 0) for x in paced) / length, 4)
+                                     for k in dict.fromkeys(k for x in paced for k in x["kills"])}
+                item["played_length"] = _whole(length)   # 묶음을 합칠 때 처치 속도를 길이로 가중한다
             for key in ("kills", "income"):
                 names = list(dict.fromkeys(k for x in full for k in x[key]))
                 with_data = [x for x in full if x[key]]
@@ -572,14 +671,19 @@ def print_report(r: dict, off_only: bool = False) -> None:
             print(f"단계 {x['stage']}: 실측 통과 {x['cleared']}/{x['entered']}판 {x['rate']:.0%} (구간 {x['low']:.0%}~{x['high']:.0%}) · "
                   f"예측 {x['predicted']:.0%} → {VERDICT_LABEL[x['verdict']]}" + (f" · 제안 값으로 {x['predicted_suggested']:.0%}" if suggested else ""))
         _print_fit(s["fit"])
-    off = sum(1 for x in r["compare"] if x["off"])
-    print(f"가정값 비교: {len(r['compare'])}건 중 {off}건이 {r['tolerance']:.0%} 넘게 다름")
+    off = sum(1 for x in r["compare"] if x["off"] and not x.get("few"))
+    hints = sum(1 for x in r["compare"] if x["off"] and x.get("few"))
+    print(f"가정값 비교: {len(r['compare'])}건 중 {off}건이 {r['tolerance']:.0%} 넘게 다름"
+          + (f"(넘긴 판이 적어 참고로 둔 {hints}건 제외)" if hints else ""))
     for x in r["compare"]:
-        if off_only and not x["off"]:
+        if off_only and not (x["off"] and not x.get("few")):   # 머리줄의 "다름"과 같은 줄만 보인다
             continue
         item = f"({x['item']})" if x["item"] else ""
-        print(f"단계 {x['stage']} {KIND_LABEL[x['kind']]}{item}: 가정 {_num(x['assumed'])} · 측정 {_num(x['measured'])} (판 {x['n']})"
-              + (f" ⚠ {x['where']}" if x["off"] else ""))
+        if x.get("few"):   # 넘긴 판이 적으면 살아남은 판의 평균이라 고칠 곳을 가리키지 않는다
+            tail = f" · 넘긴 판 {x['n']}/{x['entered']}판, 참고"
+        else:
+            tail = f" ⚠ {x['where']}" if x["off"] else ""
+        print(f"단계 {x['stage']} {KIND_LABEL[x['kind']]}{item}: 가정 {_num(x['assumed'])} · 측정 {_num(x['measured'])} (판 {x['n']})" + tail)
     for n in r["notes"]:
         print("참고: " + n)
     print("주의: 기록한 빌드와 플레이어에서 나온 값입니다. 제안은 자동으로 적용하지 않습니다. 실제 난이도·재미 판정이 아닙니다.")

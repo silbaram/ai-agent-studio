@@ -76,6 +76,8 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 세션에 단계 기록과 그때 가진 영구 강화를 적었으면 `calibrate`로 기획의 가정값과 비교한다. 평균을 손으로 내지 않는다. 프로토타입의 판별 로그(CSV)를 `runlog`로 모아 세션에 합친다(판 사이에 강화를 사서 상태가 바뀌어도 상태별 묶음으로 나온다). 형식과 읽는 법은 [references/calibration.md](references/calibration.md).
 
+단계 하나짜리 시험판(5분 회색 상자)도 비교할 수 있다. 판이 끝날 때의 레벨은 `level_end` 열로 남겨 다음 단계의 `level_at`과 견준다. 처치는 실패한 판까지 센 처치 속도(`kill_rate`)로 본다. 시간이 다 되면 끝나는 단계는 기록에 `"timed": true`를 적는다. 시험 조건이 여러 가지면 `--variant 열=값`으로 조건마다 본다. 넘긴 판이 적은 값은 "참고"로 나오므로 그 값으로 원본을 고치지 않는다.
+
 ```bash
 python3 .claude/skills/studio-data/scripts/studio.py runlog playtests/pt_20261112_1/runs.csv
 python3 .claude/skills/studio-data/scripts/studio.py calibrate data/meta_combat.json --out reports/calibrate.json

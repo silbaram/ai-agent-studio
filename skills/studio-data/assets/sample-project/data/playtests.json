@@ -35,8 +35,10 @@
       "upgrades": [],
       "logs": ["playtests/pt_20261112_1/runs.csv"],
       "stage_stats": [
-        { "stage": "zone_1", "entered": 30, "cleared": 21, "level": 1, "duration": 280, "kills": { "slime": 44, "skeleton_archer": 22, "grave_knight": 3, "bone_lord": 1 }, "income": { "soul": 8 } },
-        { "stage": "zone_2", "entered": 21, "cleared": 11, "level": 5, "duration": 340, "kills": { "frost_wolf": 33, "ice_mage": 20, "frost_giant": 3, "ice_queen": 1 }, "income": { "soul": 12 } },
+        { "stage": "zone_1", "entered": 30, "cleared": 21, "level": 1, "duration": 280, "kills": { "slime": 44, "skeleton_archer": 22, "grave_knight": 3, "bone_lord": 1 },
+          "kill_rate": { "bone_lord": 0.0036, "grave_knight": 0.0107, "skeleton_archer": 0.0786, "slime": 0.1571 }, "played_length": 5880, "income": { "soul": 8 } },
+        { "stage": "zone_2", "entered": 21, "cleared": 11, "level": 5, "duration": 340, "kills": { "frost_wolf": 33, "ice_mage": 20, "frost_giant": 3, "ice_queen": 1 },
+          "kill_rate": { "frost_giant": 0.0088, "frost_wolf": 0.0971, "ice_mage": 0.0588, "ice_queen": 0.0029 }, "played_length": 3740, "income": { "soul": 12 } },
         { "stage": "zone_3", "entered": 11, "cleared": 2, "level": 10, "duration": 410, "income": { "soul": 20 } }
       ]
     },

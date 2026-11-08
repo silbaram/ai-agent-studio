@@ -307,6 +307,22 @@ def _greybox_log(entries: list[dict]) -> dict | None:
     return out
 
 
+def _played_stages(entries: list[dict]) -> dict:
+    """플레이 기록의 단계 기록에서 {단계 id: 그 단계에 들어간 세션 수}. 기록 파일이 없으면 빈 dict다."""
+    data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "playtests"), None)
+    raw = data.get("playtests") if isinstance(data, dict) else None
+    out: dict = {}
+    for s in raw if isinstance(raw, list) else []:
+        if not isinstance(s, dict):
+            continue
+        holders = s.get("groups") if isinstance(s.get("groups"), list) else [s]
+        stages = {x.get("stage") for h in holders if isinstance(h, dict) for x in h.get("stage_stats") or []
+                  if isinstance(x, dict) and isinstance(x.get("stage"), str) and c.is_int(x.get("entered"), 1)}
+        for sid in stages:
+            out[sid] = out.get(sid, 0) + 1
+    return out
+
+
 def _threat_scores(entries: list[dict]) -> dict | None:
     """적 검사가 낸 위협도 {id: 값}(적 색인과 같이 첫 항목을 쓴다). 적이 없거나 검사를 마치지 못한 적 파일이 있으면 None."""
     found = [d for d in entries if d.get("kind") == "enemies"]
@@ -401,7 +417,8 @@ def validate_all(entries: list[dict]) -> list[dict]:
                 enemy_side = (budget_settings or {}).get("sides", {}).get("enemies") or {}
                 d["report"] = levels.validate(d["data"], enemies=by_id["enemies"], threat=_threat_scores(entries), combat=combat_data, economy=economy_data,
                                               kill_times=_kill_costs(entries, "time_to_kill"), kill_hits=_kill_costs(entries, "hits_to_kill"),
-                                              enemy_curve=enemy_side.get("curve"), purchases=_purchase_plan(entries), greybox_log=_greybox_log(entries))
+                                              enemy_curve=enemy_side.get("curve"), purchases=_purchase_plan(entries), greybox_log=_greybox_log(entries),
+                                              played_stages=_played_stages(entries))
                 first = next(x for x in entries if x["ok"] and x["kind"] == "levels")
                 if d is not first:  # 단계 범위와 처치 수는 파일을 넘어 세지 않는다. 일부만 세어 틀린 결과를 내지 않게 한 파일로 둔다
                     c.add_issue(d["report"]["errors"], "schema", "levels", f"레벨 구성 파일은 하나만 씁니다. {first['name']}에 합칩니다.")

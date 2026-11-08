@@ -329,8 +329,18 @@ def cmd_calibrate(args) -> int:
         print(f"경로를 찾을 수 없습니다: {args.path}", file=sys.stderr)
         return 2
     sessions = [x.strip() for x in args.sessions.split(",") if x.strip()] if args.sessions else None
+    variant = {}
+    for raw in args.variant or []:
+        col, sep, value = raw.partition("=")
+        if not (sep and col.strip() and value.strip()):
+            print(f"--variant는 열=값입니다(예: _setting=1): {raw}", file=sys.stderr)
+            return 2
+        if col.strip() in variant:
+            print(f"--variant에 같은 열을 두 번 줬습니다: {col.strip()}. 한 열에는 한 값만 고릅니다(조건마다 따로 돌립니다).", file=sys.stderr)
+            return 2
+        variant[col.strip()] = value.strip()
     try:
-        result = calibrate.calibrate(args.path, sessions, args.tolerance)
+        result = calibrate.calibrate(args.path, sessions, args.tolerance, variant or None)
     except meta_sim.ConfigError as exc:
         print(f"보정할 수 없습니다: {exc}", file=sys.stderr)
         return 2
@@ -545,6 +555,7 @@ def build_parser() -> argparse.ArgumentParser:
     b = sub.add_parser("calibrate", help="플레이 기록의 단계 기록으로 가정값을 비교하고 생존 곡선 값을 제안합니다 (파일을 고치지 않음).")
     b.add_argument("path", help="프로젝트·데이터 폴더(가정값 비교만) 또는 시뮬레이터 설정 파일(전투 계산 모델: 통과율 비교와 제안까지)")
     b.add_argument("--sessions", help="쓸 세션 id만 쉼표로 고릅니다. 빌드가 바뀌었으면 지금 빌드의 세션만 씁니다.")
+    b.add_argument("--variant", action="append", metavar="열=값", help="그 시험 조건(runlog --group-by가 단 variant)의 묶음만 씁니다. 예: _setting=1. 여러 번 주면 모두 맞는 묶음만 씁니다.")
     b.add_argument("--tolerance", type=float, default=calibrate.DEFAULT_TOLERANCE, help="가정값과 측정값이 이 비율을 넘게 다르면 표시합니다 (기본 0.2).")
     b.add_argument("--off-only", action="store_true", help="가정값 비교에서 차이가 표시된 줄만 보입니다.")
     b.add_argument("--json", action="store_true", help="결과를 JSON으로 출력합니다.")
@@ -552,7 +563,7 @@ def build_parser() -> argparse.ArgumentParser:
     b.set_defaults(func=cmd_calibrate)
 
     r = sub.add_parser("runlog", help="판별 로그(CSV)를 세션의 단계 기록으로 모아 출력합니다 (파일에 쓰지 않음).")
-    r.add_argument("log", help="판별 로그 CSV. 들어간 단계마다 한 줄: run, stage, cleared(1/0), upgrades, growth_build, player, level, duration, kills.<적>, income.<재화>")
+    r.add_argument("log", help="판별 로그 CSV. 들어간 단계마다 한 줄: run, stage, cleared(1/0), upgrades, growth_build, player, level, level_end, duration, kills.<적>, income.<재화>")
     r.add_argument("--group-by", metavar="열", help="강화가 아닌 시험 조건(예: _setting)의 열. 그 값으로도 나누고 묶음에 variant를 답니다.")
     r.set_defaults(func=cmd_runlog)
 
