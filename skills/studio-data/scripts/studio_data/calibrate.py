@@ -388,6 +388,14 @@ def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOL
         values = list(dict.fromkeys(s.get(key) for s in chosen))
         if len(values) > 1:
             notes.append(f"{c.josa(label, '이가')} 다른 세션을 합쳐 계산했습니다({', '.join(map(str, values))}). 한쪽만 보려면 --sessions로 고릅니다.")
+    variants: dict = {}
+    for s in chosen:
+        for g in s.get("groups") or []:
+            for col, value in (g.get("variant") or {}).items():
+                variants.setdefault(col, {})[str(value)] = None
+    for col, values in variants.items():
+        if len(values) > 1:
+            notes.append(f"시험 조건이 다른 묶음을 합쳐 계산했습니다({col}: {', '.join(values)}). 조건마다 따로 비교하지 않습니다. 조건별 판 수와 통과는 세션의 묶음(groups)에서 봅니다.")
     ids = {s["id"] for s in chosen}
     broken_counts = dict.fromkeys(w["where"] for d in logs for w in d["report"]["warnings"] if w["code"] == "stage_counts_mismatch" and w["where"] in ids)
     notes += [f"세션 {sid}: 판 수가 단계 사이에 이어지지 않습니다. 기록을 확인하세요(그대로 계산했습니다)." for sid in broken_counts]
@@ -399,7 +407,8 @@ def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOL
         notes.append("통과율 비교와 생존 곡선 제안은 시뮬레이터 설정(전투 계산 모델)을 넘기면 합니다.")
     rows = compare(entries, records, tolerance, notes)
     if not rows and survival is None:
-        raise ConfigError("단계 기록은 있지만 비교할 가정값이 없습니다(" + " ".join(notes) + "). 아무것도 비교하지 않았으므로 통과가 아닙니다.")
+        raise ConfigError("단계 기록과 가정값을 맞춰 볼 값이 없습니다. 같은 단계에 가정값(판 안 성장의 level_at, 재화 흐름의 duration·kills·income)이 있고, "
+                          "기록에도 그 값(level, duration, kills, income)과 통과한 판이 있어야 비교합니다(" + " ".join(notes) + "). 아무것도 비교하지 않았으므로 통과가 아닙니다.")
     return {"evidence": EVIDENCE, "config": str(path) if cfg else None, "tolerance": tolerance,
             "sessions": [{"id": s["id"], "date": s.get("date"), "build": s.get("build"), "runs": s.get("runs")} for s in chosen],
             "compare": rows, "survival": survival, "notes": notes,

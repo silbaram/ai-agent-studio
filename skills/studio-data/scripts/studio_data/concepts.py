@@ -258,11 +258,12 @@ def check_brief_numbers(c: dict, errors: list, warnings: list) -> list[str]:
     태그 형식 오류는 브리프 어디서든 보고하고, 태그 없는 수치 경고는 판정 기준 문장에서만 낸다."""
     assumed = []
     for path, text in _strings(c["brief"], "brief"):
-        r = provenance.check_text(text, path)
+        criterion = _is_criterion(path)   # 태그 없는 수치는 판정 기준 문장에서만 경고한다. 거기서는 단위 없는 문턱값(상관 -0.2)도 본다
+        r = provenance.check_text(text, path, bare_numbers=criterion)
         for f in r.findings:
             if f.level == "error":
                 errors.append({"code": "provenance", "where": c["id"], "message": f"{path}: {f.message}"})
-            elif _is_criterion(path):
+            elif criterion:
                 warnings.append({"code": "untagged_number", "where": c["id"], "message": f"{path}: {f.message}"})
         if r.counts["assumed"]:
             assumed.append(f"{c['id']}.{path}")

@@ -966,6 +966,10 @@ def _notes(budget, cfg, rows: list, kill_check: str | None, gaps: list) -> list:
         falling = before["curve"] is not None and after["curve"] is not None and after["curve"] < before["curve"]
         if after["threat"] < before["threat"] and not falling:
             out.append(f"단계 {after['id']}의 위협도 합이 앞 단계 {before['id']}보다 줄었습니다: {_fmt(before['threat'])} → {_fmt(after['threat'])}. 의도가 아니면 조우와 횟수를 봅니다.")
+    for s in rows:   # 하한만 아는 비율이 1배 아래면 경고가 나지 않는다. 모르는 적이 그 차이를 메울 수 있다
+        if s["kill_ratio"] is not None and s["kill_ratio"] <= 1 and s["kill_time_unknown"]:
+            out.append(f"단계 {s['id']}: 처치 시간 / 길이가 {s['kill_ratio']:g}배 이상입니다. 처치 시간을 모르는 적({', '.join(s['kill_time_unknown'])})을 빼고 낸 하한이라 "
+                       "1배를 넘는지 모릅니다. 그 적을 전투 계산의 그 단계에 넣으면 잽니다.")
     if kill_check:
         out.append(kill_check)
     return out + gaps

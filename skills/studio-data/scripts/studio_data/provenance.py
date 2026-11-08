@@ -21,8 +21,10 @@ NEAR_HEADER = re.compile(r"출처|\bsource\b|\bprovenance\b", re.IGNORECASE)
 SOURCE_EXAMPLE = {"computed": "reports/meta.json", "measured": "playtest-2026-11-02"}
 # 본문에서 조정 가능한 값으로 보이는 '숫자 + 단위'. 경고만 낸다(추정이므로 오류로 막지 않는다).
 NUMBER_UNIT = re.compile(
-    r"(?<![\w.])\d+(?:\.\d+)?\s?(?:%|％|퍼센트|초|분|시간|일|주|배|칸|타일|프레임|회|번|개|종|명|골드|코인|레벨|층|방|웨이브|판|런|스택"
+    r"(?<![\w.])\d+(?:\.\d+)?\s?(?:%|％|퍼센트|초|분|시간|일|주|배|칸|타일|프레임|회|번|개|종|명|골드|코인|레벨|층|방|웨이브|판|런|스택|건"
     r"|(?:px|ms|hp|HP|fps)(?![A-Za-z]))")
+BARE_NUMBER = re.compile(r"(?<![\w.])-?\d+\.\d+(?![0-9A-Za-z_.%％])|(?<![\w.])-\d+(?![0-9A-Za-z_.%％])")  # 단위 없는 소수와 음수(상관 0.2, -0.2보다). 판정 기준 문장에서만 본다
+RANGE_GAP = re.compile(r"\s*[~～–—-]\s*")   # 범위의 두 수 사이
 NAMED_BRACKET = re.compile(r"\[([^\[\]:：\s]{1,12})\s*[:：]")
 LINK_TARGET = re.compile(r"\]\([^)]*\)")
 
@@ -164,14 +166,18 @@ def _has_tag(text: str) -> bool:
     return bool(STRICT_TAG.search(text) or LOOSE_TAG.search(text))
 
 
-def _check_body_numbers(text: str, line: int, report: FileReport) -> None:
+def _check_body_numbers(text: str, line: int, report: FileReport, bare: bool = False) -> None:
     """표 밖 문장에서 태그 없는 '숫자 + 단위'를 경고한다. 수치마다 다음 수치 전까지 뒤따르는 태그가 있어야 한다.
-    한 줄의 태그 하나가 같은 줄의 다른 수치를 통과시키지 않는다. 제목 줄과 태그 안의 숫자(출처 설명)는 보지 않는다."""
+    한 줄의 태그 하나가 같은 줄의 다른 수치를 통과시키지 않는다. 제목 줄과 태그 안의 숫자(출처 설명)는 보지 않는다.
+    bare: 판정 기준 문장처럼 단위 없는 문턱값(상관 0.2, -0.2)도 수치로 볼 때."""
     if text.lstrip().startswith("#"):
         return
     text = LINK_TARGET.sub("]", text)
     tag_spans = [m.span() for m in LOOSE_TAG.finditer(text)] + [m.span() for m in STRICT_TAG.finditer(text)]
-    nums = [m for m in NUMBER_UNIT.finditer(text) if not any(s <= m.start() < e for s, e in tag_spans)]
+    found_nums = list(NUMBER_UNIT.finditer(text)) + (list(BARE_NUMBER.finditer(text)) if bare else [])
+    nums = sorted((m for m in found_nums if not any(s <= m.start() < e for s, e in tag_spans)), key=lambda m: m.start())
+    nums = [m for i, m in enumerate(nums) if not any(o.start() <= m.start() < o.end() for o in nums[:i])]   # 겹친 것(0.5배와 0.5)은 앞의 것 하나
+    nums = [m for i, m in enumerate(nums) if not (i + 1 < len(nums) and RANGE_GAP.fullmatch(text[m.end():nums[i + 1].start()]))]   # 0.2~0.3은 수 하나다(뒤의 태그를 함께 쓴다)
     found = []
     for i, m in enumerate(nums):
         until = nums[i + 1].start() if i + 1 < len(nums) else len(text)
@@ -182,7 +188,7 @@ def _check_body_numbers(text: str, line: int, report: FileReport) -> None:
         report.findings.append(Finding("warning", line, f"태그 없는 수치: {shown}. 조정할 수 있는 값이면 [가정] / [계산: 출처] / [측정: 출처]를 붙이세요."))
 
 
-def check_text(text: str, path: str = "<text>", base_dirs: list[Path] | None = None, check_paths: bool = False) -> FileReport:
+def check_text(text: str, path: str = "<text>", base_dirs: list[Path] | None = None, check_paths: bool = False, bare_numbers: bool = False) -> FileReport:
     report = FileReport(path=path)
     base_dirs = base_dirs or [Path.cwd()]
     lines = list(_visible_lines(text))
@@ -193,7 +199,7 @@ def check_text(text: str, path: str = "<text>", base_dirs: list[Path] | None = N
         stripped = visible.strip()
         if not stripped.startswith("|"):
             in_table, prov_col = False, None
-            _check_body_numbers(stripped, no, report)
+            _check_body_numbers(stripped, no, report, bare_numbers)
             continue
         nxt = lines[idx + 1] if idx + 1 < len(lines) else None
         if not in_table and nxt and nxt[0] == no + 1 and _is_separator(nxt[2]):
