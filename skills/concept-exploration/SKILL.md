@@ -94,6 +94,8 @@ python3 .claude/skills/studio-data/scripts/studio.py check design/concepts.json 
 
 추천을 요청받으면 "가장 재미있을 안"이 아니라 **적은 비용으로 가장 많이 배울 수 있는 안**을 먼저 시험하자고 제안한다. 선택은 사용자가 한다. 사용자 응답 없이 진행하는 작업이면 모든 후보를 `proposed`로 두고 "선택 대기"로 끝낸다. 응답을 지어내지 않는다.
 
+선택한 컨셉을 되돌리고 다시 고를 때는 [playtest-verdict](../playtest-verdict/SKILL.md)의 '컨셉을 되돌릴 때' 5단계를 따른다.
+
 ### 8. 선택한 컨셉을 브리프로
 
 사용자가 고른 후보를 `approved`로 바꾸고 `brief`를 채운다. 작성법은 [references/brief.md](references/brief.md).

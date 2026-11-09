@@ -18,6 +18,7 @@ RESULTS = ("holds", "refuted", "unknown")
 RESULT_LABEL = {"holds": "버팀", "refuted": "틀림", "unknown": "모름"}
 DECIDED = ("holds", "refuted")
 CRITERIA_GATE_REASON = {"missing": "지문 없음", "changed": "기준 바뀜"}
+NOT_CHOSEN_GATE = "이 컨셉은 지금 선택(approved)한 컨셉이 아니라 게이트에 들지 않습니다. 다시 고르면 확정해도 게이트를 넘지 못합니다. "
 NOTE_KINDS = ("observation", "preference", "deviation")  # deviation: 가설 test의 시험 절차를 어긴 일(순서, 중간 결과를 본 뒤 플레이 등)
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 PATH_LIKE = re.compile(r"^(?!.*://).*\.[A-Za-z][A-Za-z0-9]{0,4}$")  # 확장자로 끝나는 source만 파일로 본다. URL, 말, 앵커(#), 판 번호(v1.2)는 보지 않는다
@@ -361,12 +362,14 @@ def _check_criteria(v: dict, where: str, concepts: dict | None, warnings: list, 
     예전 꼴로 계산한 지문이 맞으면 ok이고, restamp에 {판정: {from, to}}를 남긴다(지금 꼴로 바꿔 두면 태그를 더해도 지문이 그대로다)."""
     info = concepts[v["concept"]] if concepts is not None else {}
     current = info.get("criteria", {}).get(v["hypothesis"])
+    chosen = info.get("approved", True)   # 되돌린 컨셉의 판정은 게이트에 들지 않는다
     if not current:
         return "ok"
     if "criteria" not in v:
         warnings.append({"code": "verdict_criteria_missing", "where": where,
-                         "message": "판정에 기준 지문이 없어 판정 뒤에 기준(claim, failure_signal, test, sample)이 바뀌어도 알 수 없습니다. 확정해도 게이트(--fail-on-assumed)를 넘지 못합니다. "
-                                    f"판정 에이전트가 돌려준 지문을 적습니다. 판정한 뒤 가설을 고치지 않았으면 지금 지문을 적어도 됩니다: \"criteria\": \"{current}\"."})
+                         "message": "판정에 기준 지문이 없어 판정 뒤에 기준(claim, failure_signal, test, sample)이 바뀌어도 알 수 없습니다. "
+                                    + ("확정해도 게이트(--fail-on-assumed)를 넘지 못합니다. " if chosen else NOT_CHOSEN_GATE)
+                                    + f"판정 에이전트가 돌려준 지문을 적습니다. 판정한 뒤 가설을 고치지 않았으면 지금 지문을 적어도 됩니다: \"criteria\": \"{current}\"."})
         return "missing"
     if v["criteria"] == current:
         return "ok"
@@ -375,8 +378,9 @@ def _check_criteria(v: dict, where: str, concepts: dict | None, warnings: list, 
             restamp[where] = {"from": v["criteria"], "to": current}
         return "ok"
     warnings.append({"code": "verdict_criteria_changed", "where": where,
-                     "message": "판정 뒤에 가설 기준(claim, failure_signal, test, sample)이 바뀌었습니다. 확정 판정이어도 게이트를 넘지 못합니다. "
-                                "뜻이 같은 고침(맞춤법, 옮겨 적은 빌드의 게임 수치를 지우고 빌드를 이름으로 가리킴)인지 사용자와 가립니다. 이미 확인했으면 다시 묻지 않습니다. "
+                     "message": "판정 뒤에 가설 기준(claim, failure_signal, test, sample)이 바뀌었습니다. "
+                                + ("확정 판정이어도 게이트를 넘지 못합니다. " if chosen else NOT_CHOSEN_GATE)
+                                + "뜻이 같은 고침(맞춤법, 옮겨 적은 빌드의 게임 수치를 지우고 빌드를 이름으로 가리킴)인지 사용자와 가립니다. 이미 확인했으면 다시 묻지 않습니다. "
                                 f"같은 뜻이면 criteria를 고칩니다(지금 지문: {current}). 뜻이 바뀌었으면 지금 기준으로 다시 판정하고 이 판정은 cut으로 둡니다. "
                                 "다시 시험하려고 기준을 바꿨으면 묻지 않고, 새 기록을 기다리지 말고 지금 cut으로 둡니다(지우지 않습니다)."})
     return "changed"
@@ -683,6 +687,9 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                                      "message": "선택(approved)한 컨셉의 가설이 틀림으로 확정됐습니다. 이 가설에 기대는 다음 단계로 가지 않습니다. "
                                                 "규칙 하나를 바꿔 다시 시험할지 컨셉을 되돌릴지 사용자와 정합니다(playtest-verdict 6단계의 '다시 시험할 때', "
                                                 "'컨셉을 되돌릴 때'. 승인을 내리는 편집은 범위 훅이 사용자에게 묻습니다)."})
+    # 선택한 컨셉이 없고 판정까지 한 컨셉이 있으면 되돌린 것이다. 판정이 없는 컨셉(승인 전에 설계하는 중)은 되돌린 것이 아니다
+    reverted = sorted({w.split(".")[0] for w in verdicts if w.split(".")[0] in concepts}) \
+        if concepts and not any(info["approved"] for info in concepts.values()) else []
     next_needs = {w: {"text": x["next_needs"], "cut": False} for w, x in verdicts.items() if x["next_needs"] and x["result"] == "unknown"}
     next_needs.update({w: {"text": text, "cut": True} for w, text in left.items()
                        if w not in next_needs and not (w in verdicts and verdicts[w]["result"] in DECIDED)})
@@ -699,6 +706,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         "unverified": unverified,
         "unverified_reasons": unverified_reasons,
         "refuted": refuted,
+        "reverted": reverted,
         "next_needs": next_needs,
         "restamp": restamp,
         "unchecked": unchecked + len(missing_refs),
@@ -710,6 +718,9 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
 
 
 def print_extra(result: dict) -> None:
+    if result.get("reverted"):
+        print(f"참고: 선택(approved)한 컨셉이 없습니다. 판정까지 한 컨셉(되돌린 컨셉): {', '.join(result['reverted'])}. "
+              "다음 컨셉을 고르기 전까지 다른 데이터의 게이트 항목(가정 수치)은 지난 시험의 기록이고 할 일이 아닙니다. 다음 컨셉의 시스템 설계에서 다시 봅니다.")
     for where, v in result["verdicts"].items():
         state = "확정" if v["status"] == "approved" else "제안"
         if v.get("proposed_result") not in (None, v["result"]):

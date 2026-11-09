@@ -115,9 +115,9 @@ python3 .claude/skills/studio-data/scripts/studio.py calibrate data/meta_combat.
 
 1. 사용자에게 묻는다: 컨셉을 `proposed`로 둘지, 탈락 사유가 증명되었으면 `hard_reject`와 함께 `cut`으로 둘지([탈락 기준](../concept-exploration/references/stress-policies.md)). 다음 후보는 이때 함께 정하지 않아도 된다.
 2. 사용자가 정한 대로 컨셉 상태를 바꾼다. 승인을 내리는 편집은 범위 훅이 사용자에게 확인을 묻는다([scope-guard](../scope-guard/SKILL.md)). 확인 창이 없는 실행에서는 거부된다(`claude -p`의 acceptEdits 모드에서 확인함. 다른 권한 모드는 [scope-guard](../scope-guard/SKILL.md)의 한계). 우회하지 않고, 사용자가 직접 고치거나 대화형 세션에서 허락받는다. 브리프와 판정 기록은 지우지 않는다. 컨셉의 `notes`에 되돌린 까닭과 날짜를 적는다.
-3. 상태를 바꾼 뒤에 시험판을 만든 열린 변경을 메인 스펙에 합치지 않고 닫는다(`openspec archive <변경> --skip-specs`). 상태를 바꾸기 전에 닫으면, 사용자가 되돌리지 않기로 했을 때 변경만 닫힌 채 남는다.
-4. `design/systems.json`과 `data/`는 다음 컨셉의 시스템 설계까지 지우지 않는다. 지난 시험의 기록이다. 그동안 나는 `concept_not_approved`(`proposed`로 둔 경우)나 `cut_referenced`(`cut`한 경우) 경고는 되돌린 컨셉을 가리킨다는 뜻이다. 다음 컨셉을 고르면 [system-design](../system-design/SKILL.md)에서 그 컨셉에 다시 잇는다.
-5. 다른 후보를 고르려면 [concept-exploration](../concept-exploration/SKILL.md)의 선택 단계로 돌아간다. 후보를 보일 때 틀린 가설과 결정 구조가 가까운 후보를 따로 짚는다.
+3. 상태를 바꾼 뒤에 시험판을 만든 열린 변경을 메인 스펙에 합치지 않고 닫는다(`openspec archive <변경> --skip-specs`, 확인 창이 없는 실행이면 `--yes`를 붙인다. `--yes`는 남은 작업 확인도 건너뛰니, `tasks.md`에 끝나지 않은 작업이 있으면 먼저 사용자에게 알린다). 상태를 바꾸기 전에 닫으면, 사용자가 되돌리지 않기로 했을 때 변경만 닫힌 채 남는다.
+4. `design/systems.json`과 `data/`는 다음 컨셉의 시스템 설계까지 지우지 않는다. 지난 시험의 기록이다. 그동안 나는 `concept_not_approved`(`proposed`로 둔 경우)나 `cut_referenced`(`cut`한 경우) 경고는 되돌린 컨셉을 가리킨다는 뜻이다. 다음 컨셉을 고르면 [system-design](../system-design/SKILL.md)에서 그 컨셉에 다시 잇는다. 선택한 컨셉이 없는 동안 `--fail-on-assumed`의 FAIL은 이 기록의 가정 수치 때문이라 할 일이 아니다(`check`가 참고 줄로 알린다).
+5. 다른 후보를 고르려면 [concept-exploration](../concept-exploration/SKILL.md)의 선택 단계(7단계)로 돌아간다. 남은 `proposed` 후보를 모두 보이고, 틀린 가설과 결정 구조가 가까운 후보를 따로 짚는다. 3~5개 비교표로 좁힐지는 사용자에게 묻는다. 좁히면 구조 차이로 고르고 재미 순위로 고르지 않는다.
 
 **다른 시스템이 바뀌어 지난 기록과 합치지 않을 때.** 틀림이 아니어도, 가설이 기대지 않는 수치(레벨업 강화 등)가 바뀌어 지난 기록을 함께 세면 안 될 때가 있다. 기준(문턱, 표본)은 그대로 두고 가설에 `builds`(이 가설이 세는 빌드: 세션의 `build` 커밋이나 `game_build` 판 로그의 빌드 지문)를 적는다. 그러면 다른 빌드의 세션으로 낸 버팀·틀림이 오류(`verdict_session_wrong_build`)다. `test` 문장에도 같은 빌드를 적고, 세션을 기록할 때 `game_build`를 함께 적는다. 지난 판정은 위 2번처럼 `cut`으로 둔다.
 
