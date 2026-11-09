@@ -91,7 +91,7 @@
   .empty { color: var(--muted); }
   .pill { display: inline-block; border-radius: 999px; padding: 0 8px; font-size: 12px; border: 1px solid currentColor; }
   .st-proposed { color: var(--accent); } .st-approved { color: var(--ok); } .st-cut { color: var(--muted); } .st-unspecified { color: var(--muted); border-style: dashed; }
-  .pv-assumed { color: var(--warn); } .pv-computed { color: var(--accent); } .pv-measured { color: var(--ok); } .pv-unspecified { color: var(--muted); border-style: dashed; }
+  .pv-assumed { color: var(--warn); } .pv-computed { color: var(--accent); } .pv-measured { color: var(--ok); } .pv-decided { color: var(--ok); border-style: dotted; } .pv-unspecified { color: var(--muted); border-style: dashed; }
   .strong { font-weight: 600; }
   .badges { margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px; }
   .intent { color: var(--muted); font-size: 12px; margin-top: 2px; }
@@ -200,7 +200,7 @@ const LABEL = {
   constraint: { note: "메모", platform: "플랫폼·입력", session: "한 판 길이", feeling: "원하는 감정", team: "제작 규모",
                 engines: "엔진 후보", avoid: "피할 것", references: "참고 게임", assumed: "가정으로 둔 값",
                 fixed_axes: "제약으로 고정된 축", extra_axes: "추가한 축" },
-  prov: { assumed: "가정", computed: "계산", measured: "측정", unspecified: "미지정" },
+  prov: { assumed: "가정", computed: "계산", measured: "측정", decided: "결정", unspecified: "미지정" },
   code: { dominated: "열위", tier_inversion: "티어 역전", schema: "형식", duplicate_id: "중복 id", unknown_item: "없는 아이템",
           provenance: "출처", pity_target_missing: "천장 대상 없음", cut_item_referenced: "삭제 아이템 드랍",
           unknown_requirement: "없는 선행 조건", requirement_cycle: "선행 순환", requires_cut: "삭제된 선행 조건",
@@ -479,7 +479,7 @@ function renderSummary(ds, idx) {
     el("span", { class: "chip " + (errs ? "fail" : "pass") }, el("b", { text: errs ? "오류 있음" : "오류 없음" })),
     el("span", { class: "chip" }, "항목 ", el("b", { text: r.count })),
     el("span", { class: "chip" }, `${names.proposed} ${s.proposed} · ${names.approved} ${s.approved} · ${names.cut} ${s.cut}` + (s.unspecified ? ` · 상태 미지정 ${s.unspecified}` : "")),
-    p ? el("span", { class: "chip" }, `출처 가정 ${p.assumed} · 계산 ${p.computed} · 측정 ${p.measured}` + (p.unspecified ? ` · 미지정 ${p.unspecified}` : "")) : null,
+    p ? el("span", { class: "chip" }, `출처 가정 ${p.assumed} · 계산 ${p.computed} · 측정 ${p.measured}` + (p.decided ? ` · 결정 ${p.decided}` : "") + (p.unspecified ? ` · 미지정 ${p.unspecified}` : "")) : null,
     el("span", { class: "chip" }, `오류 ${errs} · 경고 ${warns}`),
   ].filter(Boolean);
   if (r.totals) chips.push(el("span", { class: "chip" }, `활성 강화 ${r.totals.active}개 · 총비용 ${fmt(r.totals.cost)} · 총 power ${fmt(r.totals.power)}`));
@@ -522,7 +522,7 @@ function statusPill(e) {
 
 // 값마다 적은 출처(provenance.fields). 검사기(common.field_coverage, effective_kind)와 같은 규칙이다
 const PROV_META = new Set(["id", "name", "effect", "intent", "status", "provenance", "acknowledged", "note"]);
-const PROV_NAMES = { 가정: "assumed", 계산: "computed", 측정: "measured" };
+const PROV_NAMES = { 가정: "assumed", 계산: "computed", 측정: "measured", 결정: "decided" };
 function numericLeaves(v, prefix) {
   if (v && typeof v === "object" && !Array.isArray(v)) {
     return Object.entries(v).flatMap(([k, x]) => (k.startsWith("_") || (!prefix && PROV_META.has(k)) ? [] : numericLeaves(x, prefix ? prefix + "." + k : k)));
@@ -534,15 +534,16 @@ function fieldCoverage(e) {
   const f = e.provenance && e.provenance.fields;
   if (!f || typeof f !== "object" || Array.isArray(f) || !Object.keys(f).length) return null;
   const kindOf = (x) => (x && PROV_NAMES[x.kind]) || (x && x.kind);
-  const sourced = Object.keys(f).filter((k) => ["computed", "measured"].includes(kindOf(f[k])));
+  const sourced = Object.keys(f).filter((k) => ["computed", "measured", "decided"].includes(kindOf(f[k])));
   const leaves = numericLeaves(e, "");
   const covered = leaves.filter((leaf) => sourced.some((k) => leaf === k || leaf.startsWith(k + "."))).length;
-  return { covered, total: leaves.length, measured: sourced.some((k) => kindOf(f[k]) === "measured") };
+  const has = (kind) => sourced.some((k) => kindOf(f[k]) === kind);
+  return { covered, total: leaves.length, kind: has("measured") ? "measured" : has("computed") ? "computed" : "decided" };
 }
 function sourcePill(e) {
   let p = (e.provenance && (PROV_NAMES[e.provenance.kind] || e.provenance.kind)) || "unspecified";
   const cover = fieldCoverage(e);
-  if (cover && ["assumed", "unspecified"].includes(p) && cover.total && cover.covered === cover.total) p = cover.measured ? "measured" : "computed";
+  if (cover && ["assumed", "unspecified"].includes(p) && cover.total && cover.covered === cover.total) p = cover.kind;
   const part = cover && cover.covered < cover.total ? ` (필드 ${cover.covered}/${cover.total})` : "";
   return el("span", { class: "pill pv-" + p, title: e.provenance ? [e.provenance.source, e.provenance.note].filter(Boolean).join(" · ") : "", text: (LABEL.prov[p] || p) + part });
 }

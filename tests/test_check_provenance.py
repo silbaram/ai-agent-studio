@@ -22,7 +22,7 @@ class TagParsing(unittest.TestCase):
             "클리어 시간 12분 [측정: playtest-003]\n"
             "price 40 [assumed: genre norm]\n"
         )
-        self.assertEqual(r.counts, {"assumed": 2, "computed": 1, "measured": 1})
+        self.assertEqual(r.counts, {"assumed": 2, "computed": 1, "measured": 1, "decided": 0})
         self.assertEqual(errors(r), [])
 
     def test_computed_and_measured_require_source(self):
@@ -73,7 +73,7 @@ class ProvenanceTables(unittest.TestCase):
     def test_complete_table_passes(self):
         r = cp.check_text(self.TABLE.format(extra=""))
         self.assertEqual(errors(r), [])
-        self.assertEqual(r.counts, {"assumed": 1, "computed": 1, "measured": 0})
+        self.assertEqual(r.counts, {"assumed": 1, "computed": 1, "measured": 0, "decided": 0})
 
     def test_english_source_header_and_missing_cell(self):
         text = "| item | value | Source |\n|---|---|---|\n| sword | 10 |\n"
@@ -165,7 +165,7 @@ class CommandLine(unittest.TestCase):
         data = json.loads(out)
         self.assertEqual(code, 0)
         self.assertEqual(data["summary"]["files"], 2)
-        self.assertEqual(data["summary"]["counts"], {"assumed": 1, "computed": 0, "measured": 1})
+        self.assertEqual(data["summary"]["counts"], {"assumed": 1, "computed": 0, "measured": 1, "decided": 0})
 
     def test_check_paths_resolves_relative_to_document(self):
         ok = self.write("ok.md", "값 [계산: sim/drop.json]\n")

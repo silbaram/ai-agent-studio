@@ -7,18 +7,14 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-KINDS = {
-    "가정": "assumed",
-    "assumed": "assumed",
-    "계산": "computed",
-    "computed": "computed",
-    "측정": "measured",
-    "measured": "measured",
-}
-SOURCE_REQUIRED = {"computed", "measured"}
+from .common import DECIDED_SOURCE, PATH_KINDS, SOURCED_KINDS
+from .common import PROVENANCE_KINDS as KINDS   # 데이터 필드와 같은 종류·별칭
+
+SOURCE_REQUIRED = set(SOURCED_KINDS)
+SOURCE_KINDS = ("assumed", "computed", "measured", "decided")   # 개수를 세는 순서
 PROVENANCE_HEADERS = {"출처", "source", "provenance"}
 NEAR_HEADER = re.compile(r"출처|\bsource\b|\bprovenance\b", re.IGNORECASE)
-SOURCE_EXAMPLE = {"computed": "reports/meta.json", "measured": "playtest-2026-11-02"}
+SOURCE_EXAMPLE = {"computed": "reports/meta.json", "measured": "playtest-2026-11-02", "decided": "사용자 2026-11-09"}
 # 본문에서 조정 가능한 값으로 보이는 '숫자 + 단위'. 경고만 낸다(추정이므로 오류로 막지 않는다).
 NUMBER_UNIT = re.compile(
     r"(?<![\w.])\d+(?:\.\d+)?\s?(?:%|％|퍼센트|초|분|시간|일|주|배|칸|타일|프레임|회|번|개|종|명|골드|코인|레벨|층|방|웨이브|판|런|스택|건"
@@ -54,7 +50,7 @@ class Finding:
 @dataclass
 class FileReport:
     path: str
-    counts: dict = field(default_factory=lambda: {"assumed": 0, "computed": 0, "measured": 0})
+    counts: dict = field(default_factory=lambda: dict.fromkeys(SOURCE_KINDS, 0))
     tags: list = field(default_factory=list)
     findings: list = field(default_factory=list)
 
@@ -119,7 +115,10 @@ def _parse_tags(text: str, line: int, report: FileReport, base_dirs: list[Path],
         if kind in SOURCE_REQUIRED and not source:
             report.findings.append(Finding("error", line, f"'{m.group(0)}' 태그에 출처가 없습니다. 예: [{m.group(1)}: {SOURCE_EXAMPLE[kind]}]"))
             continue
-        if check_paths and kind in SOURCE_REQUIRED and PATHLIKE.search(source):
+        if kind == "decided" and not DECIDED_SOURCE.search(source):
+            report.findings.append(Finding("error", line, f"'{m.group(0)}' 태그에 정한 날짜가 없습니다. 예: [{m.group(1)}: {SOURCE_EXAMPLE[kind]}]. 에이전트가 짐작한 값은 [가정]입니다."))
+            continue
+        if check_paths and kind in PATH_KINDS and PATHLIKE.search(source):
             target, _, anchor = (part.strip() for part in source.partition("#"))
             found = next((b / target for b in base_dirs if (b / target).exists()), None)
             if found is None:
@@ -248,7 +247,7 @@ def check_paths_cli(paths: list[str], check_paths: bool = False) -> list[FileRep
 
 
 def summarize(reports: list[FileReport]) -> dict:
-    total = {"assumed": 0, "computed": 0, "measured": 0}
+    total = dict.fromkeys(SOURCE_KINDS, 0)
     for r in reports:
         for k, v in r.counts.items():
             total[k] += v
