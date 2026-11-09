@@ -64,12 +64,12 @@
 | `reject_unsupported` | 오류 | `hard_reject`에 유형·이유·증거 중 하나가 없음 |
 | `unknown_origin` | 오류 | `origin`이 없는 컨셉을 가리킴 |
 | `brief_missing`, `brief_incomplete` | 오류 | 선택한 컨셉의 브리프가 없거나 빠짐(필러 테스트, 가설의 틀렸다는 신호, MVP 7개 초과 등) |
-| `provenance` | 오류 | 선택한 컨셉의 브리프 문장에 출처 태그 형식 오류 |
+| `provenance` | 오류 | 선택한 컨셉의 브리프 문장에 출처 태그 형식 오류. 또는 `[계산]`·`[측정]`의 경로 출처가 게임 프로젝트 폴더에 없거나, `data/playtests.json#세션 id`의 세션이 기록에 없음 |
 | `unknown_axis` | 경고 | 표에 없는 축 이름(오타일 수 있음). 새 축이면 `constraints.extra_axes`에 적는다 |
 | `fixed_axis_mismatch` | 경고 | 제약으로 고정된 축에 다른 값을 적음 |
 | `unknown_policy` | 경고 | 목록에 없는 단순 전략인데 `definition`이 없음 |
-| `untagged_number` | 경고 | 선택한 컨셉의 판정 기준(가설의 `claim`, `failure_signal`, `test`와 `success_criteria`)에 태그 없는 수치. `--fail-on-assumed`에서도 막는다 |
-| `criteria_tag_mismatch` | 경고 | 한 가설의 두 칸(또는 가설과 `success_criteria`)에 같은 수치가 있는데 한쪽은 `[결정]`, 다른 쪽은 `[가정]`. 뜻이 다른 값이면 `acknowledged`에 `{"criteria_tag_mismatch": {"30초": 까닭}}`처럼 그 값만 적는다 |
+| `untagged_number` | 경고 | 선택한 컨셉의 판정 기준(가설의 `claim`, `failure_signal`, `test`와 `success_criteria`)에 태그 없는 수치. `--fail-on-assumed`에서도 막는다. 메시지는 앞 5개만 보이고, `--json`의 `values`에 전부 있다 |
+| `criteria_tag_mismatch` | 경고 | 한 가설의 두 칸(또는 가설과 `success_criteria`)에 같은 수치가 있는데 한쪽은 `[결정]`, 다른 쪽은 `[가정]`. 뜻이 다른 값이면 `acknowledged`에 `{"criteria_tag_mismatch": {"30초": 까닭}}`처럼 그 값만 적는다. 경고가 보인 값을 그대로 쓴다(가운뎃점 목록은 `0.5·1·2배` 전체). 예전 꼴 값(`2배`, `0.3`)으로 적은 확인은 이어 쓰고 참고 줄로 이름을 바꾸라고 알린다 |
 | `near_duplicate` | 경고 | 활성 후보 둘의 구조 축이 80% 이상 같음(고정 축 제외, 공통 축 4개 이상일 때). 변이와 원본이면 원본을 `cut`으로 둘지 안내한다 |
 | `axis_collapse` | 경고 | 활성 후보 3개 이상이 한 축에서 모두 같은 값(고정 축 제외) |
 | `dominant_policy` | 경고 | 활성 후보에 단순 전략이 지배하는 결과가 있음 |

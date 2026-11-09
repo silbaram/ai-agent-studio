@@ -15,13 +15,22 @@ SOURCE_KINDS = ("assumed", "computed", "measured", "decided")   # 개수를 세�
 PROVENANCE_HEADERS = {"출처", "source", "provenance"}
 NEAR_HEADER = re.compile(r"출처|\bsource\b|\bprovenance\b", re.IGNORECASE)
 SOURCE_EXAMPLE = {"computed": "reports/meta.json", "measured": "playtest-2026-11-02", "decided": "사용자 2026-11-09"}
-# 본문에서 조정 가능한 값으로 보이는 '숫자 + 단위'. 경고만 낸다(추정이므로 오류로 막지 않는다). 순서(5판째, 3번째)는 값이 아니라 뺀다
+# 본문에서 조정 가능한 값으로 보이는 '숫자 + 단위'. 경고만 낸다(추정이므로 오류로 막지 않는다). 순서(5판째, 3번째)는 값이 아니라 뺀다.
+# 부호(+3초, -0.5초)도 값에 넣는다. 범위의 줄표(60-90초)는 앞이 낱말이라 부호가 아니다
 NUMBER_UNIT = re.compile(
-    r"(?<![\w.])\d+(?:\.\d+)?\s?(?:%|％|퍼센트|초|분|시간|일|주|배|칸|타일|프레임|회|번|개|종|명|골드|코인|레벨|층|방|웨이브|판|런|스택|건"
+    r"(?<![\w.])[-+]?\d+(?:\.\d+)?\s?(?:%|％|퍼센트|초|분|시간|일|주|배|칸|타일|프레임|회|번|개|종|명|골드|코인|레벨|층|방|웨이브|판|런|스택|건"
     r"|(?:px|ms|hp|HP|fps)(?![A-Za-z]))(?!째)")
-BARE_NUMBER = re.compile(r"(?<![\w.])-?\d+\.\d+(?![0-9A-Za-z_.%％])|(?<![\w.])-\d+(?![0-9A-Za-z_.%％])")  # 단위 없는 소수와 음수(상관 0.2, -0.2보다). 판정 기준 문장에서만 본다
-RANGE_GAP = re.compile(r"\s*[~～–—-]\s*")   # 범위의 두 수 사이
-RANGE_HEAD = re.compile(r"-?\d+(?:\.\d+)?\s*[~～–—-]\s*$")   # 범위의 앞 수(4~9%의 4~)
+BARE_NUMBER = re.compile(r"(?<![\w.])[-+]?\d+\.\d+(?![0-9A-Za-z_.%％])|(?<![\w.])[-+]\d+(?![0-9A-Za-z_.%％])")  # 단위 없는 소수와 부호 붙은 수(상관 0.2, -0.2보다, 피해 +10). 판정 기준 문장에서만 본다
+_NUM = r"[-+]?\d+(?:\.\d+)?"
+_JOIN = r"(?:[~～–—-]|[·・])"   # 범위(4~9%)와 가운뎃점 목록(0.5·1·2배)은 수 하나로 본다(뒤의 태그 하나를 함께 쓴다)
+VALUE_GAP = re.compile(rf"\s*{_JOIN}\s*(?:{_NUM}\s*{_JOIN}\s*)*")   # 이은 두 수치 사이(가운데의 단위 없는 수 포함)
+VALUE_HEAD = re.compile(rf"(?<![\w.])(?:{_NUM}\s*{_JOIN}\s*)+$")   # 수치 앞에 이은 단위 없는 수(4~9%의 4~, 1·2·0.5배의 1·2·)
+# 태그는 같은 문장 안에서 찾는다. 소수점, 파일 이름의 점, 영문 줄임말(e.g., vs.)은 문장 끝이 아니다
+SENTENCE_END = re.compile(r"(?i)(?<!\be\.g)(?<!\bi\.e)(?<!\bvs)(?<!\betc)(?<!\bcf)[.。!?！？](?=[\s)）]|$)")
+OPEN_BRACKETS, CLOSE_BRACKETS = "(（", ")）"   # 둥근 괄호만 센다. 대괄호는 md 링크([부화 6초](…) [가정])라 경계가 아니다
+SHOWN = 5   # 경고와 게이트 줄에 보이는 값 수. 나머지는 개수로 알린다
+SESSION_SPLIT = re.compile(r"[\s,，·・+&/]+")
+SESSION_LIKE = re.compile(r"(?=[^A-Za-z]*[A-Za-z])(?=\D*\d)[A-Za-z0-9][\w.-]*", re.ASCII)   # 영문과 숫자가 함께 있는 id(pt_20261108_1)
 NAMED_BRACKET = re.compile(r"\[([^\[\]:：\s]{1,12})\s*[:：]")
 LINK_TARGET = re.compile(r"\]\([^)]*\)")
 
@@ -49,6 +58,7 @@ class Finding:
     level: str  # "error" | "warning"
     line: int
     message: str
+    values: list = field(default_factory=list)   # 태그 없는 수치 경고의 수치 전부(메시지는 앞 몇 개만 보인다)
 
 
 @dataclass
@@ -116,7 +126,7 @@ def _before_tag(head: str, tail: str = "") -> tuple[str, str]:
     앞에 낱말이 없으면(문장 맨 앞의 태그) 뒤 글(tail)의 두 낱말을 보인다."""
     m = next((m for m in [*NUMBER_UNIT.finditer(head), *BARE_NUMBER.finditer(head)] if not head[m.end():].strip()), None)
     if m:   # 바로 앞에서 끝나는 수치는 하나뿐이다(단위 없는 소수는 단위 앞에서 끝나지 않는다)
-        r = RANGE_HEAD.search(head[:m.start()])
+        r = VALUE_HEAD.search(head[:m.start()])
         value = head[r.start() if r else m.start():m.end()].replace(" ", "")
         return value, value
     words = head.split()
@@ -145,7 +155,7 @@ def _parse_tags(text: str, line: int, report: FileReport, base_dirs: list[Path],
             if found is None:
                 report.findings.append(Finding("error", line, f"출처 경로를 찾을 수 없습니다: {target}"))
             elif anchor:
-                missing = _missing_session(found, anchor.split()[0])
+                missing = _missing_session(found, _session_ids(anchor))
                 if missing:
                     report.findings.append(Finding("error", line, missing))
         report.counts[kind] += 1
@@ -159,8 +169,16 @@ def _parse_tags(text: str, line: int, report: FileReport, base_dirs: list[Path],
             report.findings.append(Finding("error", line, f"알 수 없는 태그 이름 '[{m.group(1)}:'. '{guess}'의 오타인가요?"))
 
 
-def _missing_session(path: Path, sid: str) -> str | None:
-    """출처가 플레이 기록 파일#세션 id이면 그 세션이 기록에 있는지 본다. 플레이 기록이 아닌 파일은 보지 않는다."""
+def _session_ids(anchor: str) -> list[str]:
+    """출처 # 뒤의 세션 id들(#pt_a, pt_b처럼 합친 기록). 첫 낱말은 늘 세션 id로 보고, 뒤 낱말은 영문과 숫자가 함께 있는 id 꼴만 본다
+    (뒤에 붙인 설명 '세션 요약', 'summary'는 보지 않는다)."""
+    words = [w.strip(".,;:()（）") for w in SESSION_SPLIT.split(anchor.strip())]
+    words = [w for w in words if w]
+    return words[:1] + [w for w in words[1:] if SESSION_LIKE.fullmatch(w)]
+
+
+def _missing_session(path: Path, sids: list[str]) -> str | None:
+    """출처가 플레이 기록 파일#세션 id이면 그 세션들이 기록에 있는지 본다. 플레이 기록이 아닌 파일은 보지 않는다."""
     if path.suffix.lower() != ".json" or not path.is_file():
         return None
     try:
@@ -169,9 +187,11 @@ def _missing_session(path: Path, sid: str) -> str | None:
         return None
     if not (isinstance(data, dict) and isinstance(data.get("playtests"), list)):
         return None
-    if any(isinstance(s, dict) and s.get("id") == sid for s in data["playtests"]):
+    known = {s.get("id") for s in data["playtests"] if isinstance(s, dict)}
+    missing = [sid for sid in sids if sid not in known]
+    if not missing:
         return None
-    return f"플레이 기록 {path.name}에 없는 세션입니다: {sid}. 측정값은 기록된 세션만 출처로 씁니다."
+    return f"플레이 기록 {path.name}에 없는 세션입니다: {', '.join(missing)}. 측정값은 기록된 세션만 출처로 씁니다."
 
 
 def _tag_typo(name: str) -> str | None:
@@ -186,10 +206,36 @@ def _has_tag(text: str) -> bool:
     return bool(STRICT_TAG.search(text) or LOOSE_TAG.search(text))
 
 
+def _tag_follows(text: str, end: int, until: int) -> bool:
+    """수치 끝(end)부터 다음 수치(until) 전까지 같은 문장 안에 태그가 있는가. 문장이 끝나거나 수치를 감싼 괄호가 닫히면 멈춘다
+    ('(판 끝 30초 전은 빈칸) 공격 강화만 센다 [가정]'의 태그는 30초의 것이 아니다). 수치 뒤에 연 괄호 안의 문장 끝은 보지 않는다."""
+    depth = 0
+    for i in range(end, until):
+        ch = text[i]
+        if ch == "[" and (STRICT_TAG.match(text, i) or LOOSE_TAG.match(text, i)):
+            return True
+        if ch in OPEN_BRACKETS:
+            depth += 1
+        elif ch in CLOSE_BRACKETS:
+            if not depth:
+                return False
+            depth -= 1
+        elif not depth and SENTENCE_END.match(text, i):
+            return False
+    return False
+
+
+def few(values: list, n: int = SHOWN) -> str:
+    """값 목록을 겹친 것 없이 앞 n개만 쉼표로 잇고 나머지는 개수로 알린다. 값 안에 가운뎃점 목록(0.5·1·2배)이 있어 쉼표로 가른다."""
+    unique = list(dict.fromkeys(values))
+    return ", ".join(unique[:n]) + (f" 외 {len(unique) - n}개" if len(unique) > n else "")
+
+
 def _check_body_numbers(text: str, line: int, report: FileReport, bare: bool = False) -> None:
-    """표 밖 문장에서 태그 없는 '숫자 + 단위'를 경고한다. 수치마다 다음 수치 전까지 뒤따르는 태그가 있어야 한다.
-    한 줄의 태그 하나가 같은 줄의 다른 수치를 통과시키지 않는다. 제목 줄과 태그 안의 숫자(출처 설명)는 보지 않는다.
-    bare: 판정 기준 문장처럼 단위 없는 문턱값(상관 0.2, -0.2)도 수치로 볼 때."""
+    """표 밖 문장에서 태그 없는 '숫자 + 단위'를 경고한다. 수치마다 같은 문장 안, 다음 수치 전까지 뒤따르는 태그가 있어야 한다.
+    한 줄의 태그 하나가 같은 줄의 다른 수치를 통과시키지 않는다. 범위(4~9%)와 가운뎃점 목록(0.5·1·2배)은 수치 하나다.
+    제목 줄과 태그 안의 숫자(출처 설명)는 보지 않는다.
+    bare: 판정 기준 문장처럼 단위 없는 문턱값(상관 0.2, -0.2, +10)도 수치로 볼 때."""
     if text.lstrip().startswith("#"):
         return
     text = LINK_TARGET.sub("]", text)
@@ -197,16 +243,21 @@ def _check_body_numbers(text: str, line: int, report: FileReport, bare: bool = F
     found_nums = list(NUMBER_UNIT.finditer(text)) + (list(BARE_NUMBER.finditer(text)) if bare else [])
     nums = sorted((m for m in found_nums if not any(s <= m.start() < e for s, e in tag_spans)), key=lambda m: m.start())
     nums = [m for i, m in enumerate(nums) if not any(o.start() <= m.start() < o.end() for o in nums[:i])]   # 겹친 것(0.5배와 0.5)은 앞의 것 하나
-    nums = [m for i, m in enumerate(nums) if not (i + 1 < len(nums) and RANGE_GAP.fullmatch(text[m.end():nums[i + 1].start()]))]   # 0.2~0.3은 수 하나다(뒤의 태그를 함께 쓴다)
+    values: list = []   # [시작, 끝]. 이은 수치(0.2~0.3, 0.5·1·2배)는 하나로 합친다
+    for m in nums:
+        if values and VALUE_GAP.fullmatch(text[values[-1][1]:m.start()]):
+            values[-1][1] = m.end()
+        else:
+            head = VALUE_HEAD.search(text[:m.start()])
+            values.append([head.start() if head else m.start(), m.end()])
     found = []
-    for i, m in enumerate(nums):
-        until = nums[i + 1].start() if i + 1 < len(nums) else len(text)
-        if not _has_tag(text[m.end():until]):
-            found.append(m.group(0).replace(" ", ""))
+    for i, (start, end) in enumerate(values):
+        if not _tag_follows(text, end, values[i + 1][0] if i + 1 < len(values) else len(text)):
+            found.append(text[start:end].replace(" ", ""))
     if found:
         report.untagged.extend(found)
-        shown = ", ".join(list(dict.fromkeys(found))[:5])   # 겹친 것을 먼저 빼야 뒤의 다른 수치가 가려지지 않는다
-        report.findings.append(Finding("warning", line, f"태그 없는 수치: {shown}. 조정할 수 있는 값이면 {TAG_CHOICES}를 붙이세요."))
+        report.findings.append(Finding("warning", line, f"태그 없는 수치: {few(found)}. 조정할 수 있는 값이면 {TAG_CHOICES}를 붙이세요.",
+                                       list(dict.fromkeys(found))))
 
 
 def check_text(text: str, path: str = "<text>", base_dirs: list[Path] | None = None, check_paths: bool = False, bare_numbers: bool = False) -> FileReport:
