@@ -112,7 +112,7 @@
 | `verdict_criteria_missing` | 경고 | `cut`이 아닌 판정에 `criteria`가 없음. 확정 판정이어도 `--fail-on-assumed`를 넘지 못한다. 메시지가 지금 지문을 알려 주지만, 판정한 뒤 가설을 고치지 않았을 때만 그 값을 적는다 |
 | `player_name_variants` | 경고 | 앞 세션(날짜순)과 대소문자·공백만 다른 이름. 표본은 두 사람으로 센다. 다른 사람이 맞으면 세션의 `acknowledged`에 이유를 적는다 |
 | `unknown_event` | 경고 | 세션 `events`의 사건 이름이 그 컨셉의 어느 가설 `sample.events`에도 없음(오타). 그 건수는 어떤 판정에도 세지 않는다. 비슷한 이름을 알려 준다 |
-| `verdict_criteria_changed` | 경고 | 판정 뒤에 가설 기준이 바뀜. 지금 기준으로 다시 판정하고 지난 것은 `cut`으로 둔다. 다시 시험하려고 기준을 바꿨으면 새 기록을 기다리지 않고 기준을 고친 편집에서 바로 `cut`으로 둔다. 확정 판정이어도 `--fail-on-assumed`를 넘지 못한다. 뜻이 같은 고침이면 사용자와 확인한 뒤 `criteria`를 새 지문으로 고친다 |
+| `verdict_criteria_changed` | 경고 | 판정 뒤에 가설 기준이 바뀜. 확정 판정이어도 `--fail-on-assumed`를 넘지 못한다. 뜻이 같은 고침이면 `criteria`를 새 지문으로 고치고, 뜻이 바뀌었으면 다시 판정하고 지난 것은 `cut`으로 둔다. 가리는 순서와 예는 [playtest-verdict](../SKILL.md)의 '판정한 가설의 문장을 고칠 때'. 다시 시험하려고 기준을 바꿨으면 새 기록을 기다리지 않고 기준을 고친 편집에서 바로 `cut`으로 둔다 |
 | `approved_concept_refuted` | 경고 | 선택(approved)한 컨셉의 가설이 틀림으로 확정됨. 가설 기준을 고치거나, 다시 판정하거나, 컨셉 상태를 바꾸면 사라진다 |
 | `value_not_in_source` | 경고 | `[계산: …]` 관찰값의 `value`에 있는 수가 `source` 결과 파일에 없음. 수는 값으로 맞춘다(1과 1.0은 같다). 낱말에 붙은 수(`pt_2`, `v1.2`)는 보지 않는다 |
 | `session_beyond_records` | 경고 | 세션의 `runs`가 묶음 `runs`의 합보다 많거나, `players`에 묶음의 `players`에 없는 사람이 있음. 표본은 로그에 남은 판과 사람만 센다. 로그에 남기지 못한 판·사람이 맞으면 세션의 `acknowledged`에 이유를 적고, 그러면 세션 값을 센다 |

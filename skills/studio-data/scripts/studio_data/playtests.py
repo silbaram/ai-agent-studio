@@ -374,9 +374,10 @@ def _check_criteria(v: dict, where: str, concepts: dict | None, warnings: list, 
             restamp[where] = {"from": v["criteria"], "to": current}
         return "ok"
     warnings.append({"code": "verdict_criteria_changed", "where": where,
-                     "message": "판정 뒤에 가설 기준(claim, failure_signal, test, sample)이 바뀌었습니다. 지금 기준으로 다시 판정하고 이 판정은 cut으로 둡니다. "
-                                "다시 시험하려고 기준을 바꿨으면 새 기록을 기다리지 말고 지금 cut으로 둡니다(지우지 않습니다). "
-                                f"뜻이 같은 고침(맞춤법 등)이면 사용자와 확인한 뒤 criteria를 고칩니다(지금 지문: {current}). 확정 판정이어도 게이트를 넘지 못합니다."})
+                     "message": "판정 뒤에 가설 기준(claim, failure_signal, test, sample)이 바뀌었습니다. 확정 판정이어도 게이트를 넘지 못합니다. "
+                                "뜻이 같은 고침(맞춤법, 옮겨 적은 빌드의 게임 수치를 지우고 빌드를 이름으로 가리킴)인지 사용자와 가립니다. 이미 확인했으면 다시 묻지 않습니다. "
+                                f"같은 뜻이면 criteria를 고칩니다(지금 지문: {current}). 뜻이 바뀌었으면 지금 기준으로 다시 판정하고 이 판정은 cut으로 둡니다. "
+                                "다시 시험하려고 기준을 바꿨으면 묻지 않고, 새 기록을 기다리지 말고 지금 cut으로 둡니다(지우지 않습니다)."})
     return "changed"
 
 
@@ -712,7 +713,7 @@ def print_extra(result: dict) -> None:
     for where, x in result.get("next_needs", {}).items():   # 옮겨 적은 잣대 태그는 브리프와 어긋날 수 있어 빼고 보인다
         print(f"다음 시험 전에 풀 것({where}): {YARDSTICK_TAG.sub('', x['text'])}" + (" (지난 판정)" if x["cut"] else ""))
     for where, x in result.get("restamp", {}).items():
-        print(f"참고: 판정 {where}의 기준 지문이 예전 꼴입니다(criteria {x['from']}, 태그까지 넣어 계산함). 기준은 그대로이니 criteria를 {x['to']}로 바꿔 둡니다. "
+        print(f"참고: 판정 {where}의 기준 지문이 예전 꼴입니다(criteria {x['from']}, 태그까지 넣어 계산함). 기준은 그대로이니 criteria를 바꿔 둡니다(새 지문: {x['to']}). "
               "그러면 태그 없던 수치에 태그를 달거나 태그를 바꿔도 지문이 그대로입니다.")
     if result["unchecked_reason"]:
         print(f"컨셉·가설 참조 미확인({UNCHECKED_REASON.get(result['unchecked_reason'], '')}): {result['unchecked'] - len(result['unchecked_refs'])}건")
