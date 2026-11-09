@@ -100,7 +100,7 @@ python3 .claude/skills/studio-data/scripts/studio.py calibrate data/meta_combat.
 `refuted`가 확정되면 다음 중 하나를 사용자에게 제안한다. 결정은 사용자가 한다. 선택한 컨셉의 가설이 틀림으로 확정된 동안은 `approved_concept_refuted` 경고가 나고 `--fail-on-assumed`가 실패한다. 가설 기준을 고치거나, 다시 판정하거나, 컨셉 상태를 바꾸면 사라진다.
 
 - 가설이 기대는 규칙 하나를 바꿔 다시 시험한다(브리프의 `prototype`과 가설을 고친다). 순서는 아래 "다시 시험할 때"를 따른다.
-- 컨셉을 `proposed`로 되돌리고, 탈락 사유가 증명되었으면 `hard_reject`와 함께 `cut`으로 둔다. 다른 후보를 고르려면 [concept-exploration](../concept-exploration/SKILL.md)의 선택 단계로 돌아간다.
+- 컨셉을 되돌린다(`proposed`, 탈락 사유가 증명되었으면 `hard_reject`와 함께 `cut`). 순서는 아래 "컨셉을 되돌릴 때"를 따른다.
 - `unknown`이면 무엇이 부족했는지(표본, 기록하지 못한 값)를 다음 세션 계획으로 남긴다.
 
 **다시 시험할 때.** 이 순서로 한다.
@@ -110,6 +110,14 @@ python3 .claude/skills/studio-data/scripts/studio.py calibrate data/meta_combat.
 3. 바꾼 규칙이 지표를 저절로 움직이는지 본다. 예: 적이 밟으면 보석이 깨지는 규칙은 적이 많은 곳의 늦은 수확을 없앤다. 그래서 플레이어가 아무것도 바꾸지 않아도 "몰리면 일찍 줍는다"는 쪽의 상관이 나온다. 프로토타입에 봇이 있으면 기준선을 낸다. 행동은 그대로 두고 규칙만 켠 정책으로 같은 지표를 계산한다. 주장한 행동을 뺀 정책으로도 계산한다. 기준선이 이미 문턱을 넘으면 그 지표로는 가설을 가를 수 없다. 플레이 전에 사용자와 지표나 문턱을 바꾼다([brief](../concept-exploration/references/brief.md)).
 4. 모든 가설의 `sample.events`를 새 규칙으로 다시 어림한다. 바꾼 규칙이 다른 가설의 사건을 없앨 수 있다. 예: 보석이 깨져 부화가 없어지면 "부화가 있던 판의 사망"도 생기지 않는다. 그런 가설은 플레이 전에 어떻게 볼지 사용자와 정한다(사건을 바꾼다, 그쪽을 모름으로 둔다).
 5. 시스템 설계를 고치고 새 변경으로 시험판에 넣는다.
+
+**컨셉을 되돌릴 때.** 이 순서로 한다.
+
+1. 사용자에게 묻는다: 컨셉을 `proposed`로 둘지, 탈락 사유가 증명되었으면 `hard_reject`와 함께 `cut`으로 둘지([탈락 기준](../concept-exploration/references/stress-policies.md)). 다음 후보는 이때 함께 정하지 않아도 된다.
+2. 사용자가 정한 대로 컨셉 상태를 바꾼다. 승인을 내리는 편집은 범위 훅이 사용자에게 확인을 묻는다([scope-guard](../scope-guard/SKILL.md)). 확인 창이 없는 실행에서는 거부된다(`claude -p`의 acceptEdits 모드에서 확인함. 다른 권한 모드는 [scope-guard](../scope-guard/SKILL.md)의 한계). 우회하지 않고, 사용자가 직접 고치거나 대화형 세션에서 허락받는다. 브리프와 판정 기록은 지우지 않는다. 컨셉의 `notes`에 되돌린 까닭과 날짜를 적는다.
+3. 상태를 바꾼 뒤에 시험판을 만든 열린 변경을 메인 스펙에 합치지 않고 닫는다(`openspec archive <변경> --skip-specs`). 상태를 바꾸기 전에 닫으면, 사용자가 되돌리지 않기로 했을 때 변경만 닫힌 채 남는다.
+4. `design/systems.json`과 `data/`는 다음 컨셉의 시스템 설계까지 지우지 않는다. 지난 시험의 기록이다. 그동안 나는 `concept_not_approved`(`proposed`로 둔 경우)나 `cut_referenced`(`cut`한 경우) 경고는 되돌린 컨셉을 가리킨다는 뜻이다. 다음 컨셉을 고르면 [system-design](../system-design/SKILL.md)에서 그 컨셉에 다시 잇는다.
+5. 다른 후보를 고르려면 [concept-exploration](../concept-exploration/SKILL.md)의 선택 단계로 돌아간다. 후보를 보일 때 틀린 가설과 결정 구조가 가까운 후보를 따로 짚는다.
 
 **다른 시스템이 바뀌어 지난 기록과 합치지 않을 때.** 틀림이 아니어도, 가설이 기대지 않는 수치(레벨업 강화 등)가 바뀌어 지난 기록을 함께 세면 안 될 때가 있다. 기준(문턱, 표본)은 그대로 두고 가설에 `builds`(이 가설이 세는 빌드: 세션의 `build` 커밋이나 `game_build` 판 로그의 빌드 지문)를 적는다. 그러면 다른 빌드의 세션으로 낸 버팀·틀림이 오류(`verdict_session_wrong_build`)다. `test` 문장에도 같은 빌드를 적고, 세션을 기록할 때 `game_build`를 함께 적는다. 지난 판정은 위 2번처럼 `cut`으로 둔다.
 

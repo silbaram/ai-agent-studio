@@ -64,13 +64,13 @@
 | `brief_missing` | 오류 | 컨셉에 브리프가 없음 |
 | `unknown_pillar`, `unknown_mvp`, `unknown_out_of_scope` | 오류 | 브리프에 없는 문구 |
 | `unknown_system` | 오류 | `depends_on`이 없는 시스템을 가리킴 |
-| `cut_referenced` | 경고 | 삭제된 시스템에 의존함, 삭제된 컨셉에 이음 |
+| `cut_referenced` | 경고 | 삭제된 시스템에 의존함, 삭제된 컨셉에 이음. 되돌리며 `cut`한 컨셉이면 다음 컨셉을 고를 때까지 그대로 둔다 |
 | `pillar_unserved` | 경고 | 범위가 `mvp`인 시스템이 맡지 않는 필러. 일부러 미룬 것이면 어느 시스템에서든 `{"pillar_unserved": {필러 이름: 이유}}`로 확인한다 |
 | `mvp_unserved` | 경고 | 범위가 `mvp`인 시스템이 맡지 않는 MVP 항목. 확인은 `pillar_unserved`와 같다 |
 | `out_of_scope_claimed` | 오류 | `out`이 아닌 시스템이 브리프의 범위 밖 항목을 맡거나, 이름·의도·규칙 글에 그 문구가 있음. 확인으로 끄지 못한다 |
 | `scope_dependency` | 오류 | `mvp`가 `later`나 `out`에, `later`가 `out`에 의존함. 그대로면 만들 수 없다 |
 | `dependency_cycle` | 오류 | 시스템이 서로 의존함. 순환을 이루는 시스템을 말한다 |
-| `concept_not_approved` | 경고 | 승인되지 않은 컨셉에 이음 |
+| `concept_not_approved` | 경고 | 승인되지 않은 컨셉에 이음. 되돌린 컨셉이면 다음 컨셉을 고를 때까지 그대로 둔다 |
 | `foundation_unused` | 경고 | 기반 시스템인데 기대는 시스템이 없음 |
 | `scope_mismatch` | 경고 | `mvp`인데 MVP 항목이 없음(기반 시스템 제외), `mvp`가 아닌데 MVP 항목을 맡음, `out`인데 범위 밖 항목이 없음 |
 | `system_without_pillar` | 경고 | `out`이 아닌데 필러가 없음(기반 시스템 제외) |

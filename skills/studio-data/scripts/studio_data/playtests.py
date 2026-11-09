@@ -17,6 +17,7 @@ from .common import add_issue as _err
 RESULTS = ("holds", "refuted", "unknown")
 RESULT_LABEL = {"holds": "버팀", "refuted": "틀림", "unknown": "모름"}
 DECIDED = ("holds", "refuted")
+CRITERIA_GATE_REASON = {"missing": "지문 없음", "changed": "기준 바뀜"}
 NOTE_KINDS = ("observation", "preference", "deviation")  # deviation: 가설 test의 시험 절차를 어긴 일(순서, 중간 결과를 본 뒤 플레이 등)
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 PATH_LIKE = re.compile(r"^(?!.*://).*\.[A-Za-z][A-Za-z0-9]{0,4}$")  # 확장자로 끝나는 source만 파일로 본다. URL, 말, 앵커(#), 판 번호(v1.2)는 보지 않는다
@@ -662,6 +663,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                            "sample_text": _sample_line(have, need, deviations, list(dict.fromkeys(s.get("game_build") or s["build"] for s in seen)))}
 
     unverified: list = []
+    unverified_reasons: dict = {}   # 확정 판정인데 게이트에 걸린 까닭. 데이터는 키 그대로 두고 화면(check 게이트 줄, 뷰어)이 붙인다
     refuted: list = []
     if concepts is not None:
         for cid, info in sorted(concepts.items()):
@@ -673,12 +675,14 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                 decided = bool(got) and got["result"] in DECIDED and got["status"] == "approved"
                 if not decided or got["criteria"] != "ok":   # 지문이 없거나 기준이 바뀐 확정 판정은 지금 기준의 판정인지 모른다
                     unverified.append(key)
+                    if decided and got["criteria"] in CRITERIA_GATE_REASON:   # 판정 줄은 '확정'인데 게이트에 걸린 까닭
+                        unverified_reasons[key] = CRITERIA_GATE_REASON[got["criteria"]]
                 if decided and got["result"] == "refuted" and got["criteria"] != "changed":   # 기준을 고쳤으면 다시 시험하는 중이다
                     refuted.append(key)
                     warnings.append({"code": "approved_concept_refuted", "where": key,
                                      "message": "선택(approved)한 컨셉의 가설이 틀림으로 확정됐습니다. 이 가설에 기대는 다음 단계로 가지 않습니다. "
-                                                "가설이 기대는 규칙 하나를 바꿔 다시 시험하거나(브리프의 prototype과 가설을 고치고 다시 판정) 컨셉을 되돌릴지 사용자와 정합니다. "
-                                                "가설 기준을 고치거나 다시 판정하거나 컨셉 상태를 바꾸면 사라집니다."})
+                                                "규칙 하나를 바꿔 다시 시험할지 컨셉을 되돌릴지 사용자와 정합니다(playtest-verdict 6단계의 '다시 시험할 때', "
+                                                "'컨셉을 되돌릴 때'. 승인을 내리는 편집은 범위 훅이 사용자에게 묻습니다)."})
     next_needs = {w: {"text": x["next_needs"], "cut": False} for w, x in verdicts.items() if x["next_needs"] and x["result"] == "unknown"}
     next_needs.update({w: {"text": text, "cut": True} for w, text in left.items()
                        if w not in next_needs and not (w in verdicts and verdicts[w]["result"] in DECIDED)})
@@ -693,6 +697,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         "result_counts": counts,
         "verdicts": verdicts,
         "unverified": unverified,
+        "unverified_reasons": unverified_reasons,
         "refuted": refuted,
         "next_needs": next_needs,
         "restamp": restamp,

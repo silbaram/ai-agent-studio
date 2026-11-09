@@ -1200,7 +1200,8 @@ function renderPlaytests(ds, idx) {
           v.cut_reason ? el("div", { class: "muted", text: "지운 까닭: " + v.cut_reason }) : null));
     });
   const gate = ds.report && ds.report.unverified && ds.report.unverified.length
-    ? el("div", { class: "group-note", text: "확정된 버팀·틀림이 아닌 가설: " + ds.report.unverified.join(", ") }) : null;
+    ? el("div", { class: "group-note", text: "판정이 확정되지 않았거나 지금 기준의 판정인지 모르는 가설: "
+        + ds.report.unverified.map(k => (ds.report.unverified_reasons || {})[k] ? k + "(" + ds.report.unverified_reasons[k] + ")" : k).join(", ") }) : null;
   const refutedNote = ds.report && ds.report.refuted && ds.report.refuted.length
     ? el("div", { class: "group-note", text: "틀림으로 확정된 가설(선택한 컨셉): " + ds.report.refuted.join(", ") }) : null;
   // 상태 필터는 판정에만 적용한다. 세션에는 상태가 없다.
