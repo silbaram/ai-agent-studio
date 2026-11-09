@@ -62,14 +62,15 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 받은 제안을 `verdicts`에 `"status": "proposed"`로 넣고 사용자에게 보여 준다. 사용자가 확인하면 `approved`로 바꾼다. 사용자가 버팀·틀림 제안을 모름으로 낮춰 확정할 수 있다. 예: 기록으로는 지표가 주장한 행동에서 나왔는지 규칙에서 나왔는지 가를 수 없다. 그러면 `result`를 `unknown`으로 고친다. `proposed_result`에는 에이전트가 낸 결과를 남기고, `reason` 앞에 바꾼 까닭과 날짜를 적는다. 판정 줄에 `모름 (확정, 판정 에이전트는 버팀)`처럼 보인다. 모름을 버팀·틀림으로 올리거나 버팀과 틀림을 서로 바꾸면 오류다(`verdict_overrides_proposal`). 그럴 때는 사용자의 까닭을 판정 에이전트에게 주고 다시 판정한다. 다시 판정할 때는 지난 판정을 지우지 않는다. 지난 판정을 먼저 `cut`으로 바꾸고 같은 편집에서 새 판정을 넣는다. 새 판정부터 넣으면 그 사이에 `duplicate_verdict`가 난다.
 
-판정 에이전트는 판정할 때 읽은 가설의 기준 지문(`check`의 `판정 기준 지문:` 줄)을 JSON의 `criteria`에 담아 돌려준다. 그대로 기록한다. 판정 뒤에 가설의 `claim`, `failure_signal`, `test`, `sample`이 바뀌면 `verdict_criteria_changed`가 나고, 확정 판정이어도 게이트를 넘지 못한다. 지금 기준으로 다시 판정한다. 지문이 없는 판정(`verdict_criteria_missing`)도 확정해도 게이트를 넘지 못한다. 판정한 뒤 가설을 고치지 않은 것이 확실할 때만 지금 지문을 적는다.
+판정 에이전트는 판정할 때 읽은 가설의 기준 지문(`check`의 `판정 기준 지문:` 줄)을 JSON의 `criteria`에 담아 돌려준다. 그대로 기록한다. 판정 뒤에 가설의 `claim`, `failure_signal`, `test`, `sample`이 바뀌면 `verdict_criteria_changed`가 나고, 확정 판정이어도 게이트를 넘지 못한다. 지금 기준으로 다시 판정한다. 출처 태그만 바꾼 것은 바뀐 것이 아니다. `check`가 "예전 꼴" 참고 줄을 내면 그 판정은 태그까지 넣어 계산하던 때의 지문이다. 기준은 그대로이니 줄에 적힌 지문으로 `criteria`를 바꿔 둔다. 지문이 없는 판정(`verdict_criteria_missing`)도 확정해도 게이트를 넘지 못한다. 판정한 뒤 가설을 고치지 않은 것이 확실할 때만 지금 지문을 적는다.
 
 ### 4. 측정값을 올린다
 
 관찰값을 **그대로** 옮긴 수치만 `[가정]`에서 `[측정: data/playtests.json#세션 id]`로 바꾼다. 데이터 파일(아이템·강화·적)은 `provenance`를 `{"kind": "measured", "source": "data/playtests.json#세션 id"}`로 둔다. 한 항목의 값 일부만 기록으로 뒷받침되면 항목 전체를 바꾸지 않고 `provenance.fields`에 그 값만 적는다(`{"kind": "assumed", "fields": {"kills.crawler": {"kind": "measured", "source": "data/playtests.json#pt_20261108_3"}}}`). 게이트 줄에 `zone_1(필드 1/4)`처럼 얼마나 왔는지 보이고, 모든 수치 칸에 가정이 아닌 출처가 붙으면 그 항목은 게이트에서 빠진다.
 
 - 평균·비율을 새로 계산한 값은 `[계산: 스크립트 또는 결과 파일]`이다. 계산한 스크립트가 없으면 올리지 않는다.
-- 판정 기준의 문턱값(예: `80% [가정]`)은 측정값이 아니다. 무엇이 틀림인지를 정하는 잣대라 측정으로 올리지 않는다. 사용자가 그 문턱을 정했으면 `[결정: 사용자 2026-11-09]`로 바꾼다. 그러면 게이트가 막지 않는다. 에이전트가 정한 문턱은 `[가정]` 그대로다([numeric-provenance](../numeric-provenance/SKILL.md)).
+- 판정 기준의 문턱값(예: `80% [가정]`)과 `test`의 시험 설계 값(표본, 구간)은 측정값이 아니다. 무엇이 틀림인지를 정하는 잣대라 측정으로 올리지 않는다. 사용자가 그 값을 정했으면 `[결정: 사용자 2026-11-09]`로 바꾼다. 그러면 게이트가 막지 않는다. 에이전트가 정한 값은 `[가정]` 그대로다([numeric-provenance](../numeric-provenance/SKILL.md), [브리프](../concept-exploration/references/brief.md)).
+- 판정 글(`reason`, `next_needs`, `cut_reason`)에는 문턱을 잣대 태그 없이 수치만 쓴다("사망 6건이 필요한데"). 출처는 브리프에 있고, 옮겨 적은 태그는 브리프를 고치면 어긋난다. `check`는 `next_needs`, 뷰어는 `reason`과 `next_needs`의 `[가정]`·`[결정]` 태그를 빼고 보인다.
 - 올린 뒤 `provenance design/ --check-paths`로 세션이 실제로 있는지 확인한다.
 
 ### 5. 가정값을 보정한다

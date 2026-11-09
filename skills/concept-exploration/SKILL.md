@@ -106,7 +106,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check design/concepts.json 
 - 가장 작은 프로토타입: 범위, 기간(일), 성공 기준. 프로토타입 범위의 원본은 여기다. 앞에서 쓴 `next_test`와 다르면 `next_test`를 맞춘다
 - MVP 7개 이하, 범위 밖 목록 1개 이상
 
-판정 기준 문장(`failure_signal`, `success_criteria`)의 수치에는 출처 태그를 붙인다. 예: `5판 [가정] 동안`. 규칙은 [numeric-provenance](../numeric-provenance/SKILL.md)와 같고, 검사기가 태그 없는 수치를 경고한다.
+판정 기준 문장(가설의 `claim`, `failure_signal`, `test`와 `success_criteria`)의 수치에는 출처 태그를 붙인다. 예: `5판 [가정] 동안`. 규칙은 [numeric-provenance](../numeric-provenance/SKILL.md)와 같고, 검사기가 태그 없는 수치를 경고하며 게이트가 막는다.
 
 검사기는 `approved` 컨셉의 브리프가 빠짐없는지 확인한다. 통과하지 못하면 프로토타입 단계로 넘기지 않는다. 검사기는 **구조**(빠진 항목, 개수, 틀렸다는 신호의 유무, 가설의 id와 최소 표본)만 본다. 필러 테스트가 실제로 무언가를 걸러내는지, 가설이 정말 반증 가능한지는 사람이 본다. 검사 통과를 브리프 품질 보증으로 보고하지 않는다.
 

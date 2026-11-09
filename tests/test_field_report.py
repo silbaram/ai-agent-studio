@@ -218,17 +218,17 @@ class ConceptAxes(unittest.TestCase):
 # ---------- 11, 12, 13: 수치 출처 ----------
 class BriefNumbers(unittest.TestCase):
     def test_untagged_threshold_in_failure_signal_is_warned_11(self):
-        c = approved_with(hypotheses=[{"id": "h1", "claim": "c", "failure_signal": "80% 이상이 같은 선택을 한다", "test": "3명에게 5판", "sample": {"players": 3, "runs": 15}}])
+        c = approved_with(hypotheses=[{"id": "h1", "claim": "c", "failure_signal": "80% 이상이 같은 선택을 한다", "test": "3명 [가정]에게 5판 [가정]", "sample": {"players": 3, "runs": 15}}])
         r = cc.validate({"concepts": [c]})
         self.assertEqual(codes(r["warnings"]), ["untagged_number"])
         self.assertIn("80%", r["warnings"][0]["message"])
-        self.assertEqual(r["unverified"], ["parry_tempo.brief.prototype.success_criteria"])
+        self.assertEqual(r["unverified"][0], "parry_tempo.brief.hypotheses[0].failure_signal(태그 없음: 80%)")   # 출처가 빈 값이라 게이트도 막는다(312번)
 
     def test_tagged_thresholds_are_counted_for_the_gate_11(self):
         c = approved_with()
         r = cc.validate({"concepts": [c]})
         self.assertEqual(r["warnings"], [])
-        self.assertEqual(len(r["unverified"]), 3)
+        self.assertEqual(len(r["unverified"]), 5)   # 가설 둘의 신호, 첫 가설의 주장·확인 방법(312번), 성공 기준
 
     def test_numbers_outside_criteria_are_not_warned_but_bad_tags_are_errors_11(self):
         c = approved_with(mvp=["보스 1명", "적 3종"])

@@ -17,6 +17,7 @@ PROVENANCE_KINDS = {**{k: k for k in PROVENANCE_LABEL}, **{v: k for k, v in PROV
 SOURCED_KINDS = ("computed", "measured", "decided")   # 출처가 있어야 하고 게이트를 막지 않는 출처. decided: 사용자가 정한 잣대(문턱·목표 범위·규칙 상수)
 PATH_KINDS = ("computed", "measured")   # 출처가 파일·세션인 종류. 결정의 출처는 사람과 날짜라 경로로 보지 않는다
 DECIDED_SOURCE = re.compile(r"\d{4}-\d{2}-\d{2}")   # 결정은 누가 언제 정했는지 적는다(예: 사용자 2026-11-09)
+YARDSTICK_TAG = re.compile(r"\s*\[(?:가정|assumed|결정|decided)(?:\s*[:：][^\]]*)?\]")   # 잣대 태그(가정·결정)와 앞의 공백. 판정 글에 옮겨 적은 것은 보일 때 뺀다(출처는 브리프에 있다)
 TEXT_FIELDS = ("name", "effect", "intent")
 DATASET_KINDS = ("concepts", "systems", "items", "upgrades", "enemies", "combat", "growth", "budget", "crafting", "economy", "levels", "playtests")
 KIND_LABELS = {"concepts": "컨셉", "systems": "시스템 설계", "items": "아이템", "upgrades": "영구 강화", "enemies": "적", "combat": "전투 계산",

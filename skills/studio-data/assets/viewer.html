@@ -210,7 +210,7 @@ const LABEL = {
           brief_missing: "브리프 없음", brief_incomplete: "브리프 불완전", near_duplicate: "구조 중복",
           axis_collapse: "축 쏠림", dominant_policy: "단순 전략 지배", next_test_missing: "다음 시험 없음", hypothesis_id_missing: "가설 id 없음", hypothesis_sample_missing: "가설의 최소 표본 없음",
           rejected_but_active: "탈락인데 활성", signature_missing_axis: "필수 축 없음", unknown_axis: "모르는 축",
-          fixed_axis_mismatch: "고정 축과 다름", unknown_policy: "모르는 전략", untagged_number: "태그 없는 수치",
+          fixed_axis_mismatch: "고정 축과 다름", unknown_policy: "모르는 전략", untagged_number: "태그 없는 수치", criteria_tag_mismatch: "칸마다 다른 잣대 태그",
           item_unchecked: "아이템 미확인", requirement_unchecked: "선행 조건 미확인",
           unknown_concept: "없는 컨셉", unknown_hypothesis: "없는 가설", verdict_without_evidence: "근거 세션 없음",
           unknown_session: "없는 세션", session_concept_mismatch: "다른 컨셉 세션", observation_missing: "관찰값 없음", verdict_sample_short: "최소 표본에 못 미친 판정", source_missing: "없는 기록 파일", computed_without_output: "결과 파일 없는 계산값", session_beyond_records: "기록보다 많은 판·사람", verdict_criteria_missing: "기준 지문 없는 판정", verdict_criteria_changed: "기준이 바뀐 판정", verdict_events_short: "사건 수가 모자란 버팀", value_not_in_source: "결과 파일에 없는 값", approved_concept_refuted: "틀림으로 확정된 가설", unknown_event: "가설에 없는 사건", player_name_variants: "대소문자만 다른 이름", verdict_overrides_proposal: "제안을 바꾼 판정", verdict_session_wrong_build: "가설이 세지 않는 빌드", verdict_sample_reduced_after_results: "결과를 본 뒤 줄인 표본",
@@ -1170,6 +1170,10 @@ function renderSystems(ds, idx) {
       el("tbody", {}, body.length ? body : [el("tr", {}, el("td", { colspan: String(heads.length), class: "muted", text: "시스템이 없습니다." }))]))))];
 }
 
+// 판정 글에 옮겨 적은 잣대 태그(가정·결정)는 브리프와 어긋날 수 있어 빼고 보인다. 출처는 브리프에 있다(studio.py check와 같은 규칙)
+const YARDSTICK_TAG = /\s*\[(?:가정|assumed|결정|decided)(?:\s*[:：][^\]]*)?\]/g;
+function withoutYardstickTags(text) { return String(text).replace(YARDSTICK_TAG, ""); }
+
 function renderPlaytests(ds, idx) {
   const sessions = (Array.isArray(ds.data.playtests) ? ds.data.playtests : []).filter((e) => e && typeof e === "object");
   const verdicts = (Array.isArray(ds.data.verdicts) ? ds.data.verdicts : []).filter((v) => v && typeof v === "object");
@@ -1191,8 +1195,8 @@ function renderPlaytests(ds, idx) {
         el("td", {}, el("span", { class: "pill st-" + st, text: LABEL.verdictStatus[st] || st })),
         el("td", { class: "mono" }, Array.isArray(v.sessions) && v.sessions.length ? v.sessions.join(", ") : dash()),
         el("td", {}, sample ? computed[where].sample_text : dash(ds.report ? "–" : "서버 모드")),   // check의 판정 줄과 같은 글
-        el("td", { class: "text" }, v.reason || dash(),
-          v.next_needs ? el("div", { class: "muted", text: "다음 시험 전에 풀 것: " + v.next_needs }) : null,
+        el("td", { class: "text" }, v.reason ? withoutYardstickTags(v.reason) : dash(),
+          v.next_needs ? el("div", { class: "muted", text: "다음 시험 전에 풀 것: " + withoutYardstickTags(v.next_needs) }) : null,
           v.cut_reason ? el("div", { class: "muted", text: "지운 까닭: " + v.cut_reason }) : null));
     });
   const gate = ds.report && ds.report.unverified && ds.report.unverified.length
