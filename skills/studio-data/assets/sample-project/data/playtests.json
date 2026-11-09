@@ -85,9 +85,9 @@
   "verdicts": [
     { "concept": "parry_tempo", "hypothesis": "learn_timing", "result": "holds", "sessions": ["pt_20261105_1"],
       "reason": "3명 중 2명에서 같은 방식 피격 비율이 줄었다. 틀렸다는 신호(5판 동안 줄지 않음)가 2명에게서 나오지 않았다. friend_b가 3판 뒤 설명을 다시 들은 일(절차 이탈)은 줄지 않은 friend_b의 값에만 걸려 판정을 바꾸지 않는다.",
-      "criteria": "f9669792", "status": "approved" },
+      "criteria": "e44adc49", "status": "approved" },
     { "concept": "parry_tempo", "hypothesis": "tempo_choice", "result": "unknown", "sessions": ["pt_20261105_1"],
       "reason": "패링 성공률이 높은 사람이 1명뿐이라 '높은 사람도 회피를 고른다'를 판단할 표본이 없다. 템포가 가장 높을 때 고른 횟수도 5건으로 sample의 20건에 못 미친다.",
-      "criteria": "7eef6fc0", "status": "proposed" }
+      "criteria": "82996983", "status": "proposed" }
   ]
 }

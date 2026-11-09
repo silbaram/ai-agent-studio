@@ -75,7 +75,7 @@ class DecidedKind(unittest.TestCase):
         data = copy.deepcopy(CONCEPTS)
         brief = approved(data)["brief"]
         for h in brief["hypotheses"]:
-            for k in ("failure_signal", "test"):
+            for k in ("claim", "failure_signal", "test"):
                 h[k] = h[k].replace("[가정]", "[결정: 사용자 2026-11-09]")
         brief["prototype"]["success_criteria"] = brief["prototype"]["success_criteria"].replace("[가정]", "[결정: 사용자 2026-11-09]")
         r = cc.validate(data)

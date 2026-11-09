@@ -183,27 +183,30 @@ def read_sample(v) -> dict | None:
     return {k: (dict(v[k]) if k in ("events", "reduced_from") else v[k]) for k in SAMPLE_KEYS if k in v}
 
 
-STAMP_TAG = re.compile(r"\[(?:가정|assumed|결정|decided)(?:\s*[:：][^\]]*)?\]")   # 기준 지문에서는 가정·결정 태그를 모두 [가정]으로 읽는다(메모나 출처 표시만 바꾼 것은 기준을 바꾼 것이 아니다)
+SPACES = re.compile(r"\s+")   # 지금 지문은 출처 태그와 띄어쓰기를 지운 문장으로 계산한다(태그를 달며 띄어 써도 기준은 그대로다)
+KIND_TAG = re.compile(r"\[(?:가정|assumed|결정|decided)(?:\s*[:：][^\]]*)?\]")   # 2026-11-09(이슈 306)의 지문은 가정·결정 태그를 [가정]으로 맞췄다
+STAMP_FORMS = ("tagless", "tag_kind", "nfc")   # 지금 꼴, 그리고 예전에 기록한 판정의 지문 꼴(새것부터)
 
 
-def _nfc(v, legacy: bool = False):
+def _norm(v, form: str = "tagless"):
     if isinstance(v, str):
         v = unicodedata.normalize("NFC", v)
-        return v if legacy else STAMP_TAG.sub("[가정]", v)
+        return SPACES.sub("", provenance.STRICT_TAG.sub("", v)) if form == "tagless" else KIND_TAG.sub("[가정]", v) if form == "tag_kind" else v
     if isinstance(v, dict):
-        return {k: _nfc(x, legacy) for k, x in v.items()}
+        return {k: _norm(x, form) for k, x in v.items()}
     if isinstance(v, list):
-        return [_nfc(x, legacy) for x in v]
+        return [_norm(x, form) for x in v]
     return v
 
 
-def criteria_stamp(h: dict, legacy: bool = False) -> str:
+def criteria_stamp(h: dict, form: str = "tagless") -> str:
     """판정 기준의 지문(주장, 틀렸다는 신호, 확인 방법, 최소 표본, 적었으면 세는 빌드). 판정의 criteria에 남기면 판정 뒤에 기준이 바뀐 것을 안다.
-    키 순서, 유니코드 정규화(NFC), 가정·결정 태그의 꼴(메모, 출처)이 다른 것은 바뀐 것으로 보지 않는다.
-    legacy: 태그 꼴을 맞추기 전의 지문. 그 전에 기록한 판정의 criteria와 견줄 때만 쓴다."""
-    fields = {k: _nfc(h.get(k), legacy) for k in CRITERIA_KEYS}
+    키 순서, 유니코드 정규화(NFC), 띄어쓰기, 출처 태그(있고 없음, 종류, 메모, 출처)가 다른 것은 바뀐 것으로 보지 않는다.
+    태그를 지워도 지문은 그대로라서, 판정 기준 문장의 태그 없는 수치는 게이트가 막는다(check_brief_numbers).
+    form: STAMP_FORMS의 예전 꼴은 그 전에 기록한 판정의 criteria와 견줄 때만 쓴다."""
+    fields = {k: _norm(h.get(k), form) for k in CRITERIA_KEYS}
     if "builds" in h:   # 세는 빌드도 기준이다. 결과를 본 뒤 좁히면 지난 판정이 지금 기준의 판정이 아니다(없는 가설의 지문은 그대로 둔다)
-        fields["builds"] = _nfc(h["builds"], legacy)
+        fields["builds"] = _norm(h["builds"], form)
     body = json.dumps(fields, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(body.encode("utf-8")).hexdigest()[:8]
 
@@ -281,25 +284,62 @@ def _strings(obj, path: str):
             yield from _strings(v, f"{path}[{i}]")
 
 
-def _is_criterion(path: str) -> bool:
-    """판정 기준 문장: 가설의 틀렸다는 신호와 프로토타입 성공 기준."""
-    return path.endswith(".failure_signal") or path == "brief.prototype.success_criteria"
+CRITERIA_TEXT = re.compile(r"^brief\.hypotheses\[(\d+)\]\.(claim|failure_signal|test)$")   # 지문에 드는 가설 문장
+
+
+SUCCESS_PATH = "brief.prototype.success_criteria"
+
+
+def _is_criteria_text(path: str) -> bool:
+    """판정 기준 문장: 지문에 드는 가설 문장(claim, failure_signal, test)과 성공 기준. 태그 없는 수치를 경고하고 게이트에서 막는다.
+    단위 없는 문턱값(상관 -0.2)도 수치로 본다."""
+    return bool(CRITERIA_TEXT.match(path)) or path == SUCCESS_PATH
+
+
+def _few(values: list) -> str:
+    shown = list(dict.fromkeys(values))
+    return "·".join(shown[:4]) + ("…" if len(shown) > 4 else "")
 
 
 def check_brief_numbers(c: dict, errors: list, warnings: list) -> list[str]:
-    """브리프 문장 안의 수치 출처 태그를 md와 같은 규칙으로 검사한다. [가정]이 남은 위치를 돌려준다(--fail-on-assumed용).
-    태그 형식 오류는 브리프 어디서든 보고하고, 태그 없는 수치 경고는 판정 기준 문장에서만 낸다."""
+    """브리프 문장 안의 수치 출처 태그를 md와 같은 규칙으로 검사한다. [가정]이 남은 위치를 남은 값과 함께 돌려준다(--fail-on-assumed용).
+    태그 형식 오류는 브리프 어디서든 보고한다. 태그 없는 수치는 판정 기준 문장에서만 경고하고, 거기서는 출처가 비어 있는 값이라 게이트에서도 막는다
+    (지문은 태그를 보지 않으므로 태그를 지운 것을 지문으로는 알 수 없다)."""
     assumed = []
+    tagged: dict = {}   # {가설 번호: {수치: {칸: {종류}}}} 같은 값이 칸마다 다른 태그인지 본다
+    success: dict = {}  # 성공 기준의 {수치: {종류}}. 가설마다 문턱을 다시 적는 칸이라 가설의 같은 값과 견준다
     for path, text in _strings(c["brief"], "brief"):
-        criterion = _is_criterion(path)   # 태그 없는 수치는 판정 기준 문장에서만 경고한다. 거기서는 단위 없는 문턱값(상관 -0.2)도 본다
-        r = provenance.check_text(text, path, bare_numbers=criterion)
+        criteria_text = _is_criteria_text(path)
+        r = provenance.check_text(text, path, bare_numbers=criteria_text)
         for f in r.findings:
             if f.level == "error":
                 errors.append({"code": "provenance", "where": c["id"], "message": f"{path}: {f.message}"})
-            elif criterion:
+            elif criteria_text:
                 warnings.append({"code": "untagged_number", "where": c["id"], "message": f"{path}: {f.message}"})
-        if r.counts["assumed"]:
-            assumed.append(f"{c['id']}.{path}")
+        left = [t.near for t in r.tags if t.kind == "assumed"]
+        bare = r.untagged if criteria_text else []
+        if left or bare:
+            parts = ([f"가정: {_few(left)}"] if left else []) + ([f"태그 없음: {_few(bare)}"] if bare else [])
+            assumed.append(f"{c['id']}.{path}({'; '.join(parts)})")
+        m = CRITERIA_TEXT.match(path)
+        for t in r.tags if m or path == SUCCESS_PATH else []:
+            if t.value and m:
+                tagged.setdefault(int(m.group(1)), {}).setdefault(t.value, {}).setdefault(m.group(2), set()).add(t.kind)
+            elif t.value:
+                success.setdefault(t.value, set()).add(t.kind)
+    hyps = c["brief"].get("hypotheses") if isinstance(c["brief"].get("hypotheses"), list) else []
+    for n, values in sorted(tagged.items()):
+        hid = hyps[n].get("id") if isinstance(hyps[n], dict) else None
+        for value, fields in values.items():
+            if value in success:
+                fields = {**fields, "success_criteria": success[value]}
+            dec = [f for f, kinds in fields.items() if "decided" in kinds]
+            asm = [f for f, kinds in fields.items() if "assumed" in kinds and f not in dec]
+            if dec and asm:
+                warnings.append({"code": "criteria_tag_mismatch", "where": c["id"], "part": value,
+                                 "message": f"brief.hypotheses[{n}]({hid or '이름 없음'}): 같은 값 {josa(value, '이가')} {', '.join(dec)}에서는 [결정], "
+                                            f"{', '.join(asm)}에서는 [가정]입니다. 같은 잣대면 태그를 맞춥니다. "
+                                            f"뜻이 다른 값이면 컨셉의 acknowledged에 {{\"criteria_tag_mismatch\": {{\"{value}\": 까닭}}}}을 적습니다."})
     return assumed
 
 
@@ -422,10 +462,11 @@ def hypothesis_index(data: dict) -> dict:
         named = [h for h in hyps if isinstance(h, dict) and isinstance(h.get("id"), str)]
         samples = {h["id"]: read_sample(h.get("sample")) for h in named if read_sample(h.get("sample"))}
         criteria = {h["id"]: criteria_stamp(h) for h in named}
-        legacy = {h["id"]: criteria_stamp(h, legacy=True) for h in named}   # 태그 꼴을 맞추기 전에 기록한 판정의 지문
+        legacy = {h["id"]: [s for s in dict.fromkeys(criteria_stamp(h, f) for f in STAMP_FORMS[1:]) if s != criteria[h["id"]]]
+                  for h in named}   # 예전 꼴로 기록한 판정의 지문
         builds = {h["id"]: list(h["builds"]) for h in named if isinstance(h.get("builds"), list) and h["builds"] and all(_text(x) for x in h["builds"])}
         out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids, "samples": samples, "criteria": criteria,
-                        "legacy_criteria": {k: v for k, v in legacy.items() if v != criteria[k]}, "builds": builds}
+                        "legacy_criteria": {k: v for k, v in legacy.items() if v}, "builds": builds}
     return out
 
 

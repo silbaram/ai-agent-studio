@@ -11,7 +11,7 @@ import posixpath
 import re
 from pathlib import Path
 
-from .common import ID_PATTERN, STATUSES, ack_reason, check_identity, did_you_mean, is_int, is_number, unknown_keys_text, josa
+from .common import ID_PATTERN, STATUSES, YARDSTICK_TAG, ack_reason, check_identity, did_you_mean, is_int, is_number, unknown_keys_text, josa
 from .common import add_issue as _err
 
 RESULTS = ("holds", "refuted", "unknown")
@@ -355,8 +355,9 @@ def _check_override(v: dict, where: str, errors: list) -> None:
          "제안을 모름으로 낮추는 것만 사용자가 바꿔 확정할 수 있습니다. 버팀·틀림으로 바꾸려면 바꾸려는 까닭을 판정 에이전트에게 주고 다시 판정합니다.")
 
 
-def _check_criteria(v: dict, where: str, concepts: dict | None, warnings: list) -> str:
-    """판정의 기준 지문(criteria)을 지금 가설 기준과 견준다. ok / missing(지문 없음) / changed(판정 뒤에 기준이 바뀜)."""
+def _check_criteria(v: dict, where: str, concepts: dict | None, warnings: list, restamp: dict | None = None) -> str:
+    """판정의 기준 지문(criteria)을 지금 가설 기준과 견준다. ok / missing(지문 없음) / changed(판정 뒤에 기준이 바뀜).
+    예전 꼴로 계산한 지문이 맞으면 ok이고, restamp에 {판정: {from, to}}를 남긴다(지금 꼴로 바꿔 두면 태그를 더해도 지문이 그대로다)."""
     info = concepts[v["concept"]] if concepts is not None else {}
     current = info.get("criteria", {}).get(v["hypothesis"])
     if not current:
@@ -366,7 +367,11 @@ def _check_criteria(v: dict, where: str, concepts: dict | None, warnings: list) 
                          "message": "판정에 기준 지문이 없어 판정 뒤에 기준(claim, failure_signal, test, sample)이 바뀌어도 알 수 없습니다. 확정해도 게이트(--fail-on-assumed)를 넘지 못합니다. "
                                     f"판정 에이전트가 돌려준 지문을 적습니다. 판정한 뒤 가설을 고치지 않았으면 지금 지문을 적어도 됩니다: \"criteria\": \"{current}\"."})
         return "missing"
-    if v["criteria"] in (current, info.get("legacy_criteria", {}).get(v["hypothesis"])):   # 예전 계산의 지문도 같은 기준이다(태그 꼴만 맞춤)
+    if v["criteria"] == current:
+        return "ok"
+    if v["criteria"] in info.get("legacy_criteria", {}).get(v["hypothesis"], ()):   # 예전 꼴의 지문도 같은 기준이다(태그만 다르게 계산함)
+        if restamp is not None:
+            restamp[where] = {"from": v["criteria"], "to": current}
         return "ok"
     warnings.append({"code": "verdict_criteria_changed", "where": where,
                      "message": "판정 뒤에 가설 기준(claim, failure_signal, test, sample)이 바뀌었습니다. 지금 기준으로 다시 판정하고 이 판정은 cut으로 둡니다. "
@@ -585,6 +590,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
 
     verdicts: dict = {}
     left: dict = {}   # 지난 판정이 남긴 '다음 시험 전에 풀 것' {가설: 글}. 새 판정이 나오기 전까지 보인다
+    restamp: dict = {}   # 예전 꼴 지문으로 기록한 판정 {판정: {from, to}}
     status_counts = {st: 0 for st in STATUSES + ("unspecified",)}
     for n, v in enumerate(raw_verdicts):
         where = check_verdict(v, n, errors)
@@ -603,7 +609,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
             unchecked += 1
         elif not _hypothesis_ref(v["concept"], v["hypothesis"], where, concepts, errors):
             continue
-        criteria = _check_criteria(v, where, concepts, warnings)
+        criteria = _check_criteria(v, where, concepts, warnings, restamp)
         _check_override(v, where, errors)
         cited = v.get("sessions", [])
         if v["result"] in DECIDED and not cited:
@@ -688,6 +694,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         "unverified": unverified,
         "refuted": refuted,
         "next_needs": next_needs,
+        "restamp": restamp,
         "unchecked": unchecked + len(missing_refs),
         "unchecked_reason": reason,
         "unchecked_refs": sorted(missing_refs),
@@ -702,8 +709,11 @@ def print_extra(result: dict) -> None:
         if v.get("proposed_result") not in (None, v["result"]):
             state += f", 판정 에이전트는 {RESULT_LABEL[v['proposed_result']]}"   # 사용자가 제안을 모름으로 낮춰 확정했다
         print(f"{where}: {RESULT_LABEL[v['result']]} ({state}) · 관찰한 근거 {v['sample_text']}")
-    for where, x in result.get("next_needs", {}).items():
-        print(f"다음 시험 전에 풀 것({where}): {x['text']}" + (" (지난 판정)" if x["cut"] else ""))
+    for where, x in result.get("next_needs", {}).items():   # 옮겨 적은 잣대 태그는 브리프와 어긋날 수 있어 빼고 보인다
+        print(f"다음 시험 전에 풀 것({where}): {YARDSTICK_TAG.sub('', x['text'])}" + (" (지난 판정)" if x["cut"] else ""))
+    for where, x in result.get("restamp", {}).items():
+        print(f"참고: 판정 {where}의 기준 지문이 예전 꼴입니다(criteria {x['from']}, 태그까지 넣어 계산함). 기준은 그대로이니 criteria를 {x['to']}로 바꿔 둡니다. "
+              "그러면 태그 없던 수치에 태그를 달거나 태그를 바꿔도 지문이 그대로입니다.")
     if result["unchecked_reason"]:
         print(f"컨셉·가설 참조 미확인({UNCHECKED_REASON.get(result['unchecked_reason'], '')}): {result['unchecked'] - len(result['unchecked_refs'])}건")
     if result["unchecked_refs"]:
