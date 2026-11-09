@@ -317,10 +317,10 @@ def _mismatch_part(c: dict, value: str, notes: list | None) -> str:
     return old
 
 
-ASSUMED_CRITERIA_NOTE = ("판정 기준 문장에 [가정] 값이 남아 게이트를 막습니다({where}). 사용자가 정할 잣대(문턱, 표본, 창 길이)면 사용자에게 묻고 "
-                         "정했다고 하면 [결정: 사용자 날짜]로 바꿉니다. 빌드의 게임 수치(피해, 발사 속도처럼 데이터 파일에 있는 값)를 옮겨 적은 것이면 "
-                         "판정 기준에서 지우고 빌드 id(가설의 builds, 세션의 game_build)나 변경 이름으로 가리킵니다. 그 값의 출처는 데이터 파일이 맡습니다. "
-                         "이미 판정한 가설이면 문장을 고친 뒤 지문이 바뀝니다. 뜻이 같은 고침인지 사용자와 확인하고 판정의 criteria를 새 지문으로 바꿉니다.")
+ASSUMED_CRITERIA_NOTE = ("판정 기준 문장에 [가정] 값이 남아 게이트를 막습니다({where}). 사용자가 정할 잣대(문턱, 표본, 창 길이)면 사용자에게 묻고, "
+                         "정했다고 하면 [결정: 사용자 날짜]로 바꿉니다. 빌드의 게임 수치(피해, 발사 속도)를 옮겨 적은 것이면 지우고 빌드 id(builds, game_build)나 "
+                         "변경 이름으로 가리킵니다. 판정한 가설이면 고치기 전에 사용자와 확인하고 문장과 판정의 criteria를 한 번에 바꿉니다"
+                         "(brief.md '세는 빌드는 이름으로 가리킨다').")   # 자세한 순서의 원본은 playtest-verdict SKILL.md다
 
 
 def check_brief_numbers(c: dict, errors: list, warnings: list, root: Path | None = None, notes: list | None = None,
