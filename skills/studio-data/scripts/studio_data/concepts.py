@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import unicodedata
+from pathlib import Path
 
 from . import provenance
 from .common import ID_PATTERN, STATUSES, check_identity, is_active, is_int, josa
@@ -296,31 +297,58 @@ def _is_criteria_text(path: str) -> bool:
     return bool(CRITERIA_TEXT.match(path)) or path == SUCCESS_PATH
 
 
-def _few(values: list) -> str:
-    shown = list(dict.fromkeys(values))
-    return "·".join(shown[:4]) + ("…" if len(shown) > 4 else "")
+def _legacy_value(value: str) -> str:
+    """PR #36까지 태그 값을 읽던 꼴. 가운뎃점 목록은 마지막 수만(0.5·1·2배 → 2배), 부호는 + 와 단위 수치의 - 를 뺐다(+0.3 → 0.3).
+    그때 값으로 적은 criteria_tag_mismatch 확인을 이어 쓴다."""
+    tail = re.split(r"[·・]", value)[-1]
+    return tail[1:] if tail[:1] == "+" or (tail[:1] == "-" and not tail[-1:].isdigit()) else tail
 
 
-def check_brief_numbers(c: dict, errors: list, warnings: list) -> list[str]:
+def _mismatch_part(c: dict, value: str, notes: list | None) -> str:
+    """확인의 대상 값. 지금 값으로 적은 확인이 없고 예전 꼴 값으로 적은 확인이 있으면 그것을 쓰고 이름을 바꾸라고 알린다."""
+    acks = c.get("acknowledged")
+    acks = acks.get("criteria_tag_mismatch") if isinstance(acks, dict) else None
+    old = _legacy_value(value)
+    if not isinstance(acks, dict) or value in acks or old == value or old not in acks:
+        return value
+    if notes is not None:
+        notes.append(f"{c['id']}의 criteria_tag_mismatch 확인 '{old}'는 예전 값 꼴입니다. 지금 경고의 값은 '{value}'라 그 확인을 이어 씁니다. "
+                     f"acknowledged의 대상을 '{value}'로 바꿔 둡니다.")
+    return old
+
+
+ASSUMED_CRITERIA_NOTE = ("판정 기준 문장에 [가정] 값이 남아 게이트를 막습니다({where}). 사용자가 정할 잣대(문턱, 표본, 창 길이)면 사용자에게 묻고 "
+                         "정했다고 하면 [결정: 사용자 날짜]로 바꿉니다. 빌드의 게임 수치(피해, 발사 속도처럼 데이터 파일에 있는 값)를 옮겨 적은 것이면 "
+                         "판정 기준에서 지우고 빌드 id(가설의 builds, 세션의 game_build)나 변경 이름으로 가리킵니다. 그 값의 출처는 데이터 파일이 맡습니다. "
+                         "이미 판정한 가설이면 문장을 고친 뒤 지문이 바뀝니다. 뜻이 같은 고침인지 사용자와 확인하고 판정의 criteria를 새 지문으로 바꿉니다.")
+
+
+def check_brief_numbers(c: dict, errors: list, warnings: list, root: Path | None = None, notes: list | None = None,
+                        ack_notes: list | None = None) -> list[str]:
     """브리프 문장 안의 수치 출처 태그를 md와 같은 규칙으로 검사한다. [가정]이 남은 위치를 남은 값과 함께 돌려준다(--fail-on-assumed용).
     태그 형식 오류는 브리프 어디서든 보고한다. 태그 없는 수치는 판정 기준 문장에서만 경고하고, 거기서는 출처가 비어 있는 값이라 게이트에서도 막는다
-    (지문은 태그를 보지 않으므로 태그를 지운 것을 지문으로는 알 수 없다)."""
+    (지문은 태그를 보지 않으므로 태그를 지운 것을 지문으로는 알 수 없다).
+    root(게임 프로젝트 폴더)가 있으면 [계산]·[측정]의 경로 출처를 md의 --check-paths처럼 확인한다(파일, 플레이 기록의 세션 id).
+    notes에는 판정 기준 문장에 [가정]이 남은 칸을 모아 게이트 아래 참고 줄로 낸다. ack_notes에는 예전 값 꼴로 적은 확인을 알린다."""
     assumed = []
+    held = []   # [가정]이 남은 판정 기준 칸
     tagged: dict = {}   # {가설 번호: {수치: {칸: {종류}}}} 같은 값이 칸마다 다른 태그인지 본다
     success: dict = {}  # 성공 기준의 {수치: {종류}}. 가설마다 문턱을 다시 적는 칸이라 가설의 같은 값과 견준다
     for path, text in _strings(c["brief"], "brief"):
         criteria_text = _is_criteria_text(path)
-        r = provenance.check_text(text, path, bare_numbers=criteria_text)
+        r = provenance.check_text(text, path, base_dirs=[root] if root else None, check_paths=root is not None, bare_numbers=criteria_text)
         for f in r.findings:
             if f.level == "error":
                 errors.append({"code": "provenance", "where": c["id"], "message": f"{path}: {f.message}"})
             elif criteria_text:
-                warnings.append({"code": "untagged_number", "where": c["id"], "message": f"{path}: {f.message}"})
+                warnings.append({"code": "untagged_number", "where": c["id"], "message": f"{path}: {f.message}", **({"values": f.values} if f.values else {})})
         left = [t.near for t in r.tags if t.kind == "assumed"]
         bare = r.untagged if criteria_text else []
         if left or bare:
-            parts = ([f"가정: {_few(left)}"] if left else []) + ([f"태그 없음: {_few(bare)}"] if bare else [])
+            parts = ([f"가정: {provenance.few(left)}"] if left else []) + ([f"태그 없음: {provenance.few(bare)}"] if bare else [])
             assumed.append(f"{c['id']}.{path}({'; '.join(parts)})")
+        if left and criteria_text:
+            held.append(path.removeprefix("brief."))
         m = CRITERIA_TEXT.match(path)
         for t in r.tags if m or path == SUCCESS_PATH else []:
             if t.value and m:
@@ -336,10 +364,12 @@ def check_brief_numbers(c: dict, errors: list, warnings: list) -> list[str]:
             dec = [f for f, kinds in fields.items() if "decided" in kinds]
             asm = [f for f, kinds in fields.items() if "assumed" in kinds and f not in dec]
             if dec and asm:
-                warnings.append({"code": "criteria_tag_mismatch", "where": c["id"], "part": value,
+                warnings.append({"code": "criteria_tag_mismatch", "where": c["id"], "part": _mismatch_part(c, value, ack_notes),
                                  "message": f"brief.hypotheses[{n}]({hid or '이름 없음'}): 같은 값 {josa(value, '이가')} {', '.join(dec)}에서는 [결정], "
                                             f"{', '.join(asm)}에서는 [가정]입니다. 같은 잣대면 태그를 맞춥니다. "
                                             f"뜻이 다른 값이면 컨셉의 acknowledged에 {{\"criteria_tag_mismatch\": {{\"{value}\": 까닭}}}}을 적습니다."})
+    if held and notes is not None:
+        notes.append(ASSUMED_CRITERIA_NOTE.format(where=f"{c['id']}: {', '.join(held)}"))
     return assumed
 
 
@@ -400,7 +430,8 @@ def print_extra(report: dict) -> None:
         print("판정 기준 지문: " + " · ".join(f"{k} {v}" for k, v in report["criteria"].items()))
 
 
-def validate(data: dict) -> dict:
+def validate(data: dict, root: Path | None = None) -> dict:
+    """root: 데이터 파일의 게임 프로젝트 폴더. 있으면 브리프의 [계산]·[측정] 경로 출처를 확인한다."""
     errors: list = []
     warnings: list = []
     raw = data.get("concepts")
@@ -424,11 +455,13 @@ def validate(data: dict) -> dict:
             warnings.append({"code": "dominant_policy", "where": c["id"],
                              "message": "단순 전략이 지배하는 결과가 있습니다. 규칙을 바꾸거나, 증거가 충분하면 hard_reject로 제외하세요."})
     unverified: list = []
+    gate_notes: list = []
+    ack_notes: list = []   # apply_acknowledged가 이어 붙인다
     for c in valid:
         if c.get("status") == "approved":
             check_brief(c, c["id"], errors, warnings)
             if isinstance(c.get("brief"), dict):
-                unverified += check_brief_numbers(c, errors, warnings)
+                unverified += check_brief_numbers(c, errors, warnings, root, gate_notes, ack_notes)
     structure = check_structure(active, warnings, ctx["fixed"])
     status_counts = {s: 0 for s in STATUSES + ("unspecified",)}
     for c in valid:
@@ -440,6 +473,8 @@ def validate(data: dict) -> dict:
         "approved": sorted(c["id"] for c in valid if c.get("status") == "approved"),
         "criteria": _approved_criteria(valid),
         "unverified": unverified,
+        "gate_notes": gate_notes,
+        "ack_notes": ack_notes,
         "stress_summary": {c["id"]: {r: sum(1 for s in c.get("stress", []) if s.get("result") == r) for r in POLICY_RESULTS} for c in valid},
         **structure,
         "errors": errors,

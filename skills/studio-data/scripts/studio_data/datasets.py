@@ -429,6 +429,8 @@ def validate_all(entries: list[dict]) -> list[dict]:
                 first = next(x for x in entries if x["ok"] and x["kind"] == "systems")
                 if d is not first:  # 맡는 필러와 MVP는 파일을 넘어 세지 않는다
                     c.add_issue(d["report"]["errors"], "schema", "systems", f"시스템 설계 파일은 하나만 씁니다. {first['name']}에 합칩니다.")
+            elif d["kind"] == "concepts":
+                d["report"] = concepts.validate(d["data"], root=_project_root(Path(d["path"])))   # 브리프의 [측정: data/playtests.json#세션]은 이 폴더 기준이다
             elif d["kind"] == "playtests":
                 d["report"] = playtests.validate(d["data"], hypotheses, concepts_unreadable=bool(broken_concepts), refs=stage_refs,
                                                  root=_project_root(Path(d["path"])))

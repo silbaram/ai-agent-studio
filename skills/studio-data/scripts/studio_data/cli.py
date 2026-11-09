@@ -180,6 +180,8 @@ def cmd_check(args) -> int:
                 print(TABLE_PRINTERS[d["kind"]](d["data"], r, ids))
             for label, items in gated.get(d["path"], []):
                 print("gate: " + label + ", ".join(items))
+            for text in r.get("gate_notes", []) if d["path"] in gated else []:   # 게이트에 걸린 까닭과 고치는 길
+                print("참고: " + text)
             if d["kind"] in COUNT_PRINTERS:
                 COUNT_PRINTERS[d["kind"]](r)
             else:

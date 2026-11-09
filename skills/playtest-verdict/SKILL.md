@@ -23,7 +23,7 @@ description: "Records prototype playtest sessions as data, has a read-only judge
 |---|---|---|
 | `python3 .claude/skills/studio-data/scripts/studio.py check .` | 판정이 근거 세션을 가리키는가, 그 세션이 있고 그 가설을 관찰했는가, 가설·컨셉 id가 맞는가, 세션의 판 수·사람 수 | 관찰값이 정말 틀렸다는 신호에 해당하는가 |
 | `… check . --fail-on-assumed` | 선택한 컨셉의 가설 중 확정된 버팀·틀림이 아닌 것이 남았는가 | 가설이 좋은 가설인가 |
-| `… provenance design/ --check-paths` | `[측정: data/playtests.json#세션 id]`의 세션이 실제 기록에 있는가 | 측정값을 옮겨 적을 때 틀리지 않았는가 |
+| `… provenance design/ --check-paths` | md의 `[측정: data/playtests.json#세션 id]` 세션이 실제 기록에 있는가. 컨셉 브리프의 같은 태그는 `check`가 본다 | 측정값을 옮겨 적을 때 틀리지 않았는가 |
 | `… runlog playtests/세션/runs.csv` | 판별 로그를 세션의 단계 기록으로 모아 출력(강화 상태별 묶음). 파일에 쓰지 않는다 | 로그가 맞는가 |
 | `… calibrate data/meta_combat.json` | 가정값과 기록의 차이, 단계 통과율의 예측과 실측, 기록에 맞는 생존 곡선 값 제안 | 재미, 실제 난이도. 파일을 고치지 않는다 |
 
@@ -71,7 +71,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 - 평균·비율을 새로 계산한 값은 `[계산: 스크립트 또는 결과 파일]`이다. 계산한 스크립트가 없으면 올리지 않는다.
 - 판정 기준의 문턱값(예: `80% [가정]`)과 `test`의 시험 설계 값(표본, 구간)은 측정값이 아니다. 무엇이 틀림인지를 정하는 잣대라 측정으로 올리지 않는다. 사용자가 그 값을 정했으면 `[결정: 사용자 2026-11-09]`로 바꾼다. 그러면 게이트가 막지 않는다. 에이전트가 정한 값은 `[가정]` 그대로다([numeric-provenance](../numeric-provenance/SKILL.md), [브리프](../concept-exploration/references/brief.md)).
 - 판정 글(`reason`, `next_needs`, `cut_reason`)에는 문턱을 잣대 태그 없이 수치만 쓴다("사망 6건이 필요한데"). 출처는 브리프에 있고, 옮겨 적은 태그는 브리프를 고치면 어긋난다. `check`는 `next_needs`, 뷰어는 `reason`과 `next_needs`의 `[가정]`·`[결정]` 태그를 빼고 보인다.
-- 올린 뒤 `provenance design/ --check-paths`로 세션이 실제로 있는지 확인한다.
+- 올린 뒤 `provenance design/ --check-paths`(md)와 `check .`(컨셉 브리프)로 세션이 실제로 있는지 확인한다.
 
 ### 5. 가정값을 보정한다
 
