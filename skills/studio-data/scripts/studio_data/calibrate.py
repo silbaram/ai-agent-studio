@@ -464,7 +464,7 @@ def _mark_mixed(rows: list, entries: list, records: list, cols: list, tolerance:
         x["mixed"] = False
         same = [y for got in per for y in got if (y["kind"], y["stage"], y["item"]) == (x["kind"], x["stage"], x["item"])]
         if not x["off"]:   # 평균이 가정과 맞아도 조건마다 가정의 양쪽으로 크게 갈리면 맞는 것이 아니다
-            vals = [y["measured"] for y in same if y["measured"] is not None and not y["few"]]   # 넘긴 판이 적은 조건은 살아남은 판의 값(참고)이다
+            vals = [y["measured"] for y in same if y["measured"] is not None]   # 넘긴 판이 적은 조건도 센다. 빼면 조건이 모두 적을 때 참고가 사라진다(참고 쪽이 안전하다)
             x["mixed"] = bool(x["assumed"]) and len(vals) > 1 and min(vals) < x["assumed"] < max(vals) \
                 and max(vals) - min(vals) > tolerance * abs(x["assumed"]) + 1e-9
             continue

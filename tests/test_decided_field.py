@@ -206,15 +206,19 @@ class ReviewFixes(Workspace):
         self.assertEqual(common.provenance_text(dict(pc, decided=3)), "가정 1 · 계산 0 · 측정 2 · 결정 3 · 미지정 0")
         self.assertEqual(common.provenance_text({"assumed": 0, "computed": 0, "measured": 0, "decided": 0}), "가정 0 · 계산 0 · 측정 0")
 
-    def test_a_few_cleared_condition_does_not_make_a_straddle(self):
-        s = self.run_session(runs=20, groups=[
-            {"upgrades": [], "variant": {"_setting": "1"}, "runs": 10, "stage_stats": [{"stage": "zone_2", "entered": 10, "cleared": 8, "kills": {"frost_wolf": 30}}]},
-            {"upgrades": [], "variant": {"_setting": "2"}, "runs": 10, "stage_stats": [{"stage": "zone_2", "entered": 10, "cleared": 1, "kills": {"frost_wolf": 75}}]}])
+    def test_few_cleared_conditions_still_make_a_straddle(self):
+        """4차 기록의 꼴: 조건마다 넘긴 판이 1~2판(모두 참고)이고 끝 레벨이 12, 10, 9로 가정 10의 양쪽이다.
+        넘긴 판이 적은 조건을 빼면 참고가 사라져, 섞은 평균을 맞는 값으로 옮길 수 있다. 참고 쪽으로 기우는 것이 안전하다."""
+        s = self.run_session(runs=4, groups=[
+            {"upgrades": [], "variant": {"_setting": str(n)}, "runs": 2, "stage_stats": [{"stage": "zone_1", "entered": 2, "cleared": 2, "level_end": lv}]}
+            for n, lv in enumerate((5, 3))])   # 가정은 다음 단계 zone_2의 level_at 4
         s.pop("upgrades")
         self.sessions(s)
-        wolf = row(cal.calibrate(self.root), "kills", "zone_2", "frost_wolf")   # 가정 35, 섞은 평균 (30×8 + 75)/9 = 35
-        self.assertFalse(wolf["off"])
-        self.assertFalse(wolf["mixed"])   # 75는 넘긴 판 1판의 값(참고)이라 양쪽으로 갈린 것으로 보지 않는다
+        r = cal.calibrate(self.root)
+        end = row(r, "level_end", "zone_1")
+        self.assertFalse(end["off"])
+        self.assertTrue(end["mixed"])
+        self.assertIn("조건마다 다름, 참고", cal_printed(r))
 
     def test_a_partly_counted_stage_is_not_supply_capped(self):
         rows = [{"kind": "kills", "stage": "s", "item": "a", "measured": 5}]
