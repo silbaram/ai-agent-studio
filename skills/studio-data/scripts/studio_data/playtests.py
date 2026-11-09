@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 
 from .common import ID_PATTERN, STATUSES, YARDSTICK_TAG, ack_reason, check_identity, did_you_mean, is_int, is_number, unknown_keys_text, josa
+from .common import valid_date as common_valid_date
 from .common import add_issue as _err
 
 RESULTS = ("holds", "refuted", "unknown")
@@ -39,15 +40,7 @@ UNCHECKED_REASON = {
 }
 
 
-def valid_date(v) -> bool:
-    """YYYY-MM-DD이고 달력에 있는 날짜인가. 기록의 순서가 날짜로 정해지므로 틀린 날짜는 판정을 바꾼다."""
-    if not (isinstance(v, str) and DATE.match(v)):
-        return False
-    try:
-        datetime.date.fromisoformat(v)
-    except ValueError:
-        return False
-    return True
+valid_date = common_valid_date   # 날짜 검사는 컨셉의 기준 이력과 함께 쓴다(common)
 
 
 def _text(v) -> bool:
@@ -382,8 +375,17 @@ def _check_criteria(v: dict, where: str, concepts: dict | None, warnings: list, 
                                 + ("확정 판정이어도 게이트를 넘지 못합니다. " if chosen else NOT_CHOSEN_GATE)
                                 + "뜻이 같은 고침(맞춤법, 옮겨 적은 빌드의 게임 수치를 지우고 빌드를 이름으로 가리킴)인지 사용자와 가립니다. 이미 확인했으면 다시 묻지 않습니다. "
                                 f"같은 뜻이면 criteria를 고칩니다(지금 지문: {current}). 뜻이 바뀌었으면 지금 기준으로 다시 판정하고 이 판정은 cut으로 둡니다. "
-                                "다시 시험하려고 기준을 바꿨으면 묻지 않고, 새 기록을 기다리지 말고 지금 cut으로 둡니다(지우지 않습니다)."})
+                                "다시 시험하려고 기준을 바꿨으면 묻지 않고, 새 기록을 기다리지 말고 지금 cut으로 둡니다(지우지 않습니다). "
+                                + _history_note(info, v)})
     return "changed"
+
+
+def _history_note(info: dict, v: dict) -> str:
+    """기준이 바뀐 판정: 그때 기준이 가설의 criteria_history에 있는지. 판정 에이전트는 고치기 전 기준을 이 기록으로 읽는다(297번)."""
+    found = next((e for e in reversed(info.get("history", {}).get(v["hypothesis"], [])) if e["stamp"] == v["criteria"]), None)
+    if found:
+        return f"그때 기준은 가설의 criteria_history에 있습니다({found['date']}, 고친 칸: {', '.join(found['fields'])})."
+    return "고치기 전 기준을 가설의 criteria_history에 남깁니다(고친 칸의 고치기 전 값과 이 판정의 지문)."
 
 
 def _hypothesis_ref(concept: str, hyp: str, where: str, concepts: dict, errors: list) -> bool:

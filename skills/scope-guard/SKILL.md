@@ -53,7 +53,7 @@ OpenSpec을 처음 넣는 프로젝트는 [OpenSpec 설치](references/openspec-
 
 `studio.py setup claude`가 설치한다. `openspec/`과 `design/systems.json`이 다 있는 프로젝트에서만 움직인다.
 
-- **막는다.** `scope`에 오류가 있으면 게임을 만드는 파일의 편집, 메인 스펙 편집, `openspec archive`, 변경 폴더를 옮기는 `mv`를 막는다. `scope`가 재지 못해도 막는다. `design`, `data`, `docs`, `reports`, `playtests` 폴더, `openspec`의 나머지, 점으로 시작하는 폴더, 마크다운은 변경을 고치고 플레이 기록을 남길 수 있게 열어 둔다.
+- **막는다.** `scope`에 오류가 있으면 게임을 만드는 파일의 편집, 메인 스펙 편집, `openspec archive`, 변경 폴더를 옮기는 `mv`를 막는다. `scope`가 재지 못해도 막는다. 컨셉 검사의 오류 중 판정 기록의 오류(판정 기준 이력 `criteria_history`, 브리프 수치의 출처 `provenance`)는 범위와 관계없어 막지 않는다. `check`가 오류로 알린다. `design`, `data`, `docs`, `reports`, `playtests` 폴더, `openspec`의 나머지, 점으로 시작하는 폴더, 마크다운은 변경을 고치고 플레이 기록을 남길 수 있게 열어 둔다.
 - **지문 줄을 지킨다.** 진행 중인 변경의 `.openspec.yaml`에서 `x-studio-systems`나 `x-studio-dropped` 줄을 손으로 바꾸거나 지우는 편집을 막는다. 다른 키는 열어 둔다.
 - **메인 스펙의 새 줄을 잰다.** 메인 스펙 편집이 범위 밖 문구를 넣으면 막는다. 있던 줄은 재지 않는다.
 - **묻는다.** 범위를 넓히는 편집은 사용자에게 묻는다: 승인됐거나 시스템 설계가 잇는 브리프에 MVP 추가, 범위 밖 항목 제거, 컨셉 승인 추가와 내리기, MVP 시스템 추가, 이을 컨셉 변경. 읽을 수 없는 내용으로 범위 파일을 고치는 편집과 `.claude/settings*.json`, `studio-data`, `scope-guard` 설치본의 편집도 묻는다. 사용자가 허락하면 진행한다. 막힌 에이전트가 브리프나 훅을 고쳐 빠져나가지 못하게 하려는 것이다.
