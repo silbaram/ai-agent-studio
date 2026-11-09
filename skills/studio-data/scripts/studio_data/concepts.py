@@ -13,7 +13,7 @@ import unicodedata
 from pathlib import Path
 
 from . import provenance
-from .common import ID_PATTERN, STATUSES, check_identity, is_active, is_int, josa
+from .common import ID_PATTERN, STATUSES, check_identity, is_active, is_int, josa, valid_date
 from .common import did_you_mean as _did_you_mean
 from .common import table_cell as _cell
 
@@ -212,6 +212,77 @@ def criteria_stamp(h: dict, form: str = "tagless") -> str:
     return hashlib.sha256(body.encode("utf-8")).hexdigest()[:8]
 
 
+HISTORY_KEYS = CRITERIA_KEYS + ("builds",)   # 이력에 고치기 전 값을 남길 수 있는 칸(지문에 드는 칸)
+HISTORY_STAMP = re.compile(r"^[0-9a-f]{8}$")
+HISTORY_PATH = re.compile(r"\.criteria_history(?:\[|$)")   # 브리프 문장 중 이력의 예전 문장
+HISTORY_SHAPE = '{"date": "2026-11-09", "stamp": "고치기 전 지문", "before": {"test": "고치기 전 문장"}, "why": "까닭과 확인한 사람"}'
+
+
+def _history_problem(e) -> str | None:
+    if not isinstance(e, dict):
+        return f"항목은 {HISTORY_SHAPE} 꼴입니다"
+    if not valid_date(e.get("date")):
+        return "date는 고친 날짜(YYYY-MM-DD, 달력에 있는 날)입니다"
+    if not (isinstance(e.get("stamp"), str) and HISTORY_STAMP.match(e["stamp"])):
+        return "stamp는 고치기 전 기준의 지문(소문자 16진수 8자, 그때 판정의 criteria)입니다"
+    before = e.get("before")
+    if not (isinstance(before, dict) and before and set(before) <= set(HISTORY_KEYS)):
+        return f"before는 고친 칸({', '.join(HISTORY_KEYS)})의 고치기 전 값입니다. 없던 칸은 null로 적습니다"
+    if not _text(e.get("why")):
+        return "why에 고친 까닭과 누가 확인했는지 적습니다"
+    return None
+
+
+def check_criteria_history(h: dict, n: int, where: str, errors: list) -> None:
+    """가설의 criteria_history(오래된 것부터): 기준을 고칠 때 고친 칸의 고치기 전 값과 그때 지문을 남긴다.
+    판정 에이전트는 git을 볼 수 없어 '고치기 전이었다면'을 이 기록으로 읽는다(297번). 지문에는 들지 않는다.
+    지금 가설에 뒤의 이력부터 고치기 전 값을 덮어 그때 기준을 만들고, 그 지문이 적힌 지문과 같은지 본다. 틀린 이력은 판정을 속이므로 오류다."""
+    if "criteria_history" not in h:
+        return
+    hist, path = h["criteria_history"], f"brief.hypotheses[{n}].criteria_history"
+    if not isinstance(hist, list):
+        errors.append({"code": "criteria_history_invalid", "where": where, "message": f"{path}: 고친 순서(오래된 것부터)의 배열이어야 합니다. 항목: {HISTORY_SHAPE}"})
+        return
+    problems = [(i, _history_problem(e)) for i, e in enumerate(hist)]
+    for i, problem in problems:
+        if problem:
+            errors.append({"code": "criteria_history_invalid", "where": where, "message": f"{path}[{i}]: {problem}."})
+    if any(problem for _, problem in problems):
+        return
+    cur = dict(h)
+    for i in range(len(hist) - 1, -1, -1):
+        e, prev = hist[i], dict(cur)
+        for k, v in e["before"].items():
+            if v is None:
+                prev.pop(k, None)
+            else:
+                prev[k] = v
+        if criteria_stamp(prev) == criteria_stamp(cur):
+            errors.append({"code": "criteria_history_mismatch", "where": where,
+                           "message": f"{path}[{i}]({e['date']}): 고치기 전 값으로 계산한 기준이 그 뒤의 기준과 같습니다. "
+                                      "출처 태그나 띄어쓰기만 바꾼 것은 기준이 바뀐 것이 아니라 이력에 적지 않습니다."})
+        elif e["stamp"] not in {criteria_stamp(prev, f) for f in STAMP_FORMS}:
+            errors.append({"code": "criteria_history_mismatch", "where": where,
+                           "message": f"{path}[{i}]({e['date']}): 고치기 전 값으로 계산한 지문이 적힌 지문과 다릅니다(계산: {criteria_stamp(prev)}, 적힘: {e['stamp']}). "
+                                      "고친 칸의 고치기 전 문장과 그때 판정의 criteria를 그대로 적습니다. 이력은 오래된 것이 앞입니다."
+                                      + (" 이 항목 뒤에 기준을 또 고쳤으면 그 고침도 이력 끝에 더합니다." if i == len(hist) - 1 else "")})
+        cur = prev
+
+
+def _history_ok(h: dict) -> bool:
+    """형식과 지문 사슬이 모두 맞는 이력이 있는가. 맞지 않는 이력은 판정 에이전트에게 그때 기준으로 알리지 않는다."""
+    problems: list = []
+    check_criteria_history(h, 0, "", problems)
+    return bool(isinstance(h.get("criteria_history"), list) and h["criteria_history"]) and not problems
+
+
+def _history_summary(h: dict) -> dict | None:
+    if not _history_ok(h):
+        return None
+    hist = h["criteria_history"]
+    return {"count": len(hist), "date": hist[-1]["date"], "fields": list(hist[-1]["before"])}
+
+
 def check_brief(c: dict, where: str, errors: list, warnings: list | None = None) -> None:
     """선택(approved)한 컨셉은 반증 가능한 브리프를 갖춰야 한다."""
     warnings = [] if warnings is None else warnings
@@ -335,6 +406,8 @@ def check_brief_numbers(c: dict, errors: list, warnings: list, root: Path | None
     tagged: dict = {}   # {가설 번호: {수치: {칸: {종류}}}} 같은 값이 칸마다 다른 태그인지 본다
     success: dict = {}  # 성공 기준의 {수치: {종류}}. 가설마다 문턱을 다시 적는 칸이라 가설의 같은 값과 견준다
     for path, text in _strings(c["brief"], "brief"):
+        if HISTORY_PATH.search(path):   # 고치기 전 문장은 지난 기록이다. 태그·수치·출처를 다시 재지 않고 게이트에도 넣지 않는다
+            continue
         criteria_text = _is_criteria_text(path)
         r = provenance.check_text(text, path, base_dirs=[root] if root else None, check_paths=root is not None, bare_numbers=criteria_text)
         for f in r.findings:
@@ -428,6 +501,9 @@ def _approved_criteria(valid: list) -> dict:
 def print_extra(report: dict) -> None:
     if report.get("criteria"):
         print("판정 기준 지문: " + " · ".join(f"{k} {v}" for k, v in report["criteria"].items()))
+    if report.get("criteria_history"):   # 판정 에이전트가 고치기 전 기준을 찾을 곳
+        print("기준 이력: " + " · ".join(f"{k} {x['count']}번({'마지막 ' if x['count'] > 1 else ''}{x['date']} {', '.join(x['fields'])})"
+                                       for k, x in report["criteria_history"].items()))
 
 
 def validate(data: dict, root: Path | None = None) -> dict:
@@ -454,6 +530,11 @@ def validate(data: dict, root: Path | None = None) -> dict:
         if any(s.get("result") == "dominates" for s in c.get("stress", [])):
             warnings.append({"code": "dominant_policy", "where": c["id"],
                              "message": "단순 전략이 지배하는 결과가 있습니다. 규칙을 바꾸거나, 증거가 충분하면 hard_reject로 제외하세요."})
+    for c in valid:   # 기준 이력은 선택하지 않은(되돌린) 컨셉에도 남는다. 다시 고르면 판정 에이전트가 읽는다
+        hyps = c["brief"].get("hypotheses") if isinstance(c.get("brief"), dict) else None
+        for n, h in enumerate(hyps if isinstance(hyps, list) else []):
+            if isinstance(h, dict):
+                check_criteria_history(h, n, c["id"], errors)
     unverified: list = []
     gate_notes: list = []
     ack_notes: list = []   # apply_acknowledged가 이어 붙인다
@@ -472,6 +553,9 @@ def validate(data: dict, root: Path | None = None) -> dict:
         "status_counts": status_counts,
         "approved": sorted(c["id"] for c in valid if c.get("status") == "approved"),
         "criteria": _approved_criteria(valid),
+        "criteria_history": {f"{c['id']}.{h['id']}": x for c in valid if c.get("status") == "approved" and isinstance(c.get("brief"), dict)
+                             for h in (c["brief"].get("hypotheses") if isinstance(c["brief"].get("hypotheses"), list) else [])
+                             if isinstance(h, dict) and isinstance(h.get("id"), str) and (x := _history_summary(h))},
         "unverified": unverified,
         "gate_notes": gate_notes,
         "ack_notes": ack_notes,
@@ -500,8 +584,10 @@ def hypothesis_index(data: dict) -> dict:
         legacy = {h["id"]: [s for s in dict.fromkeys(criteria_stamp(h, f) for f in STAMP_FORMS[1:]) if s != criteria[h["id"]]]
                   for h in named}   # 예전 꼴로 기록한 판정의 지문
         builds = {h["id"]: list(h["builds"]) for h in named if isinstance(h.get("builds"), list) and h["builds"] and all(_text(x) for x in h["builds"])}
+        history = {h["id"]: [{"stamp": e["stamp"], "date": e["date"], "fields": list(e["before"])} for e in h["criteria_history"]]
+                   for h in named if _history_summary(h)}   # 형식이 맞는 이력만. 틀린 이력은 컨셉 검사가 오류로 알린다
         out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids, "samples": samples, "criteria": criteria,
-                        "legacy_criteria": {k: v for k, v in legacy.items() if v}, "builds": builds}
+                        "legacy_criteria": {k: v for k, v in legacy.items() if v}, "builds": builds, "history": history}
     return out
 
 

@@ -70,6 +70,8 @@
 | `unknown_policy` | 경고 | 목록에 없는 단순 전략인데 `definition`이 없음 |
 | `untagged_number` | 경고 | 선택한 컨셉의 판정 기준(가설의 `claim`, `failure_signal`, `test`와 `success_criteria`)에 태그 없는 수치. `--fail-on-assumed`에서도 막는다. 메시지는 앞 5개만 보이고, `--json`의 `values`에 전부 있다 |
 | `criteria_tag_mismatch` | 경고 | 한 가설의 두 칸(또는 가설과 `success_criteria`)에 같은 수치가 있는데 한쪽은 `[결정]`, 다른 쪽은 `[가정]`. 뜻이 다른 값이면 `acknowledged`에 `{"criteria_tag_mismatch": {"30초": 까닭}}`처럼 그 값만 적는다. 경고가 보인 값을 그대로 쓴다(가운뎃점 목록은 `0.5·1·2배` 전체). 예전 꼴 값(`2배`, `0.3`)으로 적은 확인은 이어 쓰고 참고 줄로 이름을 바꾸라고 알린다 |
+| `criteria_history_mismatch` | 오류 | 가설의 `criteria_history`에 적은 고치기 전 값으로 계산한 지문이 적힌 지문과 다름, 또는 기준이 바뀌지 않은 이력(태그·띄어쓰기만 바꿈). 이력은 오래된 것이 앞이다. 범위 훅은 이 오류로 게임 편집을 막지 않는다 |
+| `criteria_history_invalid` | 오류 | `criteria_history`의 형식이 틀림(배열이 아님, `date`가 달력에 없는 날, `stamp`가 지문 꼴이 아님, `before`가 비었거나 지문에 드는 칸이 아님, `why`가 빔) |
 | `near_duplicate` | 경고 | 활성 후보 둘의 구조 축이 80% 이상 같음(고정 축 제외, 공통 축 4개 이상일 때). 변이와 원본이면 원본을 `cut`으로 둘지 안내한다 |
 | `axis_collapse` | 경고 | 활성 후보 3개 이상이 한 축에서 모두 같은 값(고정 축 제외) |
 | `dominant_policy` | 경고 | 활성 후보에 단순 전략이 지배하는 결과가 있음 |

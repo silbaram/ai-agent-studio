@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import datetime
 import difflib
 import hashlib
 import json
@@ -16,6 +17,7 @@ PROVENANCE_LABEL = {"assumed": "가정", "computed": "계산", "measured": "측�
 PROVENANCE_KINDS = {**{k: k for k in PROVENANCE_LABEL}, **{v: k for k, v in PROVENANCE_LABEL.items()}}
 SOURCED_KINDS = ("computed", "measured", "decided")   # 출처가 있어야 하고 게이트를 막지 않는 출처. decided: 사용자가 정한 잣대(문턱·목표 범위·규칙 상수)
 PATH_KINDS = ("computed", "measured")   # 출처가 파일·세션인 종류. 결정의 출처는 사람과 날짜라 경로로 보지 않는다
+ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 DECIDED_SOURCE = re.compile(r"\d{4}-\d{2}-\d{2}")   # 결정은 누가 언제 정했는지 적는다(예: 사용자 2026-11-09)
 YARDSTICK_TAG = re.compile(r"\s*\[(?:가정|assumed|결정|decided)(?:\s*[:：][^\]]*)?\]")   # 잣대 태그(가정·결정)와 앞의 공백. 판정 글에 옮겨 적은 것은 보일 때 뺀다(출처는 브리프에 있다)
 TEXT_FIELDS = ("name", "effect", "intent")
@@ -94,6 +96,17 @@ def josa(word: str, pair: str) -> str:
         final = last.isdigit() and last in _DIGIT_FINAL
     return f"{word}{pair[0] if final else pair[1]}"
 
+
+
+def valid_date(v) -> bool:
+    """YYYY-MM-DD이고 달력에 있는 날짜인가. 기록의 순서와 이력이 날짜로 정해지므로 틀린 날짜는 판정을 바꾼다."""
+    if not (isinstance(v, str) and ISO_DATE.match(v)):
+        return False
+    try:
+        datetime.date.fromisoformat(v)
+    except ValueError:
+        return False
+    return True
 
 def num_text(v) -> str:
     """수를 사람이 읽는 형태로(부동소수 오차를 지운다). 1.2000000000000002 → 1.2"""

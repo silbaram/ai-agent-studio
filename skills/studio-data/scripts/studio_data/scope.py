@@ -34,6 +34,9 @@ NON_GOALS = re.compile(r"^\s*(?:#+\s*|\*\*)?\s*non[- ]?goals\b", re.IGNORECASE) 
 MEASURED = ("proposal.md", "tasks.md")  # 무엇을 만들지 적는 문서. design.md는 Non-Goals에 범위 밖을 적는 자리라 재지 않는다
 
 
+# 컨셉 검사의 오류 중 범위와 관계없는 기록의 오류: 판정 기준 이력, 브리프 수치의 출처. check가 오류로 알리고, 게임 편집과 archive는 막지 않는다
+RECORD_CODES = {"criteria_history_invalid", "criteria_history_mismatch", "provenance"}
+
 def missing(root: Path) -> str | None:
     """검사할 수 없는 프로젝트면 그 이유. 둘 다 있어야 범위를 잴 수 있다."""
     if not (root / "openspec").is_dir():
@@ -67,7 +70,8 @@ def _design(root: Path) -> dict:
     if found is None:
         _err(design["errors"], "design_unreadable", SYSTEMS_FILE.name, "시스템 설계 파일을 읽지 못해 범위를 잴 수 없습니다.")
         return design
-    problems = [(d["name"], e) for d in entries if d["ok"] for e in d["report"]["errors"]]
+    problems = [(d["name"], e) for d in entries if d["ok"] for e in d["report"]["errors"]
+                if not (d["kind"] == "concepts" and e["code"] in RECORD_CODES)]   # 판정 기록의 오류는 범위를 흔들지 않는다
     if problems:
         name, first = problems[0]
         _err(design["errors"], "design_invalid", name, f"설계에 오류 {len(problems)}개가 있어 범위를 믿을 수 없습니다. 첫 오류: [{first['code']}] {first['message']} studio.py check로 고칩니다.")
