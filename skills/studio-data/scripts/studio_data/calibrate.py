@@ -227,7 +227,7 @@ def _row(kind: str, stage: str, item, assumed, measured, n: int, where: str, tol
     off = measured != assumed if not assumed else abs(measured - assumed) > tolerance * abs(assumed) + 1e-9
     few = entered is not None and (n < FEW_CLEARED or (not survivors and 2 * n < entered))
     return {"kind": kind, "stage": stage, "item": item, "assumed": assumed, "measured": measured, "n": n, "off": off, "where": where,
-            "entered": entered, "few": few}
+            "entered": entered, "few": few, "mixed": False}   # mixed: 조건을 섞은 평균이고 조건마다 같은 쪽으로 다르지 않음(calibrate가 단다)
 
 
 def _entered(records: list, key: str) -> int:
@@ -433,6 +433,24 @@ def _same_value(have, want) -> bool:
         return str(have) == str(want)
 
 
+def _mark_mixed(rows: list, entries: list, records: list, cols: list, tolerance: float) -> None:
+    """조건을 섞어 계산한 비교 줄마다, 조건별로 다시 비교해 모든 조건이 같은 쪽으로 다르고(참고가 아님) 둘 이상일 때만 고칠 곳으로 둔다.
+    그렇지 않은 다른 줄은 mixed(참고)로 둔다. 섞인 평균은 한 조건이 만든 차이일 수 있다."""
+    key = lambda r: tuple(str((r.get("variant") or {}).get(col)) for col in cols)  # noqa: E731
+    parts: dict = {}
+    for r in records:
+        parts.setdefault(key(r), []).append(r)
+    per = [compare(entries, recs, tolerance, []) for recs in parts.values()]
+    for x in rows:
+        x["mixed"] = False
+        if not x["off"]:
+            continue
+        side = 1 if (x["measured"] or 0) > (x["assumed"] or 0) else -1
+        same = [y for got in per for y in got if (y["kind"], y["stage"], y["item"]) == (x["kind"], x["stage"], x["item"])]
+        agree = len(same) > 1 and all(y["off"] and not y["few"] and (1 if (y["measured"] or 0) > (y["assumed"] or 0) else -1) == side for y in same)
+        x["mixed"] = not agree
+
+
 def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOLERANCE, variant: dict | None = None) -> dict:
     """path: 프로젝트·데이터 폴더(가정값 비교만) 또는 시뮬레이터 설정 파일(전투 계산 모델, 통과율 비교와 제안까지). 파일을 고치지 않는다.
     variant: {열: 값}. 주면 그 시험 조건의 묶음(runlog --group-by가 단 variant)만 쓴다. 값은 글자로 맞춘다(1과 "1"은 같다)."""
@@ -486,15 +504,21 @@ def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOL
         notes.append(f"시험 조건 {wanted}인 묶음만 썼습니다({len(kept)}/{len(records)}묶음).")
         records = kept
         variants = {col: {str(v): None for v in dict.fromkeys((r.get("variant") or {}).get(col) for r in records) if v is not None} for col in variants}
-    for col, values in variants.items():
-        if len(values) > 1:
-            notes.append(f"시험 조건이 다른 묶음을 합쳐 계산했습니다({col}: {', '.join(values)}). 조건마다 따로 비교하지 않습니다. 조건별로 보려면 --variant {col}=값으로 고릅니다.")
+    mixed = [col for col, values in variants.items() if len(values) > 1]
+    for col in mixed:
+        notes.append(f"시험 조건이 다른 묶음을 합쳐 계산했습니다({col}: {', '.join(variants[col])}). 조건마다 같은 쪽으로 다를 때만 고칠 곳(⚠)을 가리킵니다. "
+                     f"조건별로 보려면 --variant {col}=값으로 고릅니다.")
     survival = survival_report(cfg, records, notes) if cfg else None
     if cfg is not None and survival is None:
         raise ConfigError("통과율을 비교할 기록이 없습니다(" + " ".join(notes) + "). 가정값 비교만 하려면 프로젝트 폴더를 넘기세요.")
     if cfg is None:
         notes.append("통과율 비교와 생존 곡선 제안은 시뮬레이터 설정(전투 계산 모델)을 넘기면 합니다.")
     rows = compare(entries, records, tolerance, notes)
+    if mixed:
+        _mark_mixed(rows, entries, records, mixed, tolerance)
+        if survival and survival["fit"]["significant"]:
+            survival["fit"]["mixed"] = True
+            notes.append("생존 곡선 제안은 시험 조건을 섞어 맞춘 값입니다. --variant로 조건마다 보고, 같은 쪽으로 바뀔 때만 옮깁니다.")
     if not rows and survival is None:
         raise ConfigError("단계 기록과 가정값을 맞춰 볼 값이 없습니다. 같은 단계에 가정값(판 안 성장의 level_at, 재화 흐름의 duration·kills·income)이 있고, "
                           "기록에도 그 값(level, duration, kills, income)과 통과한 판이 있어야 비교합니다(" + " ".join(notes) + "). 아무것도 비교하지 않았으므로 통과가 아닙니다.")
@@ -543,7 +567,7 @@ def _check_run_columns(columns: list) -> None:
         raise ConfigError(f"판 로그의 열 이름이 겹칩니다: {', '.join(repeated)}")
 
 
-def summarize_runs(path, group_by: str | None = None) -> dict:
+def summarize_runs(path, group_by: str | None = None, timed: list | None = None) -> dict:
     """판별 로그(CSV, 들어간 단계마다 한 줄)를 세션의 단계 기록으로 모은다. 강화 상태(와 빌드)별 묶음을 돌려주고 파일을 고치지 않는다.
     group_by: 강화가 아닌 시험 조건(예: _setting)의 열. 주면 그 값으로도 나누고 묶음에 variant {열: 값}을 단다.
     열: run, stage, cleared(1/0) 필수. upgrades(;로 구분), growth_build, player, level, duration, kills.<적 id>, income.<재화> 선택.
@@ -592,6 +616,10 @@ def summarize_runs(path, group_by: str | None = None) -> dict:
         run["failed"] = not flag
     if not runs:
         raise ConfigError(f"판 로그에 판이 없습니다: {path}")
+    logged = {x["stage"] for r in runs.values() for x in r["stages"]}
+    stray = [s for s in timed or [] if s not in logged]
+    if stray:
+        raise ConfigError(f"--timed의 단계가 판 로그에 없습니다: {', '.join(stray)}. 로그의 단계: {', '.join(sorted(logged))}")
     groups: dict = {}
     for run in runs.values():
         groups.setdefault(run["state"], []).append(run)
@@ -612,6 +640,8 @@ def summarize_runs(path, group_by: str | None = None) -> dict:
                 item["level_end"] = _whole(sum(ends) / len(ends))   # 넘긴 판이 다음 단계에 들어설 때의 레벨
             if durations:
                 item["duration"] = _whole(sum(durations) / len(durations))
+            if stage in (timed or []):
+                item["timed"] = True   # 시간이 다 되면 끝나는 단계(사용자가 --timed로 알려 준 것. 짐작하지 않는다)
             paced = [x for x in recs if x["kills"] and x["duration"]]   # 실패한 판도 센다. 넘긴 판만 세면 살아남은 판으로 치우친다
             if paced:
                 length = sum(x["duration"] for x in paced)
@@ -650,7 +680,7 @@ def _print_fit(f: dict) -> None:
     if not f["significant"]:
         print(f"생존 곡선 제안 없음 (기록 {f['points']}건 · {f['runs']}판): 지금 값을 그대로 둡니다. 이유는 아래 참고에 있습니다.")
         return
-    print(f"생존 곡선 제안 (기록 {f['points']}건 · {f['runs']}판, 가능도 {f['log_likelihood']['current']:g} → {f['log_likelihood']['suggested']:g}):")
+    print(f"생존 곡선 제안{' (조건 섞임, 참고)' if f.get('mixed') else ''} (기록 {f['points']}건 · {f['runs']}판, 가능도 {f['log_likelihood']['current']:g} → {f['log_likelihood']['suggested']:g}):")
     span = lambda r: f" (대략 {_num(r[0])}~{_num(r[1])})" if r else ""  # noqa: E731
     print(f"  slope {f['slope']['current']:g} → {f['slope']['suggested']:g}" + (span(f["slope"]["range"]) if f["slope"]["fitted"] else " (그대로)"))
     e = f["even_margin"]
@@ -669,18 +699,21 @@ def print_report(r: dict, off_only: bool = False) -> None:
         suggested = s["fit"]["significant"]
         for x in s["stages"]:
             print(f"단계 {x['stage']}: 실측 통과 {x['cleared']}/{x['entered']}판 {x['rate']:.0%} (구간 {x['low']:.0%}~{x['high']:.0%}) · "
-                  f"예측 {x['predicted']:.0%} → {VERDICT_LABEL[x['verdict']]}" + (f" · 제안 값으로 {x['predicted_suggested']:.0%}" if suggested else ""))
+                  f"예측 {x['predicted']:.0%} → {VERDICT_LABEL[x['verdict']]}" + (f" · 제안 값으로 {x['predicted_suggested']:.0%}" + (" (참고)" if s["fit"].get("mixed") else "") if suggested else ""))
         _print_fit(s["fit"])
-    off = sum(1 for x in r["compare"] if x["off"] and not x.get("few"))
-    hints = sum(1 for x in r["compare"] if x["off"] and x.get("few"))
+    hint = lambda x: x.get("few") or x.get("mixed")  # noqa: E731
+    off = sum(1 for x in r["compare"] if x["off"] and not hint(x))
+    hints = sum(1 for x in r["compare"] if x["off"] and hint(x))
     print(f"가정값 비교: {len(r['compare'])}건 중 {off}건이 {r['tolerance']:.0%} 넘게 다름"
-          + (f"(넘긴 판이 적어 참고로 둔 {hints}건 제외)" if hints else ""))
+          + (f"(넘긴 판이 적거나 조건마다 달라 참고로 둔 {hints}건 제외)" if hints else ""))
     for x in r["compare"]:
-        if off_only and not (x["off"] and not x.get("few")):   # 머리줄의 "다름"과 같은 줄만 보인다
+        if off_only and not (x["off"] and not hint(x)):   # 머리줄의 "다름"과 같은 줄만 보인다
             continue
         item = f"({x['item']})" if x["item"] else ""
         if x.get("few"):   # 넘긴 판이 적으면 살아남은 판의 평균이라 고칠 곳을 가리키지 않는다
             tail = f" · 넘긴 판 {x['n']}/{x['entered']}판, 참고"
+        elif x.get("mixed") and x["off"]:   # 조건을 섞은 평균이 한 조건의 차이일 수 있다
+            tail = " · 조건마다 다름, 참고"
         else:
             tail = f" ⚠ {x['where']}" if x["off"] else ""
         print(f"단계 {x['stage']} {KIND_LABEL[x['kind']]}{item}: 가정 {_num(x['assumed'])} · 측정 {_num(x['measured'])} (판 {x['n']})" + tail)

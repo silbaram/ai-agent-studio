@@ -257,7 +257,76 @@ def check_common(entry: dict, where: str, errors: list) -> bool:
             errors.append({"code": "provenance", "where": where, "message": f"provenance.kind가 {kind}이면 source가 필요합니다."})
             return False
         prov["kind"] = kind
+        if "fields" in prov and not _check_fields(entry, prov["fields"], where, errors):
+            return False
     return ok
+
+
+PROVENANCE_META = {"id", "name", "effect", "intent", "status", "provenance", "acknowledged", "note"}  # 수치가 아닌 칸
+
+
+def _leaves(v, prefix: str = ""):
+    """항목 안의 수치 칸 경로(kills.crawler 등). 메타 칸과 _로 시작하는 메모 칸, 글·참거짓은 뺀다."""
+    if isinstance(v, dict):
+        for k, x in v.items():
+            if not isinstance(k, str) or k.startswith("_") or (not prefix and k in PROVENANCE_META):
+                continue
+            yield from _leaves(x, f"{prefix}.{k}" if prefix else k)
+    elif isinstance(v, list):
+        for n, x in enumerate(v):
+            yield from _leaves(x, f"{prefix}.{n}")
+    elif is_number(v):
+        yield prefix
+
+
+def _covers(field: str, leaf: str) -> bool:
+    return leaf == field or leaf.startswith(field + ".")
+
+
+def _check_fields(entry: dict, fields, where: str, errors: list) -> bool:
+    """provenance.fields {칸 경로: {kind, source, note}}: 항목 안의 값마다 따로 적은 출처. 칸 경로는 항목의 수치 칸(또는 그 묶음)이다."""
+    leaves = list(_leaves(entry))
+    if not leaves:
+        errors.append({"code": "provenance", "where": where, "message": "provenance.fields는 수치 칸이 있는 목록의 항목(단계, 아이템, 적 등)에 씁니다. 파일 전체 설정의 출처는 kind와 source로 적습니다."})
+        return False
+    if not (isinstance(fields, dict) and fields):
+        errors.append({"code": "provenance", "where": where, "message": "provenance.fields는 {칸 경로: {kind, source}} 객체입니다(예: {\"kills.crawler\": {\"kind\": \"measured\", \"source\": …}})."})
+        return False
+    for path, f in fields.items():
+        if not (isinstance(path, str) and path and any(_covers(path, leaf) for leaf in leaves)):
+            near = did_you_mean(str(path), leaves) if leaves else ""
+            errors.append({"code": "provenance", "where": where, "message": f"provenance.fields의 칸 경로가 이 항목의 수치 칸이 아닙니다: {path!r}.{near}"})
+            return False
+        kind = PROVENANCE_KINDS.get(f.get("kind")) if isinstance(f, dict) and isinstance(f.get("kind"), str) else None
+        if kind is None:
+            errors.append({"code": "provenance", "where": where, "message": f"provenance.fields.{path}: {{kind: assumed/computed/measured, source}} 객체가 필요합니다: {f!r}"})
+            return False
+        if kind in ("computed", "measured") and not (isinstance(f.get("source"), str) and f["source"].strip()):
+            errors.append({"code": "provenance", "where": where, "message": f"provenance.fields.{path}의 kind가 {kind}이면 source가 필요합니다."})
+            return False
+        f["kind"] = kind
+    return True
+
+
+def field_coverage(entry: dict) -> tuple[int, int] | None:
+    """(가정이 아닌 출처를 따로 적은 수치 칸 수, 수치 칸 수). provenance.fields가 없으면 None."""
+    prov = entry.get("provenance")
+    fields = prov.get("fields") if isinstance(prov, dict) else None
+    if not isinstance(fields, dict) or not fields:
+        return None
+    sourced = [k for k, f in fields.items() if isinstance(f, dict) and f.get("kind") in ("computed", "measured")]
+    leaves = list(_leaves(entry))
+    return sum(1 for leaf in leaves if any(_covers(k, leaf) for k in sourced)), len(leaves)
+
+
+def effective_kind(entry: dict) -> str:
+    """항목의 출처. 항목 단위 출처가 가정·미지정이어도, 모든 수치 칸에 가정이 아닌 출처를 따로 적었으면 그 출처다(측정이 하나라도 있으면 측정)."""
+    kind = provenance_kind(entry)
+    cover = field_coverage(entry) if kind in ("assumed", "unspecified") else None
+    if cover is None or cover[0] < cover[1] or not cover[1]:
+        return kind
+    kinds = {f.get("kind") for f in entry["provenance"]["fields"].values() if isinstance(f, dict)}
+    return "measured" if "measured" in kinds else "computed"
 
 
 def check_identity(entries: list, label: str, errors: list) -> list[tuple[int, dict]]:
@@ -439,11 +508,15 @@ def summary_counts(entries: list[dict]) -> dict:
     prov = {k: 0 for k in ("assumed", "computed", "measured", "unspecified")}
     active = [e for e in entries if is_active(e)]
     for e in active:
-        prov[provenance_kind(e)] += 1
+        prov[effective_kind(e)] += 1
+
+    def label(e: dict) -> str:   # 값마다 출처를 일부만 적은 항목은 얼마나 왔는지 보인다
+        cover = field_coverage(e)
+        return f"{e['id']}(필드 {cover[0]}/{cover[1]})" if cover else e["id"]
     return {
         "status_counts": status,
         "provenance_counts": prov,
-        "unverified": sorted(e["id"] for e in active if provenance_kind(e) in ("assumed", "unspecified")),
+        "unverified": sorted(label(e) for e in active if effective_kind(e) in ("assumed", "unspecified")),
     }
 
 

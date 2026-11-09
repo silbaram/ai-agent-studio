@@ -361,7 +361,8 @@ def cmd_runlog(args) -> int:
         print(f"파일을 찾을 수 없습니다: {args.log}", file=sys.stderr)
         return 2
     try:
-        result = calibrate.summarize_runs(args.log, args.group_by)
+        timed = [x.strip() for x in args.timed.split(",") if x.strip()] if args.timed else None
+        result = calibrate.summarize_runs(args.log, args.group_by, timed)
     except meta_sim.ConfigError as exc:
         print(f"판 로그를 모을 수 없습니다: {exc}", file=sys.stderr)
         return 2
@@ -565,6 +566,7 @@ def build_parser() -> argparse.ArgumentParser:
     r = sub.add_parser("runlog", help="판별 로그(CSV)를 세션의 단계 기록으로 모아 출력합니다 (파일에 쓰지 않음).")
     r.add_argument("log", help="판별 로그 CSV. 들어간 단계마다 한 줄: run, stage, cleared(1/0), upgrades, growth_build, player, level, level_end, duration, kills.<적>, income.<재화>")
     r.add_argument("--group-by", metavar="열", help="강화가 아닌 시험 조건(예: _setting)의 열. 그 값으로도 나누고 묶음에 variant를 답니다.")
+    r.add_argument("--timed", metavar="단계", help="시간이 다 되면 끝나는 단계(쉼표로 여럿). 그 단계 기록에 timed를 답니다. calibrate는 그 단계의 길이를 비교하지 않습니다.")
     r.set_defaults(func=cmd_runlog)
 
     p = sub.add_parser("provenance", help="기획 문서(md)의 수치 출처 태그를 검사합니다.")
