@@ -23,9 +23,11 @@ def _pick_concept(data: dict, concepts: list, errors: list, warnings: list) -> d
         if found is None:
             _err(errors, "unknown_concept", "concept", f"컨셉 데이터에 없는 컨셉입니다: {wanted}.{did_you_mean(str(wanted), [x.get('id') for x in concepts])}")
         elif not c.is_active(found):
-            _err(warnings, "cut_referenced", "concept", f"삭제(cut)된 컨셉에 이었습니다: {wanted}. 지금 컨셉의 브리프로 옮겨 적습니다.")
+            _err(warnings, "cut_referenced", "concept", f"삭제(cut)된 컨셉에 이었습니다: {wanted}. 선택했던 컨셉을 되돌렸으면 다음 컨셉을 고를 때까지 그대로 두고, "
+                 "고른 뒤 그 컨셉에 다시 잇습니다. 다른 컨셉으로 옮겼으면 지금 컨셉의 브리프로 옮겨 적습니다.")
         elif found.get("status") != "approved":
-            _err(warnings, "concept_not_approved", "concept", f"승인(approved)되지 않은 컨셉에 이었습니다: {wanted}. 브리프가 확정되지 않아 이 연결도 확정이 아닙니다.")
+            _err(warnings, "concept_not_approved", "concept", f"승인(approved)되지 않은 컨셉에 이었습니다: {wanted}. 브리프가 확정되지 않아 이 연결도 확정이 아닙니다. "
+                 "선택했던 컨셉을 되돌렸으면 다음 컨셉을 고를 때까지 그대로 두고, 고른 뒤 그 컨셉에 다시 잇습니다.")
         return found
     approved = [x for x in concepts if x.get("status") == "approved"]
     if len(approved) != 1:

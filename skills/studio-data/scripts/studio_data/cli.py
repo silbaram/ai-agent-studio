@@ -28,7 +28,7 @@ TABLE_PRINTERS = {"concepts": concepts.table, "combat": combat.table, "budget": 
 COUNT_PRINTERS = {"concepts": concepts.print_counts, "combat": combat.print_counts, "budget": budget.print_counts,
                   "crafting": crafting.print_counts, "economy": economy.print_counts, "growth": growth.print_counts,
                   "levels": levels.print_counts, "playtests": playtests.print_counts, "systems": systems.print_counts}
-GATE_LABELS = {"playtests": "판정이 확정되지 않은 가설(버팀·틀림 확정이 아님): ", "levels": "출처가 가정이거나 비어 있는 항목과 통과하지 않은 그레이박스 확인: "}
+GATE_LABELS = {"playtests": "판정이 확정되지 않았거나 지금 기준의 판정인지 모르는 가설: ", "levels": "출처가 가정이거나 비어 있는 항목과 통과하지 않은 그레이박스 확인: "}
 GATE_DEFAULT = "출처가 가정이거나 비어 있는 항목: "
 REFUTED_GATE = "틀림으로 확정된 가설(선택한 컨셉): "
 
@@ -36,7 +36,9 @@ REFUTED_GATE = "틀림으로 확정된 가설(선택한 컨셉): "
 def _gate_lines(d: dict) -> list:
     """--fail-on-assumed가 막는 (설명, 항목들) 줄. 선택한 컨셉의 가설이 틀림으로 확정됐으면 그 위에서 다음 단계로 가지 않는다."""
     r = d["report"]
-    lines = [(GATE_LABELS.get(d["kind"], GATE_DEFAULT), r["unverified"])] if r.get("unverified") else []
+    why = r.get("unverified_reasons") or {}   # 플레이 기록: 확정 판정인데 걸린 까닭(지문 없음, 기준 바뀜)
+    items = [f"{x}({why[x]})" if x in why else x for x in r.get("unverified") or []]
+    lines = [(GATE_LABELS.get(d["kind"], GATE_DEFAULT), items)] if items else []
     if r.get("refuted"):
         lines.append((REFUTED_GATE, r["refuted"]))
     return lines
