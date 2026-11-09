@@ -748,5 +748,5 @@ def print_counts(result: dict) -> None:
     if result.get("acknowledged"):
         tail += f" · 확인한 경고 {len(result['acknowledged'])}"
     print(f"상태: 제안 {sc['proposed']} · 승인 {sc['approved']} · 삭제 {sc['cut']} · 미지정 {sc['unspecified']}")
-    print(f"출처(삭제 제외): 가정 {pc['assumed']} · 계산 {pc['computed']} · 측정 {pc['measured']} · 미지정 {pc['unspecified']}")
+    print(f"출처(삭제 제외): {c.provenance_text(pc)}")
     print(f"전투 단계 {result['count']}개 · 계산 {len(result['rows'])}행 · {tail}")

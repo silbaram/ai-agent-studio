@@ -156,12 +156,13 @@ def skipped_note(path: str) -> str:
 
 
 def _config_sourced(config: dict | None) -> bool:
-    """설정의 출처가 계산이나 측정인가. 형식은 simulate와 같은 규칙(check_common)으로 본다."""
+    """설정의 출처가 계산이나 측정인가. 형식은 simulate와 같은 규칙(check_common)으로 본다.
+    시뮬레이터 설정은 기록으로 맞출 모델 값(생존 곡선, 숙련)이라 결정(decided)으로는 통과하지 않는다."""
     prov = (config or {}).get("provenance")
     if not isinstance(prov, dict):
         return False
     entry = {"provenance": dict(prov)}
-    return c.check_common(entry, "provenance", []) and entry["provenance"]["kind"] != "assumed"
+    return c.check_common(entry, "provenance", []) and entry["provenance"]["kind"] in c.PATH_KINDS
 
 
 def unverified_configs(targets: list[Path]) -> list[str]:

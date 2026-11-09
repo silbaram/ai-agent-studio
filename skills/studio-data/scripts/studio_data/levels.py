@@ -32,7 +32,7 @@ SPAN_KINDS = {"rest": ("쉬는 곳 사이", "max_rest_load", "long_stretch", "�
               "reward": ("보상 사이", "max_reward_load", "reward_drought", "보상을 넣거나 조우를 줄입니다.", "보상이")}  # 구간의 이름, 상한, 경고, 처방, 표시가 없을 때의 주어
 FLAG_LABEL = {"ok": "예산 안", "over": "넘침", "under": "모자람", "quiet": "–"}
 UNCHECKED_LABEL = {"enemies": "적", "combat": "전투 계산", "economy": "재화 흐름"}
-SOURCE_LABEL = {"assumed": "가정", "computed": "계산", "measured": "측정", "unspecified": "미지정"}
+SOURCE_LABEL = {**c.PROVENANCE_LABEL, "unspecified": "미지정"}
 SECOND_UNITS = ("초", "s", "sec", "secs", "second", "seconds")  # 전투 계산의 처치 시간(초)과 나눌 수 있는 재화 흐름 time_unit
 KILL_HEADS = {"time": ("처치 시간(초)", "단일 대상 처치 시간(초)", "처치 시간 ÷ 길이"), "hits": ("처치 타수", "단일 대상 처치 타수", "타수 ÷ 길이")}  # 조우 표, 단계 표, 비율
 LATE_ADVICE = {"money": "돈이 늦습니다. 가격이나 수입을 보고, 그때도 열려 있으면 조우에 open_for를 적습니다.",

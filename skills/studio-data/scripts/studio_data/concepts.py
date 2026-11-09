@@ -183,22 +183,27 @@ def read_sample(v) -> dict | None:
     return {k: (dict(v[k]) if k in ("events", "reduced_from") else v[k]) for k in SAMPLE_KEYS if k in v}
 
 
-def _nfc(v):
+STAMP_TAG = re.compile(r"\[(?:가정|assumed|결정|decided)(?:\s*[:：][^\]]*)?\]")   # 기준 지문에서는 가정·결정 태그를 모두 [가정]으로 읽는다(메모나 출처 표시만 바꾼 것은 기준을 바꾼 것이 아니다)
+
+
+def _nfc(v, legacy: bool = False):
     if isinstance(v, str):
-        return unicodedata.normalize("NFC", v)
+        v = unicodedata.normalize("NFC", v)
+        return v if legacy else STAMP_TAG.sub("[가정]", v)
     if isinstance(v, dict):
-        return {k: _nfc(x) for k, x in v.items()}
+        return {k: _nfc(x, legacy) for k, x in v.items()}
     if isinstance(v, list):
-        return [_nfc(x) for x in v]
+        return [_nfc(x, legacy) for x in v]
     return v
 
 
-def criteria_stamp(h: dict) -> str:
+def criteria_stamp(h: dict, legacy: bool = False) -> str:
     """판정 기준의 지문(주장, 틀렸다는 신호, 확인 방법, 최소 표본, 적었으면 세는 빌드). 판정의 criteria에 남기면 판정 뒤에 기준이 바뀐 것을 안다.
-    키 순서와 유니코드 정규화(NFC)가 다른 것은 바뀐 것으로 보지 않는다."""
-    fields = {k: _nfc(h.get(k)) for k in CRITERIA_KEYS}
+    키 순서, 유니코드 정규화(NFC), 가정·결정 태그의 꼴(메모, 출처)이 다른 것은 바뀐 것으로 보지 않는다.
+    legacy: 태그 꼴을 맞추기 전의 지문. 그 전에 기록한 판정의 criteria와 견줄 때만 쓴다."""
+    fields = {k: _nfc(h.get(k), legacy) for k in CRITERIA_KEYS}
     if "builds" in h:   # 세는 빌드도 기준이다. 결과를 본 뒤 좁히면 지난 판정이 지금 기준의 판정이 아니다(없는 가설의 지문은 그대로 둔다)
-        fields["builds"] = _nfc(h["builds"])
+        fields["builds"] = _nfc(h["builds"], legacy)
     body = json.dumps(fields, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(body.encode("utf-8")).hexdigest()[:8]
 
@@ -403,7 +408,7 @@ def validate(data: dict) -> dict:
 
 
 def hypothesis_index(data: dict) -> dict:
-    """플레이 기록 검사용: {컨셉 id: {approved, hypotheses: [가설 id 또는 None, ...], samples, criteria(가설별 기준 지문)}}. 형식이 틀린 항목은 건너뛴다.
+    """플레이 기록 검사용: {컨셉 id: {approved, hypotheses: [가설 id 또는 None, ...], samples, criteria(가설별 기준 지문), legacy_criteria(예전 계산의 지문)}}. 형식이 틀린 항목은 건너뛴다.
     concepts 배열 자체가 없으면 None(읽지 못함)을 돌려준다. 빈 결과로 돌려주면 모든 참조가 '없는 컨셉'으로 연쇄 보고된다."""
     if not isinstance(data.get("concepts"), list):
         return None
@@ -417,8 +422,10 @@ def hypothesis_index(data: dict) -> dict:
         named = [h for h in hyps if isinstance(h, dict) and isinstance(h.get("id"), str)]
         samples = {h["id"]: read_sample(h.get("sample")) for h in named if read_sample(h.get("sample"))}
         criteria = {h["id"]: criteria_stamp(h) for h in named}
+        legacy = {h["id"]: criteria_stamp(h, legacy=True) for h in named}   # 태그 꼴을 맞추기 전에 기록한 판정의 지문
         builds = {h["id"]: list(h["builds"]) for h in named if isinstance(h.get("builds"), list) and h["builds"] and all(_text(x) for x in h["builds"])}
-        out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids, "samples": samples, "criteria": criteria, "builds": builds}
+        out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids, "samples": samples, "criteria": criteria,
+                        "legacy_criteria": {k: v for k, v in legacy.items() if v != criteria[k]}, "builds": builds}
     return out
 
 

@@ -433,6 +433,25 @@ def _same_value(have, want) -> bool:
         return str(have) == str(want)
 
 
+def _supply_capped(rows: list, entries: list) -> list:
+    """넘긴 판의 처치가 레벨 구성에 놓인 적 수와 같은 단계. 나온 적을 다 잡았다는 뜻이라, 처치 수는 처치 능력이 아니라 공급을 잰 값이다."""
+    placed: dict = {}
+    for d in entries:   # 레벨 구성 검사의 단계 합계. 모르는 적이 있어 다 세지 못한 단계는 kills가 None이다
+        if d["ok"] and d["kind"] == "levels":
+            for st in d["report"].get("stages") or []:
+                for enemy, n in (st.get("kills") or {}).items():
+                    key = (st.get("id"), enemy)
+                    placed[key] = placed.get(key, 0) + n
+    capped: dict = {}
+    for x in rows:
+        n = placed.get((x["stage"], x["item"]))
+        if x["kind"] == "kills" and n and x["measured"] is not None and abs(x["measured"] - n) < 1e-6:
+            capped.setdefault(x["stage"], []).append(f"{x['item']} {_num(n)}")
+    return [f"단계 {stage}: 넘긴 판의 처치({', '.join(items)})가 레벨 구성에 놓인 적 수와 같습니다. 나온 적을 다 잡았다는 뜻이라 처치 수로는 더 잡을 수 있었는지 알 수 없습니다"
+            "(적이 나오는 수가 처치를 묶음). 처치 속도나 남은 적 수로 봅니다. 그 레벨에 처치 시간 경고(kill_time_over_length)가 나면, 기록상 다 잡았다는 것을 근거로 "
+            "그 레벨의 acknowledged에 적을 수 있습니다." for stage, items in capped.items()]
+
+
 def _mark_mixed(rows: list, entries: list, records: list, cols: list, tolerance: float) -> None:
     """조건을 섞어 계산한 비교 줄마다, 조건별로 다시 비교해 모든 조건이 같은 쪽으로 다르고(참고가 아님) 둘 이상일 때만 고칠 곳으로 둔다.
     그렇지 않은 다른 줄은 mixed(참고)로 둔다. 섞인 평균은 한 조건이 만든 차이일 수 있다."""
@@ -443,10 +462,13 @@ def _mark_mixed(rows: list, entries: list, records: list, cols: list, tolerance:
     per = [compare(entries, recs, tolerance, []) for recs in parts.values()]
     for x in rows:
         x["mixed"] = False
-        if not x["off"]:
+        same = [y for got in per for y in got if (y["kind"], y["stage"], y["item"]) == (x["kind"], x["stage"], x["item"])]
+        if not x["off"]:   # 평균이 가정과 맞아도 조건마다 가정의 양쪽으로 크게 갈리면 맞는 것이 아니다
+            vals = [y["measured"] for y in same if y["measured"] is not None and not y["few"]]   # 넘긴 판이 적은 조건은 살아남은 판의 값(참고)이다
+            x["mixed"] = bool(x["assumed"]) and len(vals) > 1 and min(vals) < x["assumed"] < max(vals) \
+                and max(vals) - min(vals) > tolerance * abs(x["assumed"]) + 1e-9
             continue
         side = 1 if (x["measured"] or 0) > (x["assumed"] or 0) else -1
-        same = [y for got in per for y in got if (y["kind"], y["stage"], y["item"]) == (x["kind"], x["stage"], x["item"])]
         agree = len(same) > 1 and all(y["off"] and not y["few"] and (1 if (y["measured"] or 0) > (y["assumed"] or 0) else -1) == side for y in same)
         x["mixed"] = not agree
 
@@ -514,6 +536,7 @@ def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOL
     if cfg is None:
         notes.append("통과율 비교와 생존 곡선 제안은 시뮬레이터 설정(전투 계산 모델)을 넘기면 합니다.")
     rows = compare(entries, records, tolerance, notes)
+    notes += _supply_capped(rows, entries)
     if mixed:
         _mark_mixed(rows, entries, records, mixed, tolerance)
         if survival and survival["fit"]["significant"]:
@@ -712,7 +735,7 @@ def print_report(r: dict, off_only: bool = False) -> None:
         item = f"({x['item']})" if x["item"] else ""
         if x.get("few"):   # 넘긴 판이 적으면 살아남은 판의 평균이라 고칠 곳을 가리키지 않는다
             tail = f" · 넘긴 판 {x['n']}/{x['entered']}판, 참고"
-        elif x.get("mixed") and x["off"]:   # 조건을 섞은 평균이 한 조건의 차이일 수 있다
+        elif x.get("mixed"):   # 조건을 섞은 평균이 한 조건의 차이이거나, 양쪽으로 갈린 값의 평균일 수 있다
             tail = " · 조건마다 다름, 참고"
         else:
             tail = f" ⚠ {x['where']}" if x["off"] else ""

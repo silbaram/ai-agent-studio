@@ -357,7 +357,8 @@ def _check_override(v: dict, where: str, errors: list) -> None:
 
 def _check_criteria(v: dict, where: str, concepts: dict | None, warnings: list) -> str:
     """판정의 기준 지문(criteria)을 지금 가설 기준과 견준다. ok / missing(지문 없음) / changed(판정 뒤에 기준이 바뀜)."""
-    current = concepts[v["concept"]].get("criteria", {}).get(v["hypothesis"]) if concepts is not None else None
+    info = concepts[v["concept"]] if concepts is not None else {}
+    current = info.get("criteria", {}).get(v["hypothesis"])
     if not current:
         return "ok"
     if "criteria" not in v:
@@ -365,7 +366,7 @@ def _check_criteria(v: dict, where: str, concepts: dict | None, warnings: list) 
                          "message": "판정에 기준 지문이 없어 판정 뒤에 기준(claim, failure_signal, test, sample)이 바뀌어도 알 수 없습니다. 확정해도 게이트(--fail-on-assumed)를 넘지 못합니다. "
                                     f"판정 에이전트가 돌려준 지문을 적습니다. 판정한 뒤 가설을 고치지 않았으면 지금 지문을 적어도 됩니다: \"criteria\": \"{current}\"."})
         return "missing"
-    if v["criteria"] == current:
+    if v["criteria"] in (current, info.get("legacy_criteria", {}).get(v["hypothesis"])):   # 예전 계산의 지문도 같은 기준이다(태그 꼴만 맞춤)
         return "ok"
     warnings.append({"code": "verdict_criteria_changed", "where": where,
                      "message": "판정 뒤에 가설 기준(claim, failure_signal, test, sample)이 바뀌었습니다. 지금 기준으로 다시 판정하고 이 판정은 cut으로 둡니다. "

@@ -12,8 +12,11 @@ from pathlib import Path
 
 ID_PATTERN = re.compile(r"^[a-z0-9_]+$")
 STATUSES = ("proposed", "approved", "cut")
-PROVENANCE_KINDS = {"assumed": "assumed", "computed": "computed", "measured": "measured",
-                    "가정": "assumed", "계산": "computed", "측정": "measured"}
+PROVENANCE_LABEL = {"assumed": "가정", "computed": "계산", "measured": "측정", "decided": "결정"}   # 출처 종류의 한국어 이름. md 태그와 데이터 필드가 같이 쓴다
+PROVENANCE_KINDS = {**{k: k for k in PROVENANCE_LABEL}, **{v: k for k, v in PROVENANCE_LABEL.items()}}
+SOURCED_KINDS = ("computed", "measured", "decided")   # 출처가 있어야 하고 게이트를 막지 않는 출처. decided: 사용자가 정한 잣대(문턱·목표 범위·규칙 상수)
+PATH_KINDS = ("computed", "measured")   # 출처가 파일·세션인 종류. 결정의 출처는 사람과 날짜라 경로로 보지 않는다
+DECIDED_SOURCE = re.compile(r"\d{4}-\d{2}-\d{2}")   # 결정은 누가 언제 정했는지 적는다(예: 사용자 2026-11-09)
 TEXT_FIELDS = ("name", "effect", "intent")
 DATASET_KINDS = ("concepts", "systems", "items", "upgrades", "enemies", "combat", "growth", "budget", "crafting", "economy", "levels", "playtests")
 KIND_LABELS = {"concepts": "컨셉", "systems": "시스템 설계", "items": "아이템", "upgrades": "영구 강화", "enemies": "적", "combat": "전투 계산",
@@ -250,11 +253,11 @@ def check_common(entry: dict, where: str, errors: list) -> bool:
             return False
         kind = PROVENANCE_KINDS.get(prov.get("kind")) if isinstance(prov.get("kind"), str) else None
         if kind is None:
-            errors.append({"code": "provenance", "where": where, "message": f"provenance.kind는 assumed/computed/measured(가정/계산/측정) 중 하나입니다: {prov.get('kind')!r}"})
+            errors.append({"code": "provenance", "where": where, "message": f"provenance.kind는 assumed/computed/measured/decided(가정/계산/측정/결정) 중 하나입니다: {prov.get('kind')!r}"})
             return False
-        source = prov.get("source")
-        if kind in ("computed", "measured") and not (isinstance(source, str) and source.strip()):
-            errors.append({"code": "provenance", "where": where, "message": f"provenance.kind가 {kind}이면 source가 필요합니다."})
+        problem = _source_problem(kind, prov.get("source"))
+        if problem:
+            errors.append({"code": "provenance", "where": where, "message": f"provenance: {problem}"})
             return False
         prov["kind"] = kind
         if "fields" in prov and not _check_fields(entry, prov["fields"], where, errors):
@@ -283,6 +286,15 @@ def _covers(field: str, leaf: str) -> bool:
     return leaf == field or leaf.startswith(field + ".")
 
 
+def _source_problem(kind: str, source) -> str | None:
+    """출처 종류에 맞는 source인가. 계산·측정은 파일이나 세션, 결정은 누가 언제 정했는지(날짜)."""
+    if kind in SOURCED_KINDS and not (isinstance(source, str) and source.strip()):
+        return f"kind가 {kind}이면 source가 필요합니다." + (" 결정은 누가 정했는지와 정한 날짜를 적습니다(예: 사용자 2026-11-09)." if kind == "decided" else "")
+    if kind == "decided" and not DECIDED_SOURCE.search(source):
+        return "결정의 source에는 정한 날짜(YYYY-MM-DD)를 적습니다(예: 사용자 2026-11-09). 에이전트가 짐작한 값은 결정이 아니라 가정입니다."
+    return None
+
+
 def _check_fields(entry: dict, fields, where: str, errors: list) -> bool:
     """provenance.fields {칸 경로: {kind, source, note}}: 항목 안의 값마다 따로 적은 출처. 칸 경로는 항목의 수치 칸(또는 그 묶음)이다."""
     leaves = list(_leaves(entry))
@@ -299,10 +311,11 @@ def _check_fields(entry: dict, fields, where: str, errors: list) -> bool:
             return False
         kind = PROVENANCE_KINDS.get(f.get("kind")) if isinstance(f, dict) and isinstance(f.get("kind"), str) else None
         if kind is None:
-            errors.append({"code": "provenance", "where": where, "message": f"provenance.fields.{path}: {{kind: assumed/computed/measured, source}} 객체가 필요합니다: {f!r}"})
+            errors.append({"code": "provenance", "where": where, "message": f"provenance.fields.{path}: {{kind: assumed/computed/measured/decided, source}} 객체가 필요합니다: {f!r}"})
             return False
-        if kind in ("computed", "measured") and not (isinstance(f.get("source"), str) and f["source"].strip()):
-            errors.append({"code": "provenance", "where": where, "message": f"provenance.fields.{path}의 kind가 {kind}이면 source가 필요합니다."})
+        problem = _source_problem(kind, f.get("source"))
+        if problem:
+            errors.append({"code": "provenance", "where": where, "message": f"provenance.fields.{path}: {problem}"})
             return False
         f["kind"] = kind
     return True
@@ -314,7 +327,7 @@ def field_coverage(entry: dict) -> tuple[int, int] | None:
     fields = prov.get("fields") if isinstance(prov, dict) else None
     if not isinstance(fields, dict) or not fields:
         return None
-    sourced = [k for k, f in fields.items() if isinstance(f, dict) and f.get("kind") in ("computed", "measured")]
+    sourced = [k for k, f in fields.items() if isinstance(f, dict) and f.get("kind") in SOURCED_KINDS]
     leaves = list(_leaves(entry))
     return sum(1 for leaf in leaves if any(_covers(k, leaf) for k in sourced)), len(leaves)
 
@@ -326,7 +339,7 @@ def effective_kind(entry: dict) -> str:
     if cover is None or cover[0] < cover[1] or not cover[1]:
         return kind
     kinds = {f.get("kind") for f in entry["provenance"]["fields"].values() if isinstance(f, dict)}
-    return "measured" if "measured" in kinds else "computed"
+    return next(k for k in ("measured", "computed", "decided") if k in kinds)   # 측정이 있으면 측정, 다음 계산, 모두 결정이면 결정
 
 
 def check_identity(entries: list, label: str, errors: list) -> list[tuple[int, dict]]:
@@ -501,11 +514,19 @@ def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
         report["ack_notes"] = _unused_acks(kind, acks, used, seen)
 
 
+def provenance_text(counts: dict) -> str:
+    """출처 개수 글. 결정은 있을 때만, 미지정은 그 칸이 있을 때만 적는다(md 태그 개수에는 미지정이 없다)."""
+    text = " · ".join(f"{PROVENANCE_LABEL[k]} {counts[k]}" for k in ("assumed", "computed", "measured"))
+    if counts.get("decided"):
+        text += f" · 결정 {counts['decided']}"
+    return text + (f" · 미지정 {counts['unspecified']}" if "unspecified" in counts else "")
+
+
 def summary_counts(entries: list[dict]) -> dict:
     status = {s: 0 for s in STATUSES + ("unspecified",)}
     for e in entries:
         status[e.get("status") or "unspecified"] += 1
-    prov = {k: 0 for k in ("assumed", "computed", "measured", "unspecified")}
+    prov = {k: 0 for k in ("assumed", "computed", "measured", "decided", "unspecified")}
     active = [e for e in entries if is_active(e)]
     for e in active:
         prov[effective_kind(e)] += 1

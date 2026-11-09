@@ -86,7 +86,7 @@ def _print_data_counts(entry: dict) -> None:
         tail += f" · 확인한 경고 {len(r['acknowledged'])}"
     pc = r["provenance_counts"]
     print(f"상태: 제안 {sc['proposed']} · 승인 {sc['approved']} · 삭제 {sc['cut']} · 미지정 {sc['unspecified']}")
-    print(f"출처(삭제 제외): 가정 {pc['assumed']} · 계산 {pc['computed']} · 측정 {pc['measured']} · 미지정 {pc['unspecified']}")
+    print(f"출처(삭제 제외): {c.provenance_text(pc)}")
     print(f"{entry['label']} {r['count']}개 · {tail}")
 
 
@@ -185,7 +185,7 @@ def cmd_check(args) -> int:
             else:
                 _print_data_counts(d)
         for path in assumed_configs:
-            print(f"gate: 시뮬레이터 설정의 출처가 가정이거나 비어 있거나 읽을 수 없음(보정했으면 provenance를 적습니다): {path}")
+            print(f"gate: 시뮬레이터 설정의 출처가 가정·결정이거나 비어 있거나 읽을 수 없음(모델 값이라 결정으로는 넘지 않습니다. 보정했으면 계산·측정 provenance를 적습니다): {path}")
         for path in skipped:
             print("참고: " + datasets.skipped_note(path))
         absent = sorted((table_kinds or set()) - {d["kind"] for d in entries if d["ok"]})
@@ -406,7 +406,7 @@ def cmd_provenance(args) -> int:
                     if t.kind == "assumed":
                         print(f"{r.path}:{t.line}: gate: [가정]이 남아 있습니다.")
         n = summary["counts"]
-        print(f"파일 {summary['files']}개 · 가정 {n['assumed']} · 계산 {n['computed']} · 측정 {n['measured']} · 오류 {summary['errors']}"
+        print(f"파일 {summary['files']}개 · {c.provenance_text(n)} · 오류 {summary['errors']}"
               + (f" · 경고 {summary['warnings']}" if summary["warnings"] else "") + f" → {status.upper()}")
     return 0 if status == "pass" else 1
 

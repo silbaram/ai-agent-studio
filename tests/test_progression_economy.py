@@ -135,7 +135,7 @@ class ItemMetadata(unittest.TestCase):
         d = item("d", attack=3); d["status"] = "cut"
         r = vi.validate({"items": [a, b, c, d]})
         self.assertEqual(r["unverified"], ["a", "c"])
-        self.assertEqual(r["provenance_counts"], {"assumed": 1, "computed": 0, "measured": 1, "unspecified": 1})
+        self.assertEqual(r["provenance_counts"], {"assumed": 1, "computed": 0, "measured": 1, "decided": 0, "unspecified": 1})
 
 
 class DropTables(unittest.TestCase):
