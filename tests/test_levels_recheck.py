@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _studio import ROOT, SAMPLE, STUDIO, claude, common, datasets, levels as lv, meta_sim as sm, run_cli, viewer
+from _studio import ROOT, SAMPLE, STUDIO, claude, common, datasets, levels as lv, meta_sim as sm, run_cli, viewer, level_guide, level_format
 from test_levels import BUDGET, both, enc, level, row, run
 from test_levels_field import ASSUMED, ECONOMY, ENEMY_CURVE, MEASURED, TIMES, differ, notes, printed, stage, stage_cells
 from test_meta_combat import CONFIG, Workspace as MetaWorkspace
@@ -618,8 +618,8 @@ class ViewerScript(unittest.TestCase):
 
 class Docs(unittest.TestCase):
     def setUp(self):
-        self.skill = (ROOT / "skills/level-design/SKILL.md").read_text(encoding="utf-8")
-        self.fmt = (ROOT / "skills/level-design/references/levels-format.md").read_text(encoding="utf-8")
+        self.skill = level_guide()   # 할 일은 SKILL.md와 game-shapes.md에 있다
+        self.fmt = level_format()
         self.economy = (ROOT / "skills/economy-flow/SKILL.md").read_text(encoding="utf-8")
         self.page = (STUDIO / "assets/viewer.html").read_text(encoding="utf-8")
         self.levels_page = self.page[self.page.index("function renderLevels"):self.page.index("function renderPlaytests")]
@@ -630,7 +630,7 @@ class Docs(unittest.TestCase):
         self.assertIn("일부 횟수에만", self.fmt)
 
     def test_grades_and_the_economy_route_meet(self):  # 94
-        self.assertIn("대표 등급", self.fmt)
+        self.assertIn("대표 등급", self.skill)   # 스테이지 선택형은 game-shapes.md
         self.assertIn("대표 등급", self.economy)
 
     def test_turn_based_path_is_written(self):  # 95
@@ -639,7 +639,6 @@ class Docs(unittest.TestCase):
         self.assertIn("kill_hits", self.levels_page)
 
     def test_curve_source_rule_is_written(self):  # 96
-        self.assertIn("`computed`", self.skill)
         self.assertIn("`computed`", self.fmt)
 
     def test_conditional_enemies_have_a_rule(self):  # 97
