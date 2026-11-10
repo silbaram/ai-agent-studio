@@ -645,7 +645,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         if v["result"] in DECIDED and seen and need and any(have[k] < need[k] for k in ("players", "runs") if k in need):   # 관찰값이 없으면 observation_missing이 말한다
             _err(errors, "verdict_sample_short", where,
                  f"{RESULT_LABEL[v['result']]} 판정의 근거 표본({_sample_text(have)})이 가설의 최소 표본({_sample_text(need)})보다 적습니다. "
-                 "세션을 더 하거나 unknown(모름)으로 둡니다. 표본을 바꾸려면 브리프의 sample을 사용자와 고칩니다.")
+                 "세션을 더 하거나 unknown(모름)으로 둡니다. 표본을 줄이려면 playtest-verdict references/changes.md '표본을 줄이자는 말이 나올 때'를 따릅니다.")
         short = {k: e for k, e in have.get("events", {}).items() if e["count"] < need["events"][k]}
         if v["result"] == "holds" and seen and short:   # 틀림은 사건에 기대지 않는 다른 쪽 신호로 낼 수 있어 막지 않는다
             _err(errors, "verdict_events_short", where,
@@ -662,6 +662,14 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
             _err(errors, "verdict_sample_reduced_after_results", where,
                  f"{RESULT_LABEL[v['result']]} 판정의 가설은 결과 파일을 연 뒤에 표본을 줄였습니다(sample.reduced_from). "
                  "결과를 보고 기준을 바꾼 것과 구별되지 않으므로 버팀·틀림이 아니라 unknown(모름)으로 둡니다. 원래 표본을 채우면 다시 판정할 수 있습니다.")
+        elif v["result"] in DECIDED and reduced:   # 줄인 날보다 먼저 기록한 세션은 줄이기 전에 결과가 나와 있었다
+            early = [s["id"] for s in seen if s["date"] < reduced["date"]]
+            original = {k: reduced[k] for k in ("players", "runs") if k in reduced}
+            if early and any(have[k] < original[k] for k in original):   # 줄이기 전 표본도 채웠으면 줄인 것이 판정을 바꾸지 않았다
+                _err(errors, "verdict_session_before_reduction", where,
+                     f"{RESULT_LABEL[v['result']]} 판정의 근거 세션 {josa(', '.join(early), '은는')} 표본을 줄인 날({reduced['date']})보다 "
+                     "먼저 기록한 세션이라 줄이기 전에 결과가 나와 있었습니다. 줄인 표본을 그 세션으로 채우면 결과를 보고 멈춘 것과 구별되지 않습니다. "
+                     f"줄인 뒤의 세션으로 채우거나 줄이기 전 표본({_sample_text(original)})을 채우고, 그러지 못하면 unknown(모름)으로 둡니다.")
         deviations = sum(1 for s in found for x in s.get("notes") or []   # 가설을 적은 절차 이탈은 그 가설에만 센다
                          if x.get("kind") == "deviation" and v["hypothesis"] in (x.get("hypotheses") or [v["hypothesis"]]))
         verdicts[where] = {"result": v["result"], "status": status, "reason": v["reason"], "sample": have, "need": need,
