@@ -16,12 +16,16 @@ from studio_data import budget, calibrate, claude, cli, combat, common, concepts
 CHANGES = ROOT / "skills/playtest-verdict/references/changes.md"   # 기준과 컨셉을 바꾸는 순서의 원본
 
 
-def changes_section(title: str) -> str:
-    """changes.md에서 '## title' 절 하나(다음 '## ' 제목 전까지)를 돌려준다."""
-    text = CHANGES.read_text(encoding="utf-8")
+def section(path: Path, title: str) -> str:
+    """문서에서 '## title' 절 하나(다음 '## ' 제목 전까지)를 돌려준다."""
+    text = path.read_text(encoding="utf-8")
     start = text.index(f"\n## {title}\n")
     end = text.find("\n## ", start + 1)
     return text[start:end if end != -1 else len(text)]
+
+
+def changes_section(title: str) -> str:
+    return section(CHANGES, title)
 
 
 LEVEL = ROOT / "skills/level-design"

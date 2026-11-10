@@ -162,7 +162,7 @@ def sample_problem(v) -> str | None:
 
 
 def _reduced_problem(v: dict) -> str | None:
-    """표본을 줄인 기록 {players·runs: 줄이기 전 값, after_run: 몇 판째 뒤에 줄였나, before_results: 결과 파일을 열기 전인가, date}."""
+    """표본을 줄인 기록 {players·runs: 줄이기 전 값, after_run: 진행 중이던 세션에서 몇 판째 뒤에 줄였나, before_results: 결과 파일을 열기 전인가, date}."""
     r = v["reduced_from"]
     bad = sorted(str(k) for k in r if k not in REDUCED_KEYS) if isinstance(r, dict) else []
     if bad:
@@ -171,7 +171,7 @@ def _reduced_problem(v: dict) -> str | None:
     if not (isinstance(r, dict) and isinstance(r.get("before_results"), bool)
             and is_int(r.get("after_run"), 0) and isinstance(r.get("date"), str) and DATE.match(r["date"])
             and any(k in r for k in ("players", "runs")) and all(is_int(r[k], 1) for k in ("players", "runs") if k in r)):
-        return ("sample.reduced_from은 {runs 또는 players: 줄이기 전 값, after_run: 몇 판째 뒤에 줄였나(0 이상), "
+        return ("sample.reduced_from은 {runs 또는 players: 줄이기 전 값, after_run: 진행 중이던 세션에서 몇 판째 뒤에 줄였나(0 이상), "
                 "before_results: 결과 파일을 열기 전에 줄였나(true/false), date: YYYY-MM-DD}입니다")
     if not any(k in v and r[k] > v[k] for k in ("players", "runs") if k in r):
         return "sample.reduced_from의 값이 지금 표본보다 커야 합니다(줄이기 전 값을 적습니다)"
