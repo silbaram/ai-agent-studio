@@ -2,11 +2,10 @@
 import copy
 import unittest
 
-from _studio import ROOT, concepts as cc
+from _studio import changes_section, concepts as cc, ROOT
 from test_verdict_field import CONCEPTS, hyp, judge, stamp, three, verdict
 
 BRIEF = ROOT / "skills/concept-exploration/references/brief.md"
-VERDICT = ROOT / "skills/playtest-verdict/SKILL.md"
 RECORD = ROOT / "skills/playtest-verdict/references/playtest-record.md"
 
 
@@ -36,10 +35,7 @@ class AskFirst318(unittest.TestCase):
         self.assertIn("한 번에", note)
 
     def test_the_verdict_skill_holds_the_order_318(self):
-        text = read(VERDICT)
-        self.assertIn(f"**{SECTION}.**", text)
-        part = text[text.index(f"**{SECTION}.**"):]
-        part = part[:part.index("\n### ")]   # 그 절의 끝까지(굵은 제목과 아래 목록)
+        part = changes_section(SECTION)   # 순서의 원본은 playtest-verdict references/changes.md다
         for phrase in ("고치기 전에 바꿀 문장을 보이고", "한 번에", "옮겨 적은 빌드의 게임 수치", "다시 시험할 때"):
             self.assertIn(phrase, part)
 
@@ -79,7 +75,7 @@ class PointAtBuild320(unittest.TestCase):
     """320번: 세는 빌드는 데이터 파일의 지금 값이 아니라 빌드 id나 변경 이름으로 가리킨다(데이터 파일은 다음 조정에서 바뀐다)."""
 
     def test_the_brief_rule_names_the_build_not_the_file_320(self):
-        self.assertIn("데이터 파일의 값을 가리키지 않는다", read(BRIEF))
+        self.assertIn("데이터 파일을 가리키지도 않는다", read(BRIEF))
 
     def test_the_gate_note_names_the_build_320(self):
         self.assertIn("빌드 id", cc.ASSUMED_CRITERIA_NOTE)

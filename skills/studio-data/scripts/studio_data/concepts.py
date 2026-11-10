@@ -392,7 +392,7 @@ def _mismatch_part(c: dict, value: str, notes: list | None) -> str:
 ASSUMED_CRITERIA_NOTE = ("판정 기준 문장에 [가정] 값이 남아 게이트를 막습니다({where}). 사용자가 정할 잣대(문턱, 표본, 창 길이)면 사용자에게 묻고, "
                          "정했다고 하면 [결정: 사용자 날짜]로 바꿉니다. 빌드의 게임 수치(피해, 발사 속도)를 옮겨 적은 것이면 지우고 빌드 id(builds, game_build)나 "
                          "변경 이름으로 가리킵니다. 판정한 가설이면 고치기 전에 사용자와 확인하고 문장과 판정의 criteria를 한 번에 바꿉니다"
-                         "(brief.md '세는 빌드는 이름으로 가리킨다').")   # 자세한 순서의 원본은 playtest-verdict SKILL.md다
+                         "(brief.md '세는 빌드는 이름으로 가리킨다').")   # 자세한 순서의 원본은 playtest-verdict references/changes.md다
 
 
 GAME_DATA_KINDS = tuple(k for k in DATASET_KINDS if k not in ("concepts", "systems", "playtests"))   # 조정하면 바뀌는 게임 데이터
@@ -403,7 +403,7 @@ POINTS_TO_DATA = ("게임 데이터 파일을 가리킵니다({file}). 그 파�
                   "그대로 두려면 컨셉의 acknowledged에 "
                   '{{"criteria_points_to_data": {{"{file}": 까닭}}}}을 적습니다.')
 POINTS_TO_DATA_JUDGED = (" 판정한 가설이면 builds를 새로 더하지 않고 사용자와 확인한 뒤 고칩니다"
-                         "(playtest-verdict '판정한 가설의 문장을 고칠 때').")   # 가설 문장만 지문에 든다
+                         "(playtest-verdict references/changes.md '판정한 가설의 문장을 고칠 때').")   # 가설 문장만 지문에 든다
 
 
 _KIND_CACHE: dict = {}   # {(파일, 바뀐 때, 크기): 내용으로 본 종류}. 뷰어처럼 검사를 거듭 돌려도 바뀌지 않은 파일은 다시 읽지 않는다

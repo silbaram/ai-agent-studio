@@ -4,11 +4,10 @@ import io
 import unittest
 from contextlib import redirect_stdout
 
-from _studio import ROOT, concepts as cc
+from _studio import ROOT, changes_section, concepts as cc
 from test_verdict_field import CONCEPTS, approved, hyp, judge, printed, stamp, three, verdict
 
-VERDICT = ROOT / "skills/playtest-verdict/SKILL.md"
-SECTION = "**컨셉을 되돌릴 때.**"
+SECTION = "컨셉을 되돌릴 때"
 
 
 def read(path) -> str:
@@ -16,9 +15,7 @@ def read(path) -> str:
 
 
 def section() -> str:
-    text = read(VERDICT)
-    part = text[text.index(SECTION):]
-    return part[:part.index("\n**", len(SECTION))]
+    return changes_section(SECTION)
 
 
 def reverted() -> dict:

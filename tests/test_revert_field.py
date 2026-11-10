@@ -5,11 +5,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _studio import ROOT, run_cli, systems as sy
+from _studio import ROOT, changes_section, run_cli, systems as sy
 from test_verdict_field import CONCEPTS, judge, stamp, three, verdict, hyp
 
 VERDICT = ROOT / "skills/playtest-verdict/SKILL.md"
-SECTION = "**컨셉을 되돌릴 때.**"
+SECTION = "컨셉을 되돌릴 때"
 BRIEF = {"pillars": [{"name": "p", "test": "t"}], "mvp": ["m"], "out_of_scope": ["o"]}
 
 
@@ -18,9 +18,7 @@ def read(path) -> str:
 
 
 def section() -> str:
-    text = read(VERDICT)
-    part = text[text.index(SECTION):]
-    return part[:part.index("\n**", len(SECTION))]   # 다음 굵은 제목 전까지
+    return changes_section(SECTION)
 
 
 def refuted_warning() -> str:
@@ -41,7 +39,7 @@ class HookAsks321(unittest.TestCase):
         part = section()
         self.assertIn("범위 훅", part)
         self.assertIn("claude -p", part)
-        self.assertIn("acceptEdits", part)   # 확인한 범위만 말한다
+        self.assertIn("scope-guard/SKILL.md#한계", part)   # 확인한 범위는 scope-guard의 한계 한 곳에 둔다
 
     def test_the_scope_limit_names_the_checked_mode_321(self):
         text = read(ROOT / "skills/scope-guard/SKILL.md")
@@ -103,8 +101,8 @@ class RevertOrder323(unittest.TestCase):
 
     def test_step_6_points_to_the_section_323(self):
         text = read(VERDICT)
-        step6 = text[text.index("### 6. 틀렸으면 되돌아간다"):text.index(SECTION)]
-        self.assertIn("컨셉을 되돌릴 때", step6)
+        step6 = text[text.index("### 6. 틀렸으면 되돌아간다"):text.index("## 보고")]
+        self.assertIn("changes.md#컨셉을-되돌릴-때", step6)
 
     def test_a_cut_concept_warning_covers_a_revert_too_323(self):
         r = sy.validate({"systems": [{"id": "s", "scope": "mvp", "pillars": ["p"], "mvp": ["m"], "rules": [{"id": "r", "text": "t"}]}], "concept": "gems"},
