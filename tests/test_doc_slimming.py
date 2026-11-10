@@ -47,6 +47,14 @@ class Links(unittest.TestCase):
                     self.assertIn(anchor, anchors)
         self.assertGreater(found, 5)
 
+    def test_links_inside_changes_resolve(self):   # 같은 파일 안의 링크(](#…))도 제목이 바뀌면 깨진다
+        anchors = {slug(h) for h in headings()}
+        inner = re.findall(r"\]\(#([^)\s]+)\)", CHANGES.read_text(encoding="utf-8"))
+        self.assertTrue(inner)
+        for anchor in inner:
+            with self.subTest(anchor=anchor):
+                self.assertIn(anchor, anchors)
+
     def test_checker_messages_name_real_sections(self):
         titles = headings()
         named = 0

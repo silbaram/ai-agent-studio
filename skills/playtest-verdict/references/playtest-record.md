@@ -106,6 +106,7 @@
 | `duplicate_verdict` | 오류 | 한 가설에 `cut`이 아닌 판정이 둘 이상 |
 | `verdict_session_wrong_build` | 오류 | 버팀·틀림인데, 가설의 `builds`가 있고 근거 세션의 `build`와 `game_build`가 어느 것도 거기에 없음 |
 | `verdict_sample_reduced_after_results` | 오류 | 버팀·틀림인데, 가설의 `sample.reduced_from.before_results`가 `false`(결과 파일을 연 뒤에 표본을 줄임). 모름으로 두거나 원래 표본을 채운다 |
+| `verdict_session_before_reduction` | 오류 | 버팀·틀림인데, 근거 세션 중 가설의 `sample.reduced_from.date`보다 앞선 날짜의 세션이 있고 근거 표본이 줄이기 전 표본(`reduced_from`의 `runs`·`players`)에 못 미침. 그 세션의 결과는 줄이기 전에 나와 있었다. 줄인 뒤의 세션으로 채우거나 줄이기 전 표본을 채우고, 못 하면 모름으로 둔다. 같은 날의 세션은 보지 않는다(그날 줄이기 전에 마친 세션은 [changes](changes.md#표본을-줄이자는-말이-나올-때) 5번) |
 | `verdict_overrides_proposal` | 오류 | `proposed_result`와 다른 `result`가 모름이 아님(모름을 버팀·틀림으로 올렸거나 버팀과 틀림을 바꿈). 사용자의 까닭을 판정 에이전트에게 주고 다시 판정한다. `cut`인 판정은 보지 않는다 |
 | `verdict_sample_short` | 오류 | 버팀·틀림인데, 그 가설을 관찰한 근거 세션을 합친 사람 수나 판 수가 가설의 `sample`보다 적음. 제안(`proposed`)이어도 오류다. `sample`이 없는 가설은 보지 않는다. runlog가 쓴 묶음(모든 묶음에 `runs`나 `players`가 있음)이 있는 세션은 묶음의 판 수 합과 사람을 넘겨 세지 않는다. 손으로 쓴 단계 기록은 로그가 아니라 세지 않는다 |
 | `verdict_events_short` | 오류 | 버팀인데, 근거 세션의 `events`를 합친 사건 수가 가설의 `sample.events`보다 적음. 세지 않은 세션은 0건이다. 근거 세션이 하나도 그 사건을 세지 않았으면(나중에 `sample.events`를 더함) 판정 줄과 메시지에 `미집계/6`으로 쓴다. 틀림은 사건에 기대지 않는 쪽 신호로 낼 수 있어 막지 않고 판정 줄에 보인다 |
