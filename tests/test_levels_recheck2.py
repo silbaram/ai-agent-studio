@@ -7,7 +7,7 @@ import unittest
 from contextlib import redirect_stdout
 from unittest import mock
 
-from _studio import ROOT, STUDIO, claude, common, economy as ec, levels as lv, meta_sim as sm
+from _studio import ROOT, STUDIO, claude, common, economy as ec, levels as lv, meta_sim as sm, level_guide, level_format
 from test_economy import CRAFTING, ITEMS, base, buy, validate
 from test_levels import both, enc, level, run
 from test_levels_field import ECONOMY, TIMES, notes, printed, stage
@@ -464,8 +464,8 @@ class HookDetails(Project):
 
 class Docs(unittest.TestCase):
     def setUp(self):
-        self.skill = (ROOT / "skills/level-design/SKILL.md").read_text(encoding="utf-8")
-        self.fmt = (ROOT / "skills/level-design/references/levels-format.md").read_text(encoding="utf-8")
+        self.skill = level_guide()   # 할 일은 SKILL.md와 game-shapes.md에 있다
+        self.fmt = level_format()
         self.economy = (ROOT / "skills/economy-flow/SKILL.md").read_text(encoding="utf-8")
         self.economy_fmt = (ROOT / "skills/economy-flow/references/economy-format.md").read_text(encoding="utf-8")
         self.combat = (ROOT / "skills/combat-balance/SKILL.md").read_text(encoding="utf-8")
@@ -489,7 +489,6 @@ class Docs(unittest.TestCase):
 
     def test_round_size_has_one_rule(self):  # 110
         self.assertIn("그 라운드의 적 전체", self.skill)
-        self.assertIn("그 라운드의 적 전체", self.fmt)
         self.assertNotIn("웨이브가 이어지는 게임", self.skill)
 
     def test_length_of_a_round_is_explained(self):  # 110

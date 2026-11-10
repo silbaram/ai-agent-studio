@@ -2,7 +2,7 @@
 import re
 import unittest
 
-from _studio import ROOT, STUDIO, common, levels as lv
+from _studio import ROOT, STUDIO, common, levels as lv, level_guide, level_format
 from test_economy import base, validate as economy_validate
 from test_levels import BUDGET, COMBAT, ENEMIES, THREAT, both, enc, level, row, run
 from test_levels_field import ECONOMY, notes, printed
@@ -351,14 +351,14 @@ class ValueChecks(unittest.TestCase):
 
 class Docs(unittest.TestCase):
     def test_the_docs_cover_the_recheck(self):
-        skill = (ROOT / "skills/level-design/SKILL.md").read_text(encoding="utf-8")
-        fmt = (ROOT / "skills/level-design/references/levels-format.md").read_text(encoding="utf-8")
+        skill = level_guide()
+        fmt = level_format()
         arch = (ROOT / "docs/architecture.md").read_text(encoding="utf-8")
         self.assertNotIn("쉬는 곳 구간에만", skill)
-        self.assertIn("강한 조우 연속도", skill)
-        self.assertIn("괄호의 레벨 범위는 빼고", skill)
-        self.assertIn("구매 시설은 `reward`가 아니다", skill)
-        self.assertIn("플레이어 행동에 달린 보상", skill)
+        self.assertIn("쉬는 곳 구간과 강한 조우 연속을 레벨이 끝나도 끊지 않는다", fmt)   # carry_levels의 효과는 형식에 있다
+        self.assertIn("괄호의 레벨 범위는 넣지 않는다", fmt)
+        self.assertIn("구매 시설은 보상이 아니다", fmt)
+        self.assertIn("플레이어 행동에 달린 보상", fmt)
         self.assertIn("임무를 넘는 보상 구간", skill)
         self.assertIn("가장 빡빡한 단계", skill)
         self.assertIn("층 중간에 상점", skill)

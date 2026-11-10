@@ -24,6 +24,19 @@ def changes_section(title: str) -> str:
     return text[start:end if end != -1 else len(text)]
 
 
+LEVEL = ROOT / "skills/level-design"
+
+
+def level_guide() -> str:
+    """레벨 구성의 할 일: SKILL.md와 게임 형태별로 적는 법(references/game-shapes.md)."""
+    return "\n".join((LEVEL / rel).read_text(encoding="utf-8") for rel in ("SKILL.md", "references/game-shapes.md"))
+
+
+def level_format() -> str:
+    """레벨 구성의 데이터 형식, 계산, 검사 표(references/levels-format.md)."""
+    return (LEVEL / "references/levels-format.md").read_text(encoding="utf-8")
+
+
 def run_cli(*args):
     """studio.py와 같은 진입점으로 실행해 (종료 코드, 표준 출력)을 돌려준다."""
     out, err = io.StringIO(), io.StringIO()

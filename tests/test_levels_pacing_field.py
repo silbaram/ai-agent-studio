@@ -5,7 +5,7 @@ import subprocess
 import sys
 import unittest
 
-from _studio import ROOT, STUDIO, common, economy as ec, levels as lv, run_cli
+from _studio import ROOT, STUDIO, common, economy as ec, levels as lv, run_cli, level_guide, level_format
 from test_economy import base, validate as economy_validate
 from test_levels import BUDGET, COMBAT, ENEMIES, THREAT, both, enc, level, row, run
 from test_levels_field import ECONOMY, notes, printed
@@ -523,8 +523,8 @@ class AckLine(Project):
 
 class Docs(unittest.TestCase):
     def test_the_docs_cover_the_field_answers(self):
-        fmt = (ROOT / "skills/level-design/references/levels-format.md").read_text(encoding="utf-8")
-        skill = (ROOT / "skills/level-design/SKILL.md").read_text(encoding="utf-8")
+        fmt = level_format()
+        skill = level_guide()
         eco = (ROOT / "skills/economy-flow/references/economy-format.md").read_text(encoding="utf-8")
         data = (ROOT / "skills/studio-data/SKILL.md").read_text(encoding="utf-8")
         self.assertIn("`open_for`", fmt)
@@ -534,7 +534,7 @@ class Docs(unittest.TestCase):
         self.assertIn("회복이 없는 게임", skill)
         self.assertIn("길이당 부담", skill)
         self.assertNotIn("역할과 세기로 적는다", skill)
-        self.assertIn("레벨의 `acknowledged`", skill)
+        self.assertIn("레벨에서 `{\"time_gap\"", fmt)   # 경고를 확인하는 자리는 형식의 검사 표에 있다
         self.assertIn("시각(수)", eco)
         flow = (ROOT / "skills/economy-flow/SKILL.md").read_text(encoding="utf-8")
         self.assertIn("그 시각을 적는다", flow)

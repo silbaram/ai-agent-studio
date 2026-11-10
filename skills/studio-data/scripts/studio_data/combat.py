@@ -360,7 +360,8 @@ def stage_foes(stage: dict, enemies: dict | None) -> set | None:
     return None if found is None else {e["id"] for e in found}
 
 
-CONDITIONAL_HINT = " 플레이어 행동으로만 나오는 조건부 적이면 단계에 넣지 않고 acknowledged에 이유를 적습니다."
+CONDITIONAL_HINT = (" 플레이어 행동으로만 나오는 조건부 적이면 단계에 넣지 않고 acknowledged에 이유를 적습니다"
+                    "(level-design references/game-shapes.md '플레이어 행동으로만 나오는 적과 보상').")
 
 
 def stage_hint(sid: str, free: list, order: list, free_label: str, near_note: str) -> str:

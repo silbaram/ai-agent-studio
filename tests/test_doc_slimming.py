@@ -55,16 +55,18 @@ class Links(unittest.TestCase):
             with self.subTest(anchor=anchor):
                 self.assertIn(anchor, anchors)
 
-    def test_checker_messages_name_real_sections(self):
-        titles = headings()
+    def test_checker_messages_name_real_sections(self):   # 메시지가 "<스킬> references/<파일>.md '<절>'"로 가리키면 그 절이 있다
         named = 0
         for py in (STUDIO / "scripts/studio_data").glob("*.py"):
             text = py.read_text(encoding="utf-8")
-            for m in re.finditer(r"references/changes\.md[^\n]{0,4}'([^']+)'", text):
+            for m in re.finditer(r"([a-z-]+) references/([a-z-]+\.md)[^\n']{0,4}'([^']+)'", text):
+                doc = ROOT / "skills" / m.group(1) / "references" / m.group(2)
                 named += 1
-                with self.subTest(file=py.name, title=m.group(1)):
-                    self.assertIn(m.group(1), titles)
-        self.assertGreaterEqual(named, 2)
+                with self.subTest(file=py.name, doc=str(doc.relative_to(ROOT)), title=m.group(3)):
+                    self.assertTrue(doc.is_file())
+                    titles = {line.lstrip("#").strip() for line in doc.read_text(encoding="utf-8").splitlines() if re.match(r"#{1,6} ", line)}
+                    self.assertIn(m.group(3), titles)
+        self.assertGreaterEqual(named, 3)
 
     def test_a_section_reads_to_its_end(self):   # 테스트 도우미가 다음 절을 끌어오지 않는다
         part = changes_section("판정한 가설의 문장을 고칠 때")
@@ -121,6 +123,82 @@ class ReviewFixes(unittest.TestCase):
         rule = next(line for line in brief.splitlines() if line.startswith("- **세는 빌드는 이름으로 가리킨다.**"))
         self.assertIn("지문이 바뀌", rule)
         self.assertIn("게이트를 넘지 못한다", rule)
+
+
+class LevelDesign(unittest.TestCase):
+    """레벨 구성 덜어내기(2026-11-10): 게임 형태별 규칙은 game-shapes.md, 경고마다 하는 일은 형식의 검사 표로 옮겼다."""
+
+    LEVEL = ROOT / "skills/level-design"
+
+    def test_the_skill_is_lighter(self):   # 옮기기 전 27,606바이트
+        self.assertLess(len((self.LEVEL / "SKILL.md").read_bytes()), 20000)
+
+    def test_the_skill_points_to_the_game_shapes(self):
+        skill = (self.LEVEL / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("](references/game-shapes.md", skill)
+        self.assertIn("](references/levels-format.md#검사)", skill)
+        for moved in ("서바이버라이크처럼", "m2_normal", "purchase_timing"):   # 게임 형태별 본문은 옮겼다
+            with self.subTest(moved=moved):
+                self.assertNotIn(moved, skill)
+                self.assertIn(moved, (self.LEVEL / "references/game-shapes.md").read_text(encoding="utf-8"))
+
+    def test_every_level_code_is_in_the_format_table(self):
+        code = (STUDIO / "scripts/studio_data/levels.py").read_text(encoding="utf-8")
+        table = (self.LEVEL / "references/levels-format.md").read_text(encoding="utf-8")
+        codes = set(re.findall(r'_err\(\w+, "([a-z_]+)"', code))
+        self.assertGreater(len(codes), 10)
+        self.assertEqual(sorted(c for c in codes if f"| `{c}`" not in table and f", `{c}`" not in table), [])
+
+
+class LevelReviewFixes(unittest.TestCase):
+    """레벨 구성 덜어내기 검토에서 나온 것."""
+
+    LEVEL = ROOT / "skills/level-design"
+
+    def read(self, rel: str) -> str:
+        return (self.LEVEL / rel).read_text(encoding="utf-8")
+
+    def step(self, n: int) -> str:
+        text = self.read("SKILL.md")
+        start = text.index(f"### {n}.")
+        return text[start:text.index("\n#", start + 4)]
+
+    def test_the_key_rows_point_to_the_game_shapes(self):   # 표만 읽는 에이전트도 시간 구간 규칙을 찾는다
+        fmt = self.read("references/levels-format.md")
+        for key in ("enemies", "repeat"):
+            with self.subTest(key=key):
+                row = next(line for line in fmt.splitlines() if line.startswith(f"| `{key}` |"))
+                self.assertIn("game-shapes.md#적이-끊임없이-나오는-게임", row)
+
+    def test_the_conditional_enemy_hint_names_the_section(self):
+        from _studio import combat
+        self.assertIn("game-shapes.md '플레이어 행동으로만 나오는 적과 보상'", combat.CONDITIONAL_HINT)
+
+    def test_role_split_inside_a_stage_is_general_pacing_advice(self):
+        self.assertIn("room_low", self.step(5))
+        rooms = self.read("references/game-shapes.md").split("## 방을 지나는 게임")[1].split("\n## ")[0]
+        self.assertNotIn("room_low", rooms)
+
+    def test_step_3_keeps_what_the_refill_period_drives(self):   # SKILL.md에서 바로 읽혀야 하는 결정
+        part = self.step(3)
+        for words in ("다시 차는 주기", "사용자에게 묻", "처치 수, 수입", "거꾸로 나눠 정하지 않는다"):
+            with self.subTest(words=words):
+                self.assertIn(words, part)
+
+
+class AllAnchoredLinks(unittest.TestCase):
+    def test_every_anchored_link_in_the_skills_resolves(self):   # 제목을 바꾸거나 절을 옮기면 링크가 조용히 깨진다
+        found = 0
+        for md in (ROOT / "skills").rglob("*.md"):
+            for target in re.findall(r"\]\(([^)\s]*#[^)\s]+)\)", md.read_text(encoding="utf-8")):
+                path, anchor = target.split("#", 1)
+                doc = (md.parent / path) if path else md
+                with self.subTest(file=str(md.relative_to(ROOT)), target=target):
+                    self.assertTrue(doc.is_file())
+                    heads = {slug(line.lstrip("#")) for line in doc.read_text(encoding="utf-8").splitlines() if re.match(r"#{1,6} ", line)}
+                    self.assertIn(anchor, heads)
+                found += 1
+        self.assertGreater(found, 50)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ import copy
 import json
 import unittest
 
-from _studio import ROOT, SAMPLE, STUDIO, calibrate as cal, concepts as cc, meta_sim as sm, playtests as pt, provenance as cp, run_cli
+from _studio import ROOT, SAMPLE, STUDIO, calibrate as cal, concepts as cc, meta_sim as sm, playtests as pt, provenance as cp, run_cli, level_guide, level_format
 from test_calibrate import Workspace
 from test_levels import both, enc, level, run
 from test_levels_field import ECONOMY
@@ -198,7 +198,7 @@ class Docs(unittest.TestCase):
         return (ROOT / rel).read_text(encoding="utf-8")
 
     def test_growth_covering_kill_time_names_the_gap_238(self):
-        text = self.read("skills/level-design/SKILL.md")
+        text = level_format()   # 경고마다 할 일은 형식의 검사 표에 있다
         self.assertIn("남는 배수", text)
         self.assertIn("플레이 기록", text)
 
