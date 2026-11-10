@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import posixpath
 import re
 import unicodedata
 from pathlib import Path
 
 from . import provenance
-from .common import ID_PATTERN, STATUSES, check_identity, is_active, is_int, josa, valid_date
+from .common import DATASET_KINDS, ID_PATTERN, STATUSES, check_identity, is_active, is_int, josa, load_dataset, valid_date
 from .common import did_you_mean as _did_you_mean
 from .common import table_cell as _cell
 
@@ -394,6 +395,61 @@ ASSUMED_CRITERIA_NOTE = ("판정 기준 문장에 [가정] 값이 남아 게이�
                          "(brief.md '세는 빌드는 이름으로 가리킨다').")   # 자세한 순서의 원본은 playtest-verdict SKILL.md다
 
 
+GAME_DATA_KINDS = tuple(k for k in DATASET_KINDS if k not in ("concepts", "systems", "playtests"))   # 조정하면 바뀌는 게임 데이터
+JSON_PATH = re.compile(r"(?<![A-Za-z0-9_./\\-])(?:[A-Za-z]:)?[/\\]?[A-Za-z0-9_.-]+(?:[/\\][A-Za-z0-9_.-]+)*\.json(?![A-Za-z0-9_])",
+                       re.ASCII)   # 뒤에 조사가 붙는다(growth.json의). 절대 경로와 ./도 잡는다
+POINTS_TO_DATA = ("게임 데이터 파일을 가리킵니다({file}). 그 파일은 다음 조정에서 바뀌어 문장이 다른 빌드를 가리키게 됩니다. "
+                  "빌드 id(builds, 세션의 game_build)나 변경 이름으로 가리킵니다. 판정한 가설이면 고치기 전에 사용자와 확인합니다"
+                  "(playtest-verdict '판정한 가설의 문장을 고칠 때'). 그대로 두려면 컨셉의 acknowledged에 "
+                  '{{"criteria_points_to_data": {{"{file}": 까닭}}}}을 적습니다.')
+
+
+_KIND_CACHE: dict = {}   # {(파일, 바뀐 때, 크기): 내용으로 본 종류}. 뷰어처럼 검사를 거듭 돌려도 바뀌지 않은 파일은 다시 읽지 않는다
+
+
+def _rel_path(raw: str, root: Path | None) -> str:
+    """같은 파일은 같은 대상(part)이 되게 적는다: 프로젝트 안의 절대 경로는 상대 경로로, ./와 ..는 접는다."""
+    rel = raw.replace("\\", "/")
+    if root is not None and Path(rel).is_absolute():
+        try:
+            rel = Path(rel).resolve().relative_to(root.resolve()).as_posix()
+        except (OSError, ValueError):   # 프로젝트 밖의 파일은 적힌 그대로 둔다
+            pass
+    return rel if Path(rel).is_absolute() else posixpath.normpath(rel)
+
+
+def _data_kind(rel: str, root: Path | None) -> str | None:
+    """문장에 적힌 JSON 경로의 데이터 종류. 프로젝트의 파일을 이 도구의 형식으로 읽을 수 있으면 내용으로 본다.
+    파일이 없거나, 깨졌거나, 게임이 자기 형식으로 쓴 파일(종류 키가 없음)이면 파일 이름으로 본다."""
+    name = Path(rel).stem.lower()
+    if root is None:   # 프로젝트를 모르면 작업 폴더의 엉뚱한 파일을 읽지 않는다
+        return name
+    f = root / rel
+    try:
+        st = f.stat()
+    except OSError:
+        return name
+    if not f.is_file():
+        return name
+    key = (str(f.resolve()), st.st_mtime_ns, st.st_size)
+    if key not in _KIND_CACHE:
+        try:
+            _KIND_CACHE[key] = load_dataset(f)[0]
+        except (OSError, ValueError, UnicodeDecodeError):   # 깨진 파일은 그 파일의 검사가 알린다
+            _KIND_CACHE[key] = None
+    return _KIND_CACHE[key] or name
+
+
+def _data_pointers(text: str, root: Path | None) -> list[str]:
+    """판정 기준 문장이 가리키는 게임 데이터 파일(329). 출처 태그 안의 경로는 출처라 뺀다."""
+    found: list[str] = []
+    for m in JSON_PATH.finditer(provenance.LOOSE_TAG.sub(" ", text)):
+        rel = _rel_path(m.group(0), root)
+        if rel not in found and _data_kind(rel, root) in GAME_DATA_KINDS:
+            found.append(rel)
+    return found
+
+
 def check_brief_numbers(c: dict, errors: list, warnings: list, root: Path | None = None, notes: list | None = None,
                         ack_notes: list | None = None) -> list[str]:
     """브리프 문장 안의 수치 출처 태그를 md와 같은 규칙으로 검사한다. [가정]이 남은 위치를 남은 값과 함께 돌려준다(--fail-on-assumed용).
@@ -402,6 +458,7 @@ def check_brief_numbers(c: dict, errors: list, warnings: list, root: Path | None
     root(게임 프로젝트 폴더)가 있으면 [계산]·[측정]의 경로 출처를 md의 --check-paths처럼 확인한다(파일, 플레이 기록의 세션 id).
     notes에는 판정 기준 문장에 [가정]이 남은 칸을 모아 게이트 아래 참고 줄로 낸다. ack_notes에는 예전 값 꼴로 적은 확인을 알린다."""
     assumed = []
+    hyps = c["brief"].get("hypotheses") if isinstance(c["brief"].get("hypotheses"), list) else []
     held = []   # [가정]이 남은 판정 기준 칸
     tagged: dict = {}   # {가설 번호: {수치: {칸: {종류}}}} 같은 값이 칸마다 다른 태그인지 본다
     success: dict = {}  # 성공 기준의 {수치: {종류}}. 가설마다 문턱을 다시 적는 칸이라 가설의 같은 값과 견준다
@@ -415,6 +472,11 @@ def check_brief_numbers(c: dict, errors: list, warnings: list, root: Path | None
                 errors.append({"code": "provenance", "where": c["id"], "message": f"{path}: {f.message}"})
             elif criteria_text:
                 warnings.append({"code": "untagged_number", "where": c["id"], "message": f"{path}: {f.message}", **({"values": f.values} if f.values else {})})
+        m = CRITERIA_TEXT.match(path)
+        for rel in _data_pointers(text, root) if criteria_text else []:
+            hid = hyps[int(m.group(1))].get("id") if m and isinstance(hyps[int(m.group(1))], dict) else None
+            warnings.append({"code": "criteria_points_to_data", "where": c["id"], "part": rel,
+                             "message": f"{path}{f'({hid})' if hid else ''}: " + POINTS_TO_DATA.format(file=rel)})
         left = [t.near for t in r.tags if t.kind == "assumed"]
         bare = r.untagged if criteria_text else []
         if left or bare:
@@ -422,13 +484,11 @@ def check_brief_numbers(c: dict, errors: list, warnings: list, root: Path | None
             assumed.append(f"{c['id']}.{path}({'; '.join(parts)})")
         if left and criteria_text:
             held.append(path.removeprefix("brief."))
-        m = CRITERIA_TEXT.match(path)
         for t in r.tags if m or path == SUCCESS_PATH else []:
             if t.value and m:
                 tagged.setdefault(int(m.group(1)), {}).setdefault(t.value, {}).setdefault(m.group(2), set()).add(t.kind)
             elif t.value:
                 success.setdefault(t.value, set()).add(t.kind)
-    hyps = c["brief"].get("hypotheses") if isinstance(c["brief"].get("hypotheses"), list) else []
     for n, values in sorted(tagged.items()):
         hid = hyps[n].get("id") if isinstance(hyps[n], dict) else None
         for value, fields in values.items():
