@@ -7,7 +7,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from _studio import ROOT, STUDIO, calibrate as cal, common, datasets, run_cli
+from _studio import calibrate as cal, changes_section, common, datasets, ROOT, run_cli, STUDIO
 from test_balance_field import row, printed as cal_printed
 from test_calibrate import Workspace
 from test_verdict_field import judge, printed, stamp, three, verdict, codes
@@ -244,7 +244,7 @@ class Docs(unittest.TestCase):
         return (ROOT / rel).read_text(encoding="utf-8")
 
     def test_undecided_reductions_are_reverted_300(self):
-        self.assertIn("사용자가 정하지 않은", self.read("skills/playtest-verdict/SKILL.md"))
+        self.assertIn("사용자가 정하지 않은", changes_section("표본을 줄이자는 말이 나올 때"))
 
     def test_field_provenance_is_documented_303(self):
         for rel in ("skills/numeric-provenance/SKILL.md", "skills/playtest-verdict/SKILL.md"):

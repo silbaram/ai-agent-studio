@@ -687,7 +687,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                     refuted.append(key)
                     warnings.append({"code": "approved_concept_refuted", "where": key,
                                      "message": "선택(approved)한 컨셉의 가설이 틀림으로 확정됐습니다. 이 가설에 기대는 다음 단계로 가지 않습니다. "
-                                                "규칙 하나를 바꿔 다시 시험할지 컨셉을 되돌릴지 사용자와 정합니다(playtest-verdict 6단계의 '다시 시험할 때', "
+                                                "규칙 하나를 바꿔 다시 시험할지 컨셉을 되돌릴지 사용자와 정합니다(playtest-verdict references/changes.md의 '다시 시험할 때', "
                                                 "'컨셉을 되돌릴 때'. 승인을 내리는 편집은 범위 훅이 사용자에게 묻습니다)."})
     # 선택한 컨셉이 없고 판정까지 한 컨셉이 있으면 되돌린 것이다. 판정이 없는 컨셉(승인 전에 설계하는 중)은 되돌린 것이 아니다
     reverted = sorted({w.split(".")[0] for w in verdicts if w.split(".")[0] in concepts}) \

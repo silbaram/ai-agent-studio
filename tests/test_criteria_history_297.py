@@ -4,7 +4,7 @@ import copy
 import json
 import unittest
 
-from _studio import ROOT, STUDIO, common, concepts as cc
+from _studio import changes_section, common, concepts as cc, ROOT, STUDIO
 from test_scope import Project
 from test_verdict_field import CONCEPTS, approved, hyp, judge, printed, stamp, three, verdict
 
@@ -237,9 +237,7 @@ class Docs(unittest.TestCase):
         self.assertIn("`criteria_history_invalid`", record)
 
     def test_the_restamp_order_writes_the_history(self):
-        text = self.read("skills/playtest-verdict/SKILL.md")
-        part = text[text.index("**판정한 가설의 문장을 고칠 때.**"):]
-        part = part[:part.index("\n**", 5)]
+        part = changes_section("판정한 가설의 문장을 고칠 때")
         self.assertIn("criteria_history", part)
 
     def test_the_judge_reads_the_history(self):

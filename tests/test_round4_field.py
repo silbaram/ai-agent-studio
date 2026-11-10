@@ -4,7 +4,7 @@ import io
 import unittest
 from contextlib import redirect_stdout
 
-from _studio import ROOT, STUDIO, concepts as cc, growth as gr
+from _studio import changes_section, concepts as cc, growth as gr, ROOT, STUDIO
 from test_growth import CHOICES, COMBAT, ENEMIES, codes, data, validate
 from test_verdict_field import CONCEPTS, hyp, judge, printed, stamp, three, verdict
 
@@ -297,15 +297,14 @@ class Docs(unittest.TestCase):
         self.assertRegex(text, r"가설을 더하면[^\n]*success_criteria")
 
     def test_another_system_changed_292_295(self):
-        skill = self.read("skills/playtest-verdict/SKILL.md")
-        self.assertIn("`builds`", skill)
-        self.assertIn("세션 id", skill)
+        self.assertIn("`builds`", changes_section("다른 시스템이 바뀌어 지난 기록과 합치지 않을 때"))
+        self.assertIn("세션 id", changes_section("다시 시험할 때"))
 
     def test_cut_in_the_next_edit_294(self):
-        self.assertIn("바로 다음 편집", self.read("skills/playtest-verdict/SKILL.md"))
+        self.assertIn("바로 다음 편집", changes_section("다시 시험할 때"))
 
     def test_reduce_per_hypothesis_before_results_296_299(self):
-        skill = self.read("skills/playtest-verdict/SKILL.md")
+        skill = changes_section("표본을 줄이자는 말이 나올 때")
         self.assertIn("sample.reduced_from", skill)
         self.assertIn("가설마다", skill)
         self.assertIn("결과 파일을 열기 전에", skill)

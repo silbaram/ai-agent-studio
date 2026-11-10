@@ -2,7 +2,7 @@
 import copy
 import unittest
 
-from _studio import ROOT, STUDIO
+from _studio import changes_section, ROOT, STUDIO
 from test_verdict_field import CONCEPTS, codes, hyp, judge, printed, stamp, three, verdict
 
 
@@ -122,9 +122,7 @@ class Docs(unittest.TestCase):
         return (ROOT / rel).read_text(encoding="utf-8")
 
     def retest(self):
-        text = self.read("skills/playtest-verdict/SKILL.md")
-        start = text.index("### 6.")
-        return text[start:text.index("## 보고", start)]
+        return changes_section("다시 시험할 때")
 
     def test_close_the_open_change_first_266(self):
         part = self.retest()
@@ -141,7 +139,7 @@ class Docs(unittest.TestCase):
         self.assertIn("Archive without syncing", text)
 
     def test_shrinking_the_sample_mid_test_271(self):
-        text = self.read("skills/playtest-verdict/SKILL.md")
+        text = changes_section("표본을 줄이자는 말이 나올 때")
         self.assertIn("표본을 줄", text)
         self.assertRegex(text, r"표본을 줄[^\n]*deviation")
 

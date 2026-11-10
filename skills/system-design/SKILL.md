@@ -66,7 +66,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table systems
 - `out_of_scope_claimed`(오류): 범위 밖 항목을 만들 시스템의 항목이나 글에 넣었다. 확인으로 끄지 못한다. 브리프를 바꾸려면 사용자에게 묻는다.
 - `scope_dependency`(오류): MVP 시스템이 나중이나 범위 밖 시스템에 기댄다. 그대로면 만들 수 없다. 범위를 맞추거나 의존을 끊는다.
 - `dependency_cycle`(오류): 먼저 만들 수 있는 쪽이 없다. 의존을 끊거나 한 시스템으로 합친다.
-- `concept_not_approved`: 승인되지 않은 컨셉에 이었다. 브리프가 확정되기 전이라 연결도 확정이 아니다. 선택했던 컨셉을 되돌렸으면([playtest-verdict](../playtest-verdict/SKILL.md)의 '컨셉을 되돌릴 때') 다음 컨셉을 고를 때까지 연결과 데이터를 그대로 두고, 고른 뒤 그 컨셉에 다시 잇는다. 되돌리며 `cut`했으면 같은 경우에 `cut_referenced`가 난다.
+- `concept_not_approved`: 승인되지 않은 컨셉에 이었다. 브리프가 확정되기 전이라 연결도 확정이 아니다. 선택했던 컨셉을 되돌렸으면([playtest-verdict](../playtest-verdict/references/changes.md#컨셉을-되돌릴-때)의 '컨셉을 되돌릴 때') 다음 컨셉을 고를 때까지 연결과 데이터를 그대로 두고, 고른 뒤 그 컨셉에 다시 잇는다. 되돌리며 `cut`했으면 같은 경우에 `cut_referenced`가 난다.
 - `system_without_pillar`: 필러를 돕지 않는 시스템이다. 기반이면 `foundation`을 적고, 아니면 만들 이유를 다시 본다.
 - `foundation_unused`: 기대는 시스템이 없는 기반이다. 의존을 적거나 표시를 뺀다.
 - `system_without_rules`: 규칙이 없어 구현할 수 없다.

@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _studio import ROOT, SAMPLE, STUDIO, common, concepts as cc, run_cli
+from _studio import changes_section, common, concepts as cc, ROOT, run_cli, SAMPLE, STUDIO
 from test_criteria_history_297 import entry
 from test_verdict_field import CONCEPTS, approved, hyp
 
@@ -160,12 +160,8 @@ class Docs(unittest.TestCase):
     def read(self, rel: str) -> str:
         return (ROOT / rel).read_text(encoding="utf-8")
 
-    def section(self, text: str, head: str) -> str:
-        part = text[text.index(head):]
-        return part[:part.index("\n**", 5)]
-
     def test_the_verdict_skill_says_how_to_backfill_328(self):
-        part = self.section(self.read("skills/playtest-verdict/SKILL.md"), "**이력을 나중에 남길 때.**")
+        part = changes_section("이력을 나중에 남길 때")
         for words in ("고친 날", "^:design/concepts.json", "`cut`", "`why`", "오래된 것부터", "사용자에게 알린다", "`check`"):
             self.assertIn(words, part)
 
@@ -210,8 +206,8 @@ class JudgedKeepsTheChangeName(unittest.TestCase):
         self.assertIn("사용자에게 묻는다", rule)
 
     def test_the_verdict_step_and_record_table_say_so(self):
-        verdict = self.read("skills/playtest-verdict/SKILL.md")
-        step = next(line for line in verdict.splitlines() if line.startswith("1. 고치기 전에 바꿀 문장을 보이고"))
+        step = next(line for line in changes_section("판정한 가설의 문장을 고칠 때").splitlines()
+                    if line.startswith("1. 고치기 전에 바꿀 문장을 보이고"))
         self.assertIn("변경 이름이 없으면", step)
         self.assertIn("세는 판을 바꿀 수 있어", step)          # 늘 바뀌는 것은 아니다
         self.assertIn("이미 센 세션이 모두 그 빌드", step)      # 그때는 뜻이 같은 고침이 될 수 있다
