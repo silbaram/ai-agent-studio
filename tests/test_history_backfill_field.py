@@ -182,5 +182,44 @@ class Docs(unittest.TestCase):
         self.assertIn(f"{CODE}:", (STUDIO / "assets/viewer.html").read_text(encoding="utf-8"))
 
 
+class JudgedKeepsTheChangeName(unittest.TestCase):
+    """330. 판정한 가설을 고칠 때 builds를 새로 더하면 지문에 들어가 세는 판이 바뀐다. 문장의 변경 이름으로 가리킨다.
+    game_build는 세션 기록의 선택 칸이라 없을 수 있다."""
+
+    def read(self, rel: str) -> str:
+        return (ROOT / rel).read_text(encoding="utf-8")
+
+    def test_the_warning_names_both_build_ids_and_the_judged_case(self):
+        msg = pointers(changed("test", REAL))[0]["message"]
+        self.assertIn("세션의 build 커밋", msg)   # 세션에 늘 있는 칸. game_build는 선택 칸이다
+        self.assertIn("game_build", msg)
+        self.assertIn("판정한 가설이면 builds를 새로 더하지 않고", msg)
+
+    def test_success_criteria_gets_no_judged_hypothesis_advice(self):   # 지문에 들지 않고 builds도 없다
+        msg = pointers(changed("success_criteria", "data/items.json의 값으로 본다", proto))[0]["message"]
+        self.assertNotIn("판정한 가설", msg)
+        self.assertNotIn("builds", msg)
+        self.assertIn("세션의 build 커밋", msg)
+
+    def test_the_brief_rule_says_so(self):
+        brief = self.read("skills/concept-exploration/references/brief.md")
+        rule = next(line for line in brief.splitlines() if line.startswith("- **세는 빌드는 이름으로 가리킨다.**"))
+        self.assertIn("세션의 `build` 커밋이나 `game_build`", rule)
+        self.assertIn("이미 판정한 가설을 고칠 때는 `builds`를 새로 더하지 않고", rule)
+        self.assertIn("변경 이름이 없으면", rule)
+        self.assertIn("사용자에게 묻는다", rule)
+
+    def test_the_verdict_step_and_record_table_say_so(self):
+        verdict = self.read("skills/playtest-verdict/SKILL.md")
+        step = next(line for line in verdict.splitlines() if line.startswith("1. 고치기 전에 바꿀 문장을 보이고"))
+        self.assertIn("변경 이름이 없으면", step)
+        self.assertIn("세는 판을 바꿀 수 있어", step)          # 늘 바뀌는 것은 아니다
+        self.assertIn("이미 센 세션이 모두 그 빌드", step)      # 그때는 뜻이 같은 고침이 될 수 있다
+        row = next(line for line in self.read("skills/concept-exploration/references/concept-record.md").splitlines()
+                   if line.startswith(f"| `{CODE}`"))
+        self.assertIn("`builds`를 새로 더하지 않고", row)
+        self.assertIn("세션의 `build` 커밋", row)
+
+
 if __name__ == "__main__":
     unittest.main()
