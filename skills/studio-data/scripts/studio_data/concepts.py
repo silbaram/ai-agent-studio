@@ -399,9 +399,11 @@ GAME_DATA_KINDS = tuple(k for k in DATASET_KINDS if k not in ("concepts", "syste
 JSON_PATH = re.compile(r"(?<![A-Za-z0-9_./\\-])(?:[A-Za-z]:)?[/\\]?[A-Za-z0-9_.-]+(?:[/\\][A-Za-z0-9_.-]+)*\.json(?![A-Za-z0-9_])",
                        re.ASCII)   # 뒤에 조사가 붙는다(growth.json의). 절대 경로와 ./도 잡는다
 POINTS_TO_DATA = ("게임 데이터 파일을 가리킵니다({file}). 그 파일은 다음 조정에서 바뀌어 문장이 다른 빌드를 가리키게 됩니다. "
-                  "빌드 id(builds, 세션의 game_build)나 변경 이름으로 가리킵니다. 판정한 가설이면 고치기 전에 사용자와 확인합니다"
-                  "(playtest-verdict '판정한 가설의 문장을 고칠 때'). 그대로 두려면 컨셉의 acknowledged에 "
+                  "변경 이름이나 빌드 id(세션의 build 커밋, 판 로그의 game_build 지문)로 가리킵니다.{judged} "
+                  "그대로 두려면 컨셉의 acknowledged에 "
                   '{{"criteria_points_to_data": {{"{file}": 까닭}}}}을 적습니다.')
+POINTS_TO_DATA_JUDGED = (" 판정한 가설이면 builds를 새로 더하지 않고 사용자와 확인한 뒤 고칩니다"
+                         "(playtest-verdict '판정한 가설의 문장을 고칠 때').")   # 가설 문장만 지문에 든다
 
 
 _KIND_CACHE: dict = {}   # {(파일, 바뀐 때, 크기): 내용으로 본 종류}. 뷰어처럼 검사를 거듭 돌려도 바뀌지 않은 파일은 다시 읽지 않는다
@@ -476,7 +478,7 @@ def check_brief_numbers(c: dict, errors: list, warnings: list, root: Path | None
         for rel in _data_pointers(text, root) if criteria_text else []:
             hid = hyps[int(m.group(1))].get("id") if m and isinstance(hyps[int(m.group(1))], dict) else None
             warnings.append({"code": "criteria_points_to_data", "where": c["id"], "part": rel,
-                             "message": f"{path}{f'({hid})' if hid else ''}: " + POINTS_TO_DATA.format(file=rel)})
+                             "message": f"{path}{f'({hid})' if hid else ''}: " + POINTS_TO_DATA.format(file=rel, judged=POINTS_TO_DATA_JUDGED if m else "")})
         left = [t.near for t in r.tags if t.kind == "assumed"]
         bare = r.untagged if criteria_text else []
         if left or bare:
