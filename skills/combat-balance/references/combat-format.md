@@ -28,13 +28,14 @@
 
 | 키 | 필수 | 뜻 |
 |---|---|---|
-| `stats.player`, `stats.enemy` | 예 | 역할 → 그 게임의 스탯 이름. 역할: `hp`, `attack`(필수), `defense`, `attack_rate`, `crit_chance`, `crit_multiplier` |
+| `stats.player`, `stats.enemy` | 예 | 역할 → 그 게임의 스탯 이름. 역할: `hp`, `attack`(필수), `defense`, `attack_rate`, `crit_chance`, `crit_multiplier`, `armor_pierce` |
 | `defense` | 예 | 방어 공식. 아래 표 |
 | `targets` | 아니오 | `{등급: {지표: [최소, 최대]}}`. 등급은 `normal` / `elite` / `boss`(적 데이터의 `rank`), 한쪽은 `null` 가능 |
 | `provenance` | 아니오 | 공식과 목표의 출처. 없거나 `assumed`면 `--fail-on-assumed`에서 실패한다 |
 
 - `attack_rate`는 초당 공격 횟수다. 없으면 시간 지표(`time_to_kill`, `time_to_die`)를 내지 않는다.
 - `crit_chance`는 0~1 비율이다. 5처럼 퍼센트로 적으면 오류(`bad_stat`)다. `crit_multiplier`가 없으면 2로 본다. 치명 역할이 없으면 치명은 없다.
+- `armor_pierce`는 그 쪽의 공격이 상대 방어 중 무시하는 비율(0~1)이다. 0.5면 상대 방어의 절반만 공식에 넣는다. 약화로 음수가 된 방어는 그대로 둔다. 없으면 0이다.
 - 플레이어와 적이 같은 이름의 스탯을 써도 되고 달라도 된다.
 - 역할이 가리키는 이름이 그 쪽 데이터(플레이어: 단계 `base`·아이템·영구 강화, 적: 적 데이터) 어디에도 없으면, 어느 역할도 쓰지 않는 비슷한 이름이 있을 때 `stat_not_found` 경고다. 비슷한 이름도 없으면 `empty_roles`(값이 있는 데이터가 없는 역할)로만 알린다. 아직 값이 없는 스탯이면 `base`에 0으로 적어 둔다.
 
@@ -61,6 +62,7 @@
 | `enemies` | 아니오 | 계산할 적 id 배열. 없으면 `zone` |
 | `zone` | 아니오 | 적 데이터의 `zone`(처음 나오는 구역)이 이 값인 적(삭제 제외)을 모두 계산 |
 | `zone_rule` | 아니오 | `first_seen`(기본): 위와 같다 / `up_to`: `zone`이 이 값 이하인 적, 곧 이 구역까지 나온 적을 모두 계산(앞 구역의 적이 모두 계속 나오는 게임. 일부만 이어지면 `enemies` 목록을 쓴다). `up_to`는 `zone`이 수여야 한다 |
+| `variant_of` | 아니오 | 이 파일의 다른 단계 id. 무기나 직업 하나만 든 기준 장비를 따로 볼 때 쓰는 **변형 단계**다. 처치·버팀과 원가 제안만 계산하고, 레벨 구성·판 안 성장·재화 흐름·메타 성장의 단계 순서에는 들지 않는다. 레벨, 재화 흐름 단계, `level_at`은 원래 단계에 잇는다 |
 | `status`, `provenance`, `acknowledged` | 아니오 | 공통 필드 ([data-format](../../progression-economy/references/data-format.md#공통-필드)) |
 
 `acknowledged`는 단계에 적는다. `{코드: "이유"}`는 그 단계와 그 단계의 모든 행(`단계.적`)에서 난 그 코드 경고에 적용된다(나중에 생기는 다른 적의 경고도 덮는다). `{코드: {적 id: "이유"}}`는 그 적의 행 경고만 덮는다. 의도한 이탈은 적 단위로 확인한다. 공식·목표·역할 쪽 경고(`target_unchecked`, `stat_not_found`)는 단계 확인으로 끌 수 없다.
@@ -85,8 +87,9 @@
 | `schema`, `duplicate_id` | 오류 | 형식 위반(역할·공식·목표·단계), 단계 id 중복 |
 | `unknown_item`, `unknown_upgrade`, `unknown_enemy`, `unknown_enhance` | 오류 | 원본 데이터에 없는 id(강화는 강화·합성 데이터) |
 | `missing_stat` | 오류 | 플레이어(합계)나 적에 체력·공격 스탯이 없음 |
-| `bad_stat` | 오류 | 계산에 쓸 수 없는 값: 체력 0 이하, 공격 속도 0 이하, 치명 확률 0~1 밖(2 이상이면 퍼센트로 적은 것으로 보고 안내), 치명 배율 1 미만. 기준 장비에 넣지 않은 영구 강화도 하나씩 단계 기준 장비에 더해 보고, 그 강화가 스탯을 깨면 `upgrades:<강화 id>`의 오류다(메타 성장 시뮬레이터가 사면 더하므로) |
+| `bad_stat` | 오류 | 계산에 쓸 수 없는 값: 체력 0 이하, 공격 속도 0 이하, 치명 확률 0~1 밖(2 이상이면 퍼센트로 적은 것으로 보고 안내), 치명 배율 1 미만, 방어 무시 비율 0~1 밖. 기준 장비에 넣지 않은 영구 강화도 하나씩 단계 기준 장비에 더해 보고, 그 강화가 스탯을 깨면 `upgrades:<강화 id>`의 오류다(메타 성장 시뮬레이터가 사면 더하므로) |
 | `negative_defense` | 오류 | 비율 공식에서 방어가 음수 |
+| `unknown_stage` | 오류 | `variant_of`가 이 파일의 삭제되지 않은, 변형이 아닌 단계를 가리키지 않음(변형의 변형 포함) |
 | `target_out_of_range` | 경고 | 지표가 등급별 목표 범위를 벗어남 |
 | `target_unchecked` | 경고 | 시간 목표(`time_to_kill`, `time_to_die`)를 정했는데 그쪽에 공격 속도 값이 없어 검사하지 못함. 등급·지표마다 한 번. 피해 0으로 타수가 없는 경우는 `zero_damage`가 알린다 |
 | `zero_damage` | 경고 | 이 단계 기준 장비로 그 적에게 피해를 줄 수 없음, 또는 그 적이 기준 장비에 피해를 줄 수 없음. 그 행의 타수·시간 목표는 검사하지 않는다 |

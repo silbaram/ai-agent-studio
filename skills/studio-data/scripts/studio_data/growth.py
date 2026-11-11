@@ -256,12 +256,13 @@ def validate(data: dict, combat: dict | None = None, items: dict | None = None, 
     elif settings is not None and active_choices and active_builds:
         raw_stages = [s for s in combat.get("stages", []) if isinstance(s, dict) and isinstance(s.get("id"), str)] \
             if isinstance(combat.get("stages"), list) else []
-        stage_ids = [s["id"] for s in raw_stages if c.is_active(s)]
+        stage_ids = cb.main_stage_ids(combat)   # 변형 단계(variant_of)는 레벨을 두지 않는다
         cut_ids = {s["id"] for s in raw_stages if not c.is_active(s)}
+        variants = {s["id"]: s for s in raw_stages if c.is_active(s) and cb.is_variant(s)}
         level_at = settings["level_at"]
         unknown = [k for k in level_at if k not in stage_ids and k not in cut_ids]
         for k in unknown:
-            _err(errors, "unknown_stage", "growth.level_at", f"전투 계산(combat.json)에 없는 단계입니다: {k}."
+            _err(errors, "unknown_stage", "growth.level_at", cb.variant_hint(variants[k]) if k in variants else f"전투 계산(combat.json)에 없는 단계입니다: {k}."
                  + cb.stage_hint(k, [x for x in stage_ids if x not in level_at], stage_ids, "level_at이 없는 전투 단계", "이미 level_at에 있습니다"))
         for k in sorted(k for k in set(level_at) & cut_ids if level_at[k] is not None):
             _err(warnings, "cut_referenced", "growth.level_at", f"삭제(cut)된 전투 단계 {k}의 레벨이 있습니다. 계산에서 뺍니다.")

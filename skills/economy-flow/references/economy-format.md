@@ -98,7 +98,7 @@
 | `price_missing` | 오류 | 가격 출처에 가격(`price`·`cost`)이 없음 |
 | `rarity_empty` | 오류 | 드랍 테이블의 희귀도 칸에 해당하는 활성 아이템이 없음 |
 | `price_source_invalid` | 오류 | 가격으로 쓰는 강화·합성의 형식이 틀려 가격을 계산하지 않음(강화·합성 검사 결과를 먼저 고친다) |
-| `unknown_stage` | 오류 | `after`에 적은 단계가 없음, 또는 `combat_stage`가 전투 계산에 없음 |
+| `unknown_stage` | 오류 | `after`에 적은 단계가 없음, 또는 `combat_stage`가 전투 계산에 없거나 변형 단계(`variant_of`)임 |
 | `requirement_missing` | 경고 | 영구 강화를 선행 조건보다 먼저 사는 계획(형식 오류로 빠진 앞 구매도 계획에 있는 것으로 본다) |
 | `duplicate_purchase` | 경고 | 같은 영구 강화를 두 번 삼 |
 | `enhance_gap` | 경고 | 같은 강화의 구매가 앞 구매의 단계와 이어지지 않음(건너뜀·겹침) |

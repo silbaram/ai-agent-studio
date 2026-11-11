@@ -149,7 +149,7 @@
 | `duplicate_id` | 오류 | 조우 id가 겹침 |
 | `unknown_role` | 오류 | `roles`에 없는 역할 |
 | `unknown_enemy` | 오류 | 적 데이터에 없는 id |
-| `unknown_stage` | 오류 | 전투 계산에 없는 단계. 레벨이 없는 단계를 먼저 오타로 보고 목록으로 보인다. 레벨이 있는 단계는 오타로 단정하지 않고 이름이 비슷한 단계로만 말한다 |
+| `unknown_stage` | 오류 | 전투 계산에 없는 단계, 또는 변형 단계(`variant_of`). 변형이면 원래 단계를 알려 준다. 레벨이 없는 단계를 먼저 오타로 보고 목록으로 보인다. 레벨이 있는 단계는 오타로 단정하지 않고 이름이 비슷한 단계로만 말한다 |
 | `curve_missing_point` | 오류 | `table` 곡선에 그 단계가 없음 |
 | `curve_not_positive` | 오류 | 그 단계의 곡선 값이 0 이하 |
 | `unknown_encounter` | 오류 | `greybox`의 `encounter`가 이 레벨의 조우가 아님 |

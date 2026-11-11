@@ -425,7 +425,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
     combat_stages = {x["id"]: x for x in (combat or {}).get("stages") or [] if isinstance(x, dict) and isinstance(x.get("id"), str)} \
         if isinstance((combat or {}).get("stages"), list) else {}
     linked = {c.combat_link(s) for s in stages if c.is_active(s)}
-    free = [k for k, x in combat_stages.items() if c.is_active(x) and k not in linked]  # 재화 흐름과 이어지지 않은 전투 단계
+    free = [k for k in cb.main_stage_ids(combat) if k not in linked]  # 재화 흐름과 이어지지 않은 전투 단계. 변형 단계(variant_of)는 잇지 않는다
     if settings is not None:
         cur = settings["currencies"]
         complete, gap = True, False
@@ -620,6 +620,9 @@ def _check_link(s: dict, combat: dict | None, combat_stages: dict, free: list, e
         return
     if not c.is_active(cs):
         _err(warnings, "cut_referenced", s["id"], f"삭제(cut)된 전투 단계 {link}에 이었습니다.", owner=s["id"])
+        return
+    if cb.is_variant(cs):
+        _err(errors, "unknown_stage", s["id"], cb.variant_hint(cs))
         return
     foes = cb.stage_foes(cs, enemies)
     kills = s.get("kills") if isinstance(s.get("kills"), dict) else {}

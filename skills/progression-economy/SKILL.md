@@ -41,7 +41,7 @@ description: "Keeps items, permanent upgrades, and enemies in single-source JSON
 
 ## 작업 순서
 
-1. **데이터를 단일 원본으로 둔다.** 게임이 읽는 JSON/CSV 파일을 도구도 그대로 읽는다.
+1. **데이터를 단일 원본으로 둔다.** 게임이 읽는 JSON/CSV 파일을 도구도 그대로 읽는다. 게임이 그 파일을 직접 읽지 못하면(`file://`로 여는 HTML 등) JSON을 원본으로 두고 게임 파일에는 옮긴 값만 둔다. 게임 테스트가 두 값을 비교해 어긋나면 실패하게 한다. 게임 파일에서 JSON을 만들어 내지 않는다. 밸런스 스킬이 고친 값이 다음에 만들 때 덮인다.
 2. **검사한다.**
    ```bash
    python3 .claude/skills/studio-data/scripts/studio.py check data/ --out reports/data-check.json

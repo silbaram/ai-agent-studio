@@ -20,7 +20,11 @@
 4. **사용자에게 확인받고 승인한다.** 의도 칸을 사용자가 확인하면 `status`를 `approved`로 둔다. 사용자 응답을 받을 수 없는 실행이면 `proposed`로 두고 "확인 대기"로 끝낸다. 의도를 지어내 승인하지 않는다.
 5. **검사한다.** `python3 .claude/skills/studio-data/scripts/studio.py check design/`
 
-그다음은 [system-design](../../system-design/SKILL.md)이다. 그레이박스나 단계 기록만 적는 플레이 세션은 컨셉 없이도 적을 수 있다([플레이 기록 형식](../../playtest-verdict/references/playtest-record.md)의 `concept`).
+그다음은 [system-design](../../system-design/SKILL.md)이다. 밸런스 스킬을 쓰기 전에 게임 수치가 어디 있는지 본다(아래 '수치가 게임 코드에 있을 때'). 그레이박스나 단계 기록만 적는 플레이 세션은 컨셉 없이도 적을 수 있다([플레이 기록 형식](../../playtest-verdict/references/playtest-record.md)의 `concept`).
+
+## 수치가 게임 코드에 있을 때
+
+밸런스 스킬은 `data/*.json`을 읽고 고친다. 게임의 수치가 코드나 게임 고유 파일에만 있으면, 밸런스 스킬을 쓰기 전에 수치를 `data/*.json`으로 옮긴다. 게임이 그 파일을 읽게 고칠지, 옮긴 값을 게임에 두고 테스트로 비교할지는 [progression-economy](../../progression-economy/SKILL.md)의 작업 순서 1번을 따르고, 어느 쪽으로 할지 사용자에게 묻는다. 등급·티어·출처처럼 게임에 없는 칸은 `data/*.json`에만 적고, 정하지 않은 값은 가정(`provenance`)으로 둔다.
 
 ## 방향을 바꾸려고 후보를 만들 때
 
