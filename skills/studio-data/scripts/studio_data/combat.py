@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 
 from . import common as c
+from . import enemies as en
 from . import crafting as cr
 from .common import add_issue as _err, did_you_mean
 
@@ -373,7 +374,7 @@ def stage_enemies(stage: dict, enemies: dict, errors: list, warnings: list) -> l
         out = []
         for eid in ids:
             if eid not in enemies:
-                _err(errors, "unknown_enemy", where, f"적 데이터에 없는 id입니다: {eid}")
+                _err(errors, "unknown_enemy", where, en.missing_text(eid, enemies) or f"적 데이터에 없는 id입니다: {eid}")
             elif not c.is_active(enemies[eid]):
                 _err(warnings, "cut_referenced", where, f"삭제(cut)된 적 {c.josa(eid, '을를')} 이 단계에 넣었습니다. 계산에서 뺍니다.", owner=where)
             else:

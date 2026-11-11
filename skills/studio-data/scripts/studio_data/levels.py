@@ -16,6 +16,7 @@ from operator import add
 from . import budget as bg
 from . import combat as cb
 from . import common as c
+from . import enemies as en
 from .common import add_issue as _err, did_you_mean
 
 DEFAULT_TOLERANCE = bg.DEFAULT_TOLERANCE
@@ -250,7 +251,7 @@ def _score(x: dict, lid: str, enemies: dict | None, threat: dict | None, errors:
     placed, known = {}, True
     for eid, n in x["enemies"].items():
         if enemies is not None and eid not in enemies:
-            _err(errors, "unknown_enemy", f"{lid}.{x['id']}", f"적 데이터에 없는 id입니다: {eid}.{did_you_mean(eid, enemies)}")
+            _err(errors, "unknown_enemy", f"{lid}.{x['id']}", en.missing_text(eid, enemies) or f"적 데이터에 없는 id입니다: {eid}.{did_you_mean(eid, enemies)}")
             total, known = None, False
             continue
         if enemies is not None and not c.is_active(enemies[eid]):

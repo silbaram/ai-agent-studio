@@ -159,6 +159,97 @@ class LeveledEnemies(Project):
         self.assertTrue(out.rstrip().endswith("→ PASS"), out[-300:])
 
 
+class TemplateEnemies(Project):
+    """350번: 틀로만 쓰는 기본 적(template)은 적으로 세지 않고 level_of의 기본으로만 쓴다."""
+
+    def templated(self, **extra):
+        def fn(d):
+            d["enemies"].append({"id": "wraith", "template": True, "rank": "elite", "stats": {"hp": 100, "damage": 1}, "growth": {"hp": 10}, **extra})
+            d["enemies"].append({"id": "wraith_l3", "level_of": "wraith", "level": 3, "zone": 2})
+        self.change("data/enemies.json", fn)
+
+    def test_a_template_is_not_an_enemy(self):
+        self.templated()
+        r = self.reports()["enemies"]
+        self.assertEqual(r["errors"], [])
+        self.assertNotIn("wraith", r["scores"])
+        self.assertIn("wraith_l3", r["scores"])
+        self.assertEqual(r["templates"], ["wraith"])
+        index = datasets.indexes(datasets.collect([self.root]))["enemies"]
+        self.assertNotIn("wraith", index)
+        self.assertEqual((index["wraith_l3"]["stats"]["hp"], index["wraith_l3"]["rank"]), (120, "elite"))
+
+    def test_a_template_does_not_move_the_zone_means(self):
+        before = self.reports()["enemies"]["zone_rank_mean_threat"]
+        self.change("data/enemies.json", lambda d: d["enemies"].append(
+            {"id": "ghost", "template": True, "rank": "boss", "zone": 1, "stats": {"hp": 1}, "growth": {"hp": 1}}))   # 구역을 적어도 세지 않는다
+        self.assertEqual(self.reports()["enemies"]["zone_rank_mean_threat"], before)
+
+    def test_template_rows_are_checked(self):
+        base = {"rank": "normal", "zone": 1, "stats": {"hp": 30}, "growth": {"hp": 5}}
+        cases = {"no growth": ([{"id": "a", "template": True, "rank": "normal", "stats": {"hp": 1}}], "growth"),
+                 "not true": ([{"id": "a", "template": "yes", **base}], "template"),
+                 "with level_of": ([dict(base, id="a"), {"id": "b", "template": True, "level_of": "a", "level": 2}], "template"),
+                 "same id": ([dict(base, id="a"), {"id": "a", "template": True, "stats": {"hp": 1}, "growth": {"hp": 1}}], "중복")}
+        for name, (raw, words) in cases.items():
+            with self.subTest(name):
+                errors = en.validate({"enemies": raw})["errors"]
+                self.assertTrue(any(words in e["message"] for e in errors), errors)
+
+    def test_a_csv_template_column(self):
+        folder = Path(self.tmp.name) / "csv"
+        folder.mkdir()
+        (folder / "enemies.csv").write_text(
+            "id,rank,zone,template,level,level_of,stat.hp,growth.hp\n"
+            "slime,normal,,true,,,30,5\n"
+            "slime_l2,,1,,2,slime,,\n", encoding="utf-8")
+        report = next(d["report"] for d in datasets.collect([folder]) if d["kind"] == "enemies")
+        self.assertEqual((report["errors"], report["templates"], list(report["scores"])), ([], ["slime"], ["slime_l2"]))
+
+    @unittest.skipUnless(shutil.which("node"), "node가 없습니다")
+    def test_the_viewer_marks_only_the_template(self):
+        self.templated(intent="틀 메모")
+        ds = next(d for d in datasets.collect([self.root]) if d["kind"] == "enemies")
+        html = (ROOT / "skills/studio-data/assets/viewer.html").read_text(encoding="utf-8")
+        script = html.split("<script>", 1)[1].split("/* ---------- 시작 ---------- */", 1)[0]
+        probe = ('const ds = JSON.parse(require("fs").readFileSync(0, "utf8")); const all = KINDS.enemies.entries(ds);'
+                 'console.log(JSON.stringify([all.find((e) => e.id === "wraith"), all.find((e) => e.id === "wraith_l3")]));')
+        out = subprocess.run(["node", "-e", SHIM + script + probe], input=json.dumps({"data": ds["data"], "report": ds["report"]}, ensure_ascii=False),
+                             capture_output=True, text=True, encoding="utf-8", check=True).stdout
+        tpl, row = json.loads(out)
+        self.assertTrue(tpl["template"])
+        self.assertNotIn("template", row)   # 실제 적에 틀 표시가 붙지 않는다
+        self.assertNotIn("intent", row)
+        self.assertEqual((row["rank"], row["stats"]["hp"]), ("elite", 120))
+
+    def test_the_viewer_inherits_the_same_fields_as_the_checker(self):
+        html = (ROOT / "skills/studio-data/assets/viewer.html").read_text(encoding="utf-8")
+        line = next(x for x in html.splitlines() if "const ENEMY_INHERITED" in x)
+        self.assertEqual(tuple(json.loads(line.split("=", 1)[1].split(";")[0])), en.INHERITED)
+
+    def test_a_direct_reference_to_a_template_is_explained(self):
+        self.templated()
+        self.change("data/combat.json", lambda d: d["stages"][0].update(enemies=["slime", "wraith"], zone=None))
+        self.change("data/levels.json", lambda d: d["levels"][0]["encounters"][0]["enemies"].__setitem__("wraith", 1))
+        self.change("data/economy.json", lambda d: d["stages"][0]["kills"].__setitem__("wraith", 1))
+        r = self.reports()
+        for kind in ("combat", "levels", "economy"):
+            with self.subTest(kind):
+                found = [e for e in r[kind]["errors"] if e["code"] == "unknown_enemy"]
+                self.assertTrue(found, r[kind]["errors"])
+                self.assertIn("틀", found[0]["message"])
+                self.assertIn("wraith_l3", found[0]["message"])
+                self.assertNotIn("없는 id", found[0]["message"])
+
+    def test_a_template_field_typo_is_reported_once_at_the_template(self):
+        self.templated(rank="boss2")
+        def more(d):
+            d["enemies"].append({"id": "wraith_l4", "level_of": "wraith", "level": 4, "zone": 2})
+        self.change("data/enemies.json", more)
+        errors = [e for e in self.reports()["enemies"]["errors"] if "rank" in e["message"]]
+        self.assertEqual([e["where"] for e in errors], ["wraith"], errors)
+
+
 class StageTargets(Project):
     """347번: 변형 단계처럼 처치가 원래 느린 기준 장비는 그 단계에 목표를 따로 적는다."""
 
@@ -189,6 +280,7 @@ class Docs(unittest.TestCase):
         text = (ROOT / "skills/progression-economy/references/data-format.md").read_text(encoding="utf-8")
         self.assertIn("`level_of`", text)
         self.assertIn("`growth`", text)
+        self.assertIn("`template`", text)
 
     def test_stage_targets_are_documented(self):
         text = (ROOT / "skills/combat-balance/references/combat-format.md").read_text(encoding="utf-8")

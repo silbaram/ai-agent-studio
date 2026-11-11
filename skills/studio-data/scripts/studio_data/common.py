@@ -232,7 +232,7 @@ def read_csv(path: Path, kind: str) -> list[dict]:
                     entry[key] = _num(raw) if raw else None
                 elif key in lists:
                     entry[key] = [p.strip() for p in raw.split(";") if p.strip()]
-                elif key == "unique_effect":
+                elif key in ("unique_effect", "template"):
                     entry[key] = raw.lower() in ("1", "true", "yes", "y")
                 elif key.startswith("provenance_"):
                     if raw != "":

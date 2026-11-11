@@ -266,6 +266,7 @@ const label = (kind, key, data) => ((data && data[kind + "_labels"] && data[kind
 const ui = (ds) => (state.ui[ds.path] ||= { q: "", group: "", status: "", onlyIssues: false });
 
 /* ---------- 종류별 정의 (보여 주기만, 검사 규칙 없음) ---------- */
+const ENEMY_INHERITED = ["name", "rank", "zone", "reward", "drop_table", "status", "provenance"];  // level_of 행이 기본 적에서 받는 칸. enemies.py의 INHERITED와 같다
 const KINDS = {
   concepts: {
     listKey: "concepts", groupName: "", custom: (ds, idx) => renderConcepts(ds, idx),
@@ -375,8 +376,10 @@ const KINDS = {
       const leveled = (ds.report && ds.report.leveled) || {};
       return raw.map((e) => {
         if (!("level_of" in e)) return e;
-        const { id, growth, level, ...inherited } = bases[e.level_of] || {};
-        return { ...inherited, ...e, stats: leveled[e.id] ? leveled[e.id].stats : {} };
+        const base = bases[e.level_of] || {};
+        const inherited = Object.fromEntries(ENEMY_INHERITED.filter((k) => base[k] !== undefined && base[k] !== null).map((k) => [k, base[k]]));
+        const own = Object.fromEntries(Object.entries(e).filter(([, v]) => v !== null));  // CSV의 빈 칸(null)은 물려받은 값을 덮지 않는다(검사기와 같다)
+        return { ...inherited, ...own, stats: leveled[e.id] ? leveled[e.id].stats : {} };
       });
     },
     groupOf: (e) => (e.zone !== undefined ? "zone_" + e.zone : "(구역 없음)"),
@@ -411,6 +414,7 @@ function nameColumn(ds) {
     const badges = [];
     if (e.unique_effect) badges.push(el("span", { class: "tag info", text: "고유 효과" }));
     if (e.level_of) badges.push(el("span", { class: "tag info", text: `${e.level_of} 레벨 ${e.level ?? "?"}` }));
+    if (e.template === true) badges.push(el("span", { class: "tag info", title: "level_of 행의 기본으로만 쓰고 적으로 세지 않는다", text: `틀 · 레벨 ${e.level ?? 1}` }));
     for (const x of issues) badges.push(el("span", { class: "tag " + x.level, title: x.message, text: LABEL.code[x.code] || x.code }));
     return [el("div", {}, el("span", { class: "nm", text: e.name || e.id || "(id 없음)" })),
             e.name ? el("div", { class: "mono muted", text: e.id }) : null,
