@@ -17,6 +17,7 @@ from . import datasets
 from .common import add_issue as _err, did_you_mean
 
 META = ".openspec.yaml"
+CMD = "python3 .claude/skills/studio-data/scripts/studio.py"   # 메시지에 적는 명령. 게임 프로젝트 폴더에서 Claude Code 설치본 기준이다
 KEY = "x-studio-systems"
 LINE = re.compile(rf"^{KEY}:(.*(?:\n[ \t]+.*)*)$", re.MULTILINE)
 DROPPED_KEY = "x-studio-dropped"   # 뺀 시스템의 지문. 다시 이으면 이 지문을 되살려 그 사이 바뀐 규칙을 놓치지 않는다
@@ -74,7 +75,7 @@ def _design(root: Path) -> dict:
                 if not (d["kind"] == "concepts" and e["code"] in RECORD_CODES)]   # 판정 기록의 오류는 범위를 흔들지 않는다
     if problems:
         name, first = problems[0]
-        _err(design["errors"], "design_invalid", name, f"설계에 오류 {len(problems)}개가 있어 범위를 믿을 수 없습니다. 첫 오류: [{first['code']}] {first['message']} studio.py check로 고칩니다.")
+        _err(design["errors"], "design_invalid", name, f"설계에 오류 {len(problems)}개가 있어 범위를 믿을 수 없습니다. 첫 오류: [{first['code']}] {first['message']} {CMD} check로 고칩니다.")
         return design
     report = found["report"]
     if report["brief_out_of_scope"] is None:
@@ -186,7 +187,7 @@ def _check_rule_refs(change: Path, texts: list[tuple[Path, str]], systems: dict,
                     continue
                 if _buildable(s):
                     fix = (f"proposal에 그 시스템이 없거나 브리프의 prototype.scope 밖이면 그 줄을 뺍니다. 이 변경이 그 시스템도 다루기로 했으면 "
-                           f"studio.py scope --link {change.name} {' '.join(sorted({*declared, sid}))}로 잇습니다.")
+                           f"{CMD} scope --link {change.name} {' '.join(sorted({*declared, sid}))}로 잇습니다.")
                 else:   # 이을 수 없는 시스템이다. --link가 거부한다
                     fix = (f"그 시스템은 이번에 만들지 않습니다(범위 {s['scope']}, 상태 {s.get('status', '없음')}). 그 줄을 빼고, 하지 않을 일이면 design.md의 "
                            "Non-Goals에 적습니다. 만들어야 하면 범위를 바꿀지 사용자에게 묻습니다.")
@@ -198,11 +199,12 @@ def _check_change(change: Path, design: dict, errors: list) -> None:
     text = meta.read_text(encoding="utf-8", errors="replace") if meta.is_file() else ""
     declared = _declared(text)
     if declared is None:
-        _err(errors, "change_unreadable", change.name, f"{KEY} 줄을 읽지 못했습니다. 손으로 적지 않고 studio.py scope --link로 다시 씁니다.")
+        _err(errors, "change_unreadable", change.name, f"{KEY} 줄을 읽지 못했습니다. 손으로 적지 않고 {CMD} scope --link로 다시 씁니다.")
         return
     specs = sorted((change / "specs").rglob("*.md"))
     if not declared and (specs or not SKIP_SPECS.search(text)):  # 명세가 있으면 동작을 바꾸는 변경이다
-        _err(errors, "change_without_system", change.name, f"어떤 시스템을 다루는 변경인지 밝히지 않았습니다. studio.py scope --link {change.name} <시스템 id>로 잇습니다.")
+        skip = "" if specs else f" 명세 없이 동작을 바꾸지 않는 변경이면 {META}에 skip_specs: true를 적습니다."
+        _err(errors, "change_without_system", change.name, f"어떤 시스템을 다루는 변경인지 밝히지 않았습니다. {CMD} scope --link {change.name} <시스템 id>로 잇습니다.{skip}")
     systems = design["systems"]
     for sid, mark in declared.items():
         s = systems.get(sid)
@@ -211,27 +213,36 @@ def _check_change(change: Path, design: dict, errors: list) -> None:
         elif not _buildable(s):
             _err(errors, "system_not_in_mvp", change.name, f"이번에 만들 시스템이 아닙니다: {sid}(범위 {s['scope']}, 상태 {s.get('status', '없음')}). 범위를 바꿀지 사용자에게 묻습니다.")
         elif stamp(s) != mark:
-            _err(errors, "design_changed", change.name, f"명세를 쓴 뒤 규칙이 바뀌었습니다: {sid}. 명세를 지금 규칙에 맞춘 뒤 studio.py scope --link {change.name} {' '.join(sorted(declared))} --refresh로 지문을 새로 찍습니다.")
+            _err(errors, "design_changed", change.name, f"명세를 쓴 뒤 규칙이 바뀌었습니다: {sid}. 어느 규칙인지는 git diff {SYSTEMS_FILE.as_posix()}로 봅니다. "
+                                                     f"명세를 지금 규칙에 맞춘 뒤 {CMD} scope --link {change.name} {' '.join(sorted(declared))} --refresh로 지문을 새로 찍습니다.")
     measured = [change / n for n in MEASURED if (change / n).is_file()] + specs
     texts = [(path, path.read_text(encoding="utf-8", errors="replace")) for path in measured]   # 훅이 편집마다 부르므로 한 번만 읽는다
     _check_texts(change, texts, design["out_of_scope"], errors)
     _check_rule_refs(change, texts, systems, declared, errors)   # 잇지 않은 변경은 change_without_system이 말하므로 이음은 보지 않는다
 
 
+def _empty(change: Path) -> bool:
+    return not any(p.is_file() for p in change.rglob("*"))
+
+
 def check(root: Path) -> dict:
-    """진행 중인 변경을 잰다. 보관한 변경은 이미 끝난 기록이라 보지 않는다."""
+    """진행 중인 변경을 잰다. 보관한 변경은 이미 끝난 기록이라 보지 않는다. 파일이 하나도 없는 폴더는 변경이 아니라 알리기만 한다."""
     design = _design(root)
-    changes = _changes(root)
+    found = _changes(root)
+    changes = [p for p in found if not _empty(p)]
+    notes = [f"빈 변경 폴더: {p.name}. 파일이 없어 재지 않습니다. 지웁니다." for p in found if p not in changes]
     errors = list(design["errors"])
     if not errors:
         for change in changes:
             _check_change(change, design, errors)
-    return {"changes": [p.name for p in changes], "errors": errors}
+    return {"changes": [p.name for p in changes], "errors": errors, "notes": notes}
 
 
 def print_report(report: dict) -> None:
     for e in report["errors"]:
         print(f"error [{e['code']}] {e['where']}: {e['message']}")
+    for note in report.get("notes", []):
+        print(f"참고: {note}")
     verdict = "FAIL" if report["errors"] else "PASS" if report["changes"] else "잴 변경 없음"
     print(f"전체: 변경 {len(report['changes'])}개 · 오류 {len(report['errors'])} → {verdict}")
 
@@ -245,7 +256,7 @@ def link(root: Path, change: str, ids: list[str], refresh: bool = False) -> tupl
     if change not in names or not meta.is_file():
         return 2, [f"진행 중인 변경이 아닙니다: {change}.{did_you_mean(change, names)}"]
     if not ids:
-        return 2, ["이을 시스템 id를 적습니다: studio.py scope --link <변경> <시스템 id> …"]
+        return 2, [f"이을 시스템 id를 적습니다: {CMD} scope --link <변경> <시스템 id> …"]
     design = _design(root)
     if design["errors"]:
         return 1, [f"[{e['code']}] {e['where']}: {e['message']}" for e in design["errors"]]
@@ -268,8 +279,11 @@ def link(root: Path, change: str, ids: list[str], refresh: bool = False) -> tupl
     text = _put_line(text, DROPPED, gone) if gone else DROPPED_WHOLE.sub("", text, count=1)
     meta.write_text(text, encoding="utf-8")
     dropped = sorted(set(before or {}) - set(ids))
+    added = sorted(set(ids) - set(before or {})) if before else []   # 처음 이을 때는 proposal을 따른다
     stale = [x for x, m in marks.items() if m != stamp(systems[x])]
     out = [f"{change}: {pairs}"] + ([f"뺀 시스템: {', '.join(dropped)}"] if dropped else [])
+    if added:
+        out.append(f"더한 시스템: {', '.join(added)}. 브리프 prototype.scope로 보아 이번 프로토타입 범위인지 사용자에게 확인합니다.")
     if stale:
         out.append(f"규칙이 바뀐 시스템의 지문은 그대로 두었습니다: {', '.join(stale)}. 명세를 지금 규칙에 맞춘 뒤 --refresh로 새로 찍습니다.")
     return 0, out
@@ -288,12 +302,24 @@ def _mvp_systems(data: dict) -> set:
 
 
 def concept_in_use(root: Path):
-    """시스템 설계가 잇는 컨셉. 승인 전이어도 지금 범위의 기준이다."""
+    """시스템 설계가 잇는 컨셉. 승인 전이어도 지금 범위의 기준이다. concept 키가 없으면 check처럼 승인된 컨셉 하나에 잇는다."""
     try:
         data = json.loads((root / SYSTEMS_FILE).read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return None
-    return data.get("concept") if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return None
+    if "concept" in data:
+        return data["concept"]
+    approved = sorted(set().union(*(_approved(d) for d in _concept_files(root))))
+    return approved[0] if len(approved) == 1 else None
+
+
+def _concept_files(root: Path) -> list[dict]:
+    """컨셉 파일의 내용. 훅이 편집마다 부르므로 흔한 이름(concepts.json)을 먼저 읽고, 없을 때만 프로젝트를 훑는다."""
+    named = [root / d / "concepts.json" for d in (".", *c.SUBFOLDERS)]
+    found = [datasets.read(p) for p in named if p.is_file()] or datasets.scan([root])
+    return [d["data"] for d in found if d.get("ok") and d.get("kind") == "concepts" and isinstance(d.get("data"), dict)]
 
 
 def _standing_briefs(data: dict, in_use) -> dict:
@@ -321,7 +347,7 @@ def widened(name: str, before: dict, after: dict, in_use=None) -> list[str]:
     승인을 내리는 것은 묻는다. 내린 동안의 편집은 묻지 않으므로 넓히는 길이 된다."""
     if name == "systems":
         found = [f"MVP 시스템 추가 {x}" for x in sorted(_mvp_systems(after) - _mvp_systems(before))]
-        if "concept" in after and after["concept"] != before.get("concept"):
+        if "concept" in after and after["concept"] != before.get("concept", in_use):   # 키가 없던 설계는 in_use에 이어져 있었다
             found.append(f"이을 컨셉을 {after['concept']}(으)로 바꿈")
         return found
     old = _standing_briefs(before, in_use)

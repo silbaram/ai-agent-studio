@@ -119,7 +119,7 @@
 | `session_beyond_records` | 경고 | 세션의 `runs`가 묶음 `runs`의 합보다 많거나, `players`에 묶음의 `players`에 없는 사람이 있음. 표본은 로그에 남은 판과 사람만 센다. 로그에 남기지 못한 판·사람이 맞으면 세션의 `acknowledged`에 이유를 적고, 그러면 세션 값을 센다 |
 | `source_missing` | 경고 | `logs`나 `source`의 파일이 프로젝트에 없음. 확장자로 끝나는 것만 파일로 본다(URL, `#` 앵커, 말은 보지 않는다). `./`와 역슬래시는 같은 경로로 읽고, 경로는 프로젝트 폴더(`data/playtests.json`이면 그 위 폴더) 기준이다 |
 | `computed_without_output` | 경고 | 관찰값의 `note`가 `[계산: …]`인데 `source`가 없거나 `logs`의 원본 기록임(`./`, 역슬래시, 앞뒤 공백이 달라도 같은 파일로 본다). 계산 출력을 결과 파일로 남겨 `source`로 둔다. 결과 파일은 `logs`에 넣지 않는다 |
-| `session_without_observations` | 경고 | 세션에 관찰값도 단계 기록도 없음 |
+| `session_without_observations` | 경고 | 세션에 관찰값, 단계 기록, 묶음(`groups`), 그레이박스 기록(`greybox`)이 모두 없음 |
 | `stage_counts_mismatch`, `unknown_reference` | 경고 | 단계 기록의 판 수가 이어지지 않음, 지금 데이터에 없는 id([calibration](calibration.md)) |
 
 - 컨셉 데이터를 함께 넘기지 않으면 컨셉·가설 참조를 확인하지 못해 `INCOMPLETE`다. 프로젝트 폴더(`check .`)로 검사한다.

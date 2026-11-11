@@ -14,7 +14,7 @@ import os
 import re
 import shlex
 from contextlib import redirect_stderr, redirect_stdout
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from . import common as c
 from . import datasets, scope
@@ -29,8 +29,14 @@ PYTHON = re.compile(r"^(python(3(\.\d+)?)?|py)(\.exe)?$", re.IGNORECASE)
 SHELL_META = re.compile(r"[;&|<>`$\n\r]")
 WATCHED = ("design", "data")
 PLANNING = ("design", "data", "docs", "reports", "playtests")  # 무엇을 만들지 적는 곳과 플레이 기록. 나머지는 게임을 만드는 파일로 본다
-ARCHIVE = re.compile(r"openspec[^\s;&|]*(?:\s+-\S+)*\s+archive\b"  # openspec archive. npx와 판 지정, 앞의 옵션을 포함한다
-                     r"|\b(?:mv|move|Move-Item)\s[^;&|\n]*(?:openspec[/\\]+changes[/\\]|archive[/\\])")  # /opsx:archive는 CLI 대신 폴더를 옮긴다
+OPENSPEC_ARCHIVE = r"openspec[^\s;&|]*(?:\s+-\S+)*\s+archive\b"  # openspec archive. npx와 판 지정, 앞의 옵션을 포함한다
+MOVE = re.compile(r"\b(?:mv|move|Move-Item)\s[^;&|\n]*(?:openspec[/\\]+changes[/\\]|(?-i:archive)[/\\])", re.IGNORECASE)  # /opsx:archive는 CLI 대신 폴더를 옮긴다. 대소문자를 가리지 않는 것은 openspec 쪽만이다
+ARCHIVE = re.compile(OPENSPEC_ARCHIVE + "|" + MOVE.pattern, re.IGNORECASE)
+TEXT_ONLY = {"grep", "egrep", "fgrep", "echo", "printf"}   # 인자를 글로만 다루는 명령. 그 인자 속 글은 보관이 아니다
+GIT_TEXT_ONLY = {"commit", "log", "show"}                 # git 바로 뒤에 올 때만. 앞에 옵션(-c, -C)이 있으면 보지 않는다
+PIPE_TEXT_ONLY = {"head", "tail", "wc", "sort", "uniq", "cat", "grep", "egrep", "fgrep"}   # 받은 글을 실행하지 않는 파이프 뒤 명령
+UNSURE = re.compile(r"\$\(|`|[<>]\(|\\[\s;&|'\"]")   # 명령 치환, 프로세스 치환(따옴표 안에서도 실행된다), 셸마다 다르게 읽는 이스케이프
+HELP = {"--help", "-h"}
 GUARDED = "|".join(WRITE_TOOLS + ("Bash",))
 SELF = (".claude/settings.json", ".claude/settings.local.json", ".claude/skills/studio-data", ".claude/skills/scope-guard")  # 고치면 범위 훅이 꺼진다
 HOOKS = (("PostToolUse", "Write|Edit|MultiEdit", "post-edit"), ("PreToolUse", GUARDED, "judge-guard"), ("PreToolUse", GUARDED, "scope-guard"))
@@ -158,7 +164,12 @@ def _target(payload: dict, project: Path) -> tuple[Path, Path] | None:
 
 
 # ---------- hook: scope-guard ----------
-def _builds_game(rel: Path) -> bool:
+def _folded(rel: Path) -> PurePosixPath:
+    """경로를 맞춰 볼 꼴. 대소문자를 가리지 않는 파일 시스템에서 Design/systems.json은 design/systems.json이다."""
+    return PurePosixPath(*(part.casefold() for part in rel.parts))
+
+
+def _builds_game(rel: PurePosixPath) -> bool:
     """게임을 만드는 파일인가. 메인 스펙은 보관의 결과이고, 그 밖의 계획 파일은 변경을 고칠 수 있게 열어 둔다."""
     if rel.parts[:2] == ("openspec", "specs"):
         return True
@@ -169,11 +180,11 @@ def _gate(project: Path) -> tuple[int, str, str]:
     try:
         errors = scope.check(project)["errors"]
     except Exception as exc:  # 훅이 죽어도 Claude Code는 막지 않는다. 재지 못한 것을 통과시키지 않는다
-        return 2, "", f"범위를 재지 못해 막았습니다: {exc!r}. studio.py scope로 원인을 봅니다.\n"
+        return 2, "", f"범위를 재지 못해 막았습니다: {exc!r}. {scope.CMD} scope로 원인을 봅니다.\n"
     if not errors:
         return 0, "", ""
     lines = "\n".join(f"[{e['code']}] {e['where']}: {e['message']}" for e in errors)
-    return 2, "", f"범위를 벗어난 변경이 있어 막았습니다.\n{lines}\n변경을 고친 뒤 studio.py scope로 확인합니다. 시스템은 studio.py scope --link로 잇습니다. 범위를 바꾸는 일은 사용자에게 묻습니다.\n"
+    return 2, "", f"범위를 벗어난 변경이 있어 막았습니다.\n{lines}\n변경을 고친 뒤 {scope.CMD} scope로 확인합니다. 시스템은 {scope.CMD} scope --link로 잇습니다. 범위를 바꾸는 일은 사용자에게 묻습니다.\n"
 
 
 def _edited_text(path: Path, tool: str, tool_input: dict) -> str | None:
@@ -191,13 +202,13 @@ def _edited_text(path: Path, tool: str, tool_input: dict) -> str | None:
     return text
 
 
-def _sets_scope(rel: Path) -> bool:
+def _sets_scope(rel: PurePosixPath) -> bool:
     """범위를 정하는 파일인가. 컨셉은 check가 찾는 자리면 어디든, 시스템 설계는 design/에만 둔다."""
     name, parent = rel.name.lower(), rel.parent.as_posix()
     return (name == "systems.json" and parent == "design") or (name == "concepts.json" and parent in (".", *c.SUBFOLDERS))
 
 
-def _is_change_meta(rel: Path) -> bool:
+def _is_change_meta(rel: PurePosixPath) -> bool:
     """진행 중인 변경의 메타데이터(openspec/changes/<변경>/.openspec.yaml). 보관한 변경은 한 단계 더 깊어 여기에 들지 않는다."""
     return len(rel.parts) == 4 and rel.parts[:2] == ("openspec", "changes") and rel.name == scope.META
 
@@ -211,8 +222,8 @@ def _guard_meta(path: Path, tool: str, tool_input: dict) -> tuple[int, str, str]
         after = None
     if after is not None and scope.meta_lines(after) == scope.meta_lines(before):
         return 0, "", ""
-    return 2, "", (f"{scope.KEY} 줄은 studio.py scope --link로만 씁니다. 손으로 지우거나 고친 뒤 다시 이으면 바뀐 규칙이 새 지문으로 덮입니다. "
-                   "시스템을 바꾸려면 scope --link <변경> <시스템 id> …를, 명세를 바뀐 규칙에 맞춘 뒤에는 --refresh를 붙여 씁니다.\n")
+    return 2, "", (f"{scope.KEY} 줄은 {scope.CMD} scope --link로만 씁니다. 손으로 지우거나 고친 뒤 다시 이으면 바뀐 규칙이 새 지문으로 덮입니다. "
+                   f"시스템을 바꾸려면 {scope.CMD} scope --link <변경> <시스템 id> …를, 명세를 바뀐 규칙에 맞춘 뒤에는 --refresh를 붙여 씁니다.\n")
 
 
 def _ask(reason: str) -> tuple[int, str, str]:
@@ -247,7 +258,7 @@ def _ask_if_widened(project: Path, path: Path, tool: str, tool_input: dict) -> t
     return _ask("범위를 넓히는 편집입니다. 사용자가 정할 일입니다: " + "; ".join(found)) if found else (0, "", "")
 
 
-def _guards_itself(rel: Path) -> bool:
+def _guards_itself(rel: PurePosixPath) -> bool:
     text = rel.as_posix()
     return any(text == x or text.startswith(x + "/") for x in SELF)
 
@@ -265,6 +276,97 @@ def _check_main_spec(project: Path, path: Path, tool: str, tool_input: dict) -> 
     return 2, "", f"[out_of_scope_in_spec] {path.name}: 브리프가 범위 밖이라고 한 항목을 메인 스펙에 넣습니다: {', '.join(found)}. 빼거나, 브리프를 바꿀지 사용자에게 묻습니다.\n"
 
 
+def _segments(command: str) -> list[tuple[str, str]] | None:
+    """셸 연결(; & | 줄바꿈)로 나눈 (앞의 연결 기호, 명령). 따옴표 안은 나누지 않는다. 따옴표가 닫히지 않으면 None."""
+    out, sep, buf, quote, i = [], "", "", None, 0
+    while i < len(command):
+        ch = command[i]
+        if ch == "\\" and quote != "'":
+            buf, i = buf + command[i:i + 2], i + 2
+            continue
+        if quote:
+            quote = None if ch == quote else quote
+        elif ch in "'\"":
+            quote = ch
+        elif ch in ";&|\n\r":
+            run = re.match(r"[;&|\n\r]+", command[i:]).group(0)
+            out.append((sep, buf))
+            sep, buf, i = run, "", i + len(run)
+            continue
+        buf += ch
+        i += 1
+    return None if quote else out + [(sep, buf)]
+
+
+def _unquoted(command: str) -> str:
+    """따옴표 밖의 글. 따옴표 안의 >는 글이고 밖의 >는 출력을 파일로 보낸다."""
+    out, quote, i = "", None, 0
+    while i < len(command):
+        ch = command[i]
+        if ch == "\\" and quote != "'":
+            i += 2
+            continue
+        if quote:
+            quote = None if ch == quote else quote
+        elif ch in "'\"":
+            quote = ch
+        else:
+            out += ch
+        i += 1
+    return out
+
+
+def _writes_file(command: str) -> bool:
+    """출력을 파일로 보내는가(>, >>, &>). 2>&1처럼 흐름만 잇는 것은 뺀다. 파일에 쓴 보관 명령은 나중에 실행할 수 있다."""
+    return ">" in re.sub(r"\d*>&\d+", "", _unquoted(command))
+
+
+def _words(text: str) -> list[str] | None:
+    try:
+        return shlex.split(text)
+    except ValueError:
+        return None
+
+
+def _text_only(words: list[str] | None) -> bool:
+    """인자를 글로만 다루는 명령인가. 명령 이름이 맨 앞에 그대로 있을 때만 믿는다(환경 변수, 경로, sudo 앞붙임은 보지 않는다)."""
+    if not words:
+        return False
+    return words[0] in TEXT_ONLY or (words[0] == "git" and len(words) > 1 and words[1] in GIT_TEXT_ONLY)
+
+
+def _asks_help(text: str) -> bool:
+    """openspec … archive 뒤에 --help나 -h가 있어 도움말만 내는가. 명령 글을 한 인자로 넘기는 꼴(bash -c "…"), 주석(#), -- 뒤는 믿지 않는다."""
+    words = _words(text)
+    if not words or MOVE.search(text) or any(re.search(r"\s", w) or w.startswith("#") for w in words):
+        return False
+    for i, word in enumerate(words):
+        if word.casefold() != "archive" or i == 0:
+            continue
+        program = next((w for w in reversed(words[:i]) if not w.startswith("-")), "")
+        if "openspec" in program.casefold():
+            rest = words[i + 1:]
+            return bool(HELP & set(rest[:rest.index("--")] if "--" in rest else rest))
+    return False
+
+
+def _archives(command: str) -> bool:
+    """변경을 보관하거나 옮기는 명령인가. 글을 찾거나 찍기만 하는 명령의 인자와 도움말은 뺀다.
+    명령 치환이 있거나, 출력을 파일로 보내거나, 파이프가 글을 실행할 수 있는 명령으로 가면 빼지 않는다. 모르면 보관으로 본다."""
+    command = re.sub(r"\\\r?\n", " ", command)   # 줄 잇기
+    if not ARCHIVE.search(command):
+        return False
+    segments = _segments(command)
+    if segments is None:
+        return True
+    lenient = not UNSURE.search(command) and not _writes_file(command) and all(
+        (_words(text) or [""])[0] in PIPE_TEXT_ONLY for sep, text in segments if "|" in sep and sep != "||")
+    for _, text in segments:
+        if ARCHIVE.search(text) and not (lenient and _text_only(_words(text))) and not _asks_help(text):
+            return True
+    return False
+
+
 def scope_guard(payload_text: str, project: Path | None = None) -> tuple[int, str, str]:
     """(종료 코드, 표준 출력, 표준 오류). OpenSpec과 시스템 설계가 다 있는 프로젝트에서만 관여한다."""
     payload = _payload(payload_text)
@@ -276,21 +378,22 @@ def scope_guard(payload_text: str, project: Path | None = None) -> tuple[int, st
     tool, tool_input = payload.get("tool_name"), payload["tool_input"]
     if tool == "Bash":
         command = tool_input.get("command")
-        return _gate(project) if isinstance(command, str) and ARCHIVE.search(command) else (0, "", "")
+        return _gate(project) if isinstance(command, str) and _archives(command) else (0, "", "")
     target = _target(payload, project) if tool in WRITE_TOOLS else None
     if target is None:
         return 0, "", ""
     path, rel = target
-    if _is_change_meta(rel):
+    key = _folded(rel)
+    if _is_change_meta(key):
         return _guard_meta(path, tool, tool_input)
-    if _sets_scope(rel):
+    if _sets_scope(key):
         return _ask_if_widened(project, path, tool, tool_input)
-    if _guards_itself(rel):
+    if _guards_itself(key):
         return _ask(f"범위 훅과 검사 도구를 바꾸는 편집입니다. 사용자가 정할 일입니다: {rel.as_posix()}")
-    if not _builds_game(rel):
+    if not _builds_game(key):
         return 0, "", ""
     result = _gate(project)
-    return _check_main_spec(project, path, tool, tool_input) if result[0] == 0 and rel.parts[:2] == ("openspec", "specs") else result
+    return _check_main_spec(project, path, tool, tool_input) if result[0] == 0 and key.parts[:2] == ("openspec", "specs") else result
 
 
 # ---------- hook: post-edit ----------

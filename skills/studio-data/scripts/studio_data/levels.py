@@ -470,13 +470,14 @@ def _check_kill_ratio(rows: list, by_stage: dict, warnings: list) -> None:
              "acknowledged에 적고, 아니면 조우 수나 기준 장비를 고칩니다.", owner=owner, part=row["id"])
 
 
-def _kill_check_note(listed: list, by_stage: dict, links: dict, economy, whole, dropped: set, astray: set) -> str | None:
+def _kill_check_note(listed: list, by_stage: dict, links: dict, economy, whole, dropped: set, astray: set) -> list:
     """처치 수를 어디까지 맞춰 봤는가. 재화 흐름은 없어도 미확인이 아니라서, 대조가 끝난 것처럼 읽히지 않게 따로 알린다.
-    분모는 전투 단계다. astray: combat_stage가 틀려 어떤 단계에도 잇지 못한 재화 흐름 단계의 id."""
+    분모는 전투 단계다. astray: combat_stage가 틀려 어떤 단계에도 잇지 못한 재화 흐름 단계의 id.
+    재화 흐름 단계 여럿이 한 전투 단계를 가리키면 합만 맞춰 봤으므로 그 단계들을 따로 말한다."""
     if not by_stage:
-        return None
+        return []
     if economy is None:
-        return "처치 수 대조: 재화 흐름을 함께 읽지 않아 하지 못했습니다."
+        return ["처치 수 대조: 재화 흐름을 함께 읽지 않아 하지 못했습니다."]
     stated = [k for k in listed if links.get(k, {}).get("kills")]
     done = [k for k in stated if k in by_stage and whole(k)]
     text = f"처치 수 대조: {len(done)}/{len(listed)} 단계"
@@ -492,7 +493,8 @@ def _kill_check_note(listed: list, by_stage: dict, links: dict, economy, whole, 
     strays = sorted(k for k in astray if k and k not in listed)
     if strays:
         text += f" · 이어지지 않은 재화 흐름 단계: {', '.join(strays)}"
-    return text
+    split = [f"{k}({', '.join(str(i) for i in links[k]['all'])})" for k in done if len(links[k]["all"]) > 1]   # 처치를 비워 둔 단계도 나눈 것이다
+    return [text] + ([f"처치 수는 합으로만 맞춰 봤습니다: {', '.join(split)}. 재화 흐름 단계마다 나누는 값은 직접 정합니다."] if split else [])
 
 
 def _gap_notes(rows: list, economy, unit: str, enemy_curve: dict | None) -> list:
@@ -893,8 +895,9 @@ def _judge(item: dict, record: dict | None) -> str:
     return "open"
 
 
-def _greybox_rows(lv: dict, log: dict | None, seen: set, errors: list, warnings: list) -> list:
-    """레벨의 그레이박스 확인 항목과 판정. log: 플레이 기록 {항목 id: 날짜순 기록}. 마지막 기록이 지금의 판정이다."""
+def _greybox_rows(lv: dict, log: dict | None, seen: set, homes: dict, errors: list, warnings: list) -> list:
+    """레벨의 그레이박스 확인 항목과 판정. log: 플레이 기록 {항목 id: 날짜순 기록}. 마지막 기록이 지금의 판정이다.
+    homes: 파일의 조우 {조우 id: 레벨 id}. 다른 레벨의 조우를 가리키면 오타가 아니라 자리가 틀린 것이다."""
     raw = lv.get("greybox", [])
     if not isinstance(raw, list):
         _err(errors, "schema", f"{lv['id']}.greybox", f"greybox는 확인 항목 {{id, check, encounter, expect}} 배열입니다: {_shown(raw)}")
@@ -916,7 +919,9 @@ def _greybox_rows(lv: dict, log: dict | None, seen: set, errors: list, warnings:
             _err(errors, "schema", at, f"expect는 기대 범위 [최소, 최대]이고 한쪽은 null로 비울 수 있습니다: {_shown(item['expect'])}")
             ok = False
         if "encounter" in item and item["encounter"] not in spots:
-            _err(errors, "unknown_encounter", at, f"이 레벨에 없는 조우입니다: {item['encounter']}.{did_you_mean(str(item['encounter']), spots)}")
+            home = homes.get(item["encounter"]) if isinstance(item["encounter"], str) else None
+            hint = f" 레벨 {home}의 조우입니다. 그 레벨의 greybox에 적습니다." if home else did_you_mean(str(item["encounter"]), spots)
+            _err(errors, "unknown_encounter", at, f"이 레벨에 없는 조우입니다: {item['encounter']}.{hint}")
             ok = False
         if not ok:
             continue
@@ -933,11 +938,13 @@ def _greybox_rows(lv: dict, log: dict | None, seen: set, errors: list, warnings:
     return rows
 
 
-def _greybox_note(rows: list, log: dict | None, played: dict | None = None) -> list:
-    """확인 목록을 어디까지 해 봤는가. 목록을 쓰지 않는 게임에는 말하지 않는다. 다만 목록 없이 그 단계를 플레이한 기록이 있으면 알린다."""
+def _greybox_note(rows: list, log: dict | None, played: dict | None = None, written: set | None = None) -> list:
+    """확인 목록을 어디까지 해 봤는가. 목록을 쓰지 않는 게임에는 말하지 않는다. 다만 목록 없이 그 단계를 플레이한 기록이 있으면 알린다.
+    written: 목록을 적은 레벨. 항목이 형식 오류로 모두 빠진 레벨은 오류로 알렸으므로 목록이 없는 레벨로 세지 않는다."""
     items = [x for lv in rows for x in lv["greybox"]]
+    written = written or set()
     if not items:
-        hit = [f"{lv['id']}({lv['stage']}, 세션 {played[lv['stage']]}개)" for lv in rows if lv["stage"] in (played or {})]
+        hit = [f"{lv['id']}({lv['stage']}, 세션 {played[lv['stage']]}개)" for lv in rows if lv["stage"] in (played or {}) and lv["id"] not in written]
         if not hit:
             return []
         return [f"그레이박스 확인 항목이 없습니다: 플레이 기록이 있는 레벨 {', '.join(hit)}. 확인할 값(분당 처치, 처음 죽은 시각 등)을 "
@@ -945,7 +952,7 @@ def _greybox_note(rows: list, log: dict | None, played: dict | None = None) -> l
                 "(kill_time_over_length)가 난 단계면 분당 처치를 항목으로 둡니다."]
     counts = {k: sum(x["status"] == k for x in items) for k in GREYBOX_LABEL}
     text = f"그레이박스 확인: {len(items)}개 · " + " · ".join(f"{GREYBOX_LABEL[k]} {n}" for k, n in counts.items() if n)
-    bare = [lv["id"] for lv in rows if not lv["greybox"]]
+    bare = [lv["id"] for lv in rows if not lv["greybox"] and lv["id"] not in written]
     if bare:
         text += f" · 항목이 없는 레벨: {', '.join(bare)}"
     return [text + (" · 플레이 기록을 함께 읽지 않았습니다" if log is None else "")]
@@ -961,7 +968,7 @@ def _limits_assumed(data: dict) -> bool:
     return isinstance(raw, dict) and any(k in raw for k in PACING_LIMITS) and c.provenance_kind(raw) in ("assumed", "unspecified")
 
 
-def _notes(budget, cfg, rows: list, kill_check: str | None, gaps: list) -> list:
+def _notes(budget, cfg, rows: list, kill_check: list, gaps: list) -> list:
     """결과를 읽을 때 알아야 할 문장. 경고가 아니다. check와 뷰어가 같은 문장을 쓴다. 곡선도 함께 내려간 단계는 의도를 이미 적은 것이라 말하지 않는다."""
     out = []
     if cfg is not None and c.provenance_kind(budget) in ("assumed", "unspecified"):
@@ -975,9 +982,7 @@ def _notes(budget, cfg, rows: list, kill_check: str | None, gaps: list) -> list:
         if s["kill_ratio"] is not None and s["kill_ratio"] <= 1 and s["kill_time_unknown"]:
             out.append(f"단계 {s['id']}: 처치 시간 / 길이가 {s['kill_ratio']:g}배 이상입니다. 처치 시간을 모르는 적({', '.join(s['kill_time_unknown'])})을 빼고 낸 하한이라 "
                        "1배를 넘는지 모릅니다. 그 적을 전투 계산의 그 단계에 넣으면 잽니다.")
-    if kill_check:
-        out.append(kill_check)
-    return out + gaps
+    return out + kill_check + gaps
 
 
 def validate(data: dict, enemies: dict | None = None, threat: dict | None = None, combat: dict | None = None, economy: dict | None = None,
@@ -1016,8 +1021,14 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
     active = [e for e in entries if c.is_active(e)]
     linked = {c.combat_link(e) for e in active}
     free = [k for k in order or [] if k not in linked]
+    homes = {x["id"]: e["id"] for e in active if isinstance(e.get("encounters"), list) for x in e["encounters"] if isinstance(x, dict) and isinstance(x.get("id"), str)}
+    written = {e["id"] for e in active if e.get("greybox", []) != []}
     for lv in active:
         _known_keys(lv, LEVEL_FIELDS, lv["id"], errors)
+        ack = lv.get("acknowledged")
+        if isinstance(ack, dict) and isinstance(ack.get("greybox_failed"), str):
+            _err(errors, "schema", lv["id"], "greybox_failed는 항목마다 {\"greybox_failed\": {항목 id: 이유}}로 확인합니다. "
+                                             "글 한 줄은 어떤 실패도 덮지 않습니다. 덮으면 나중에 실패하는 항목까지 가려지기 때문입니다.")
         link = lv.get("combat_stage")
         if link is not None and not isinstance(link, str):
             _err(errors, "schema", lv["id"], f"combat_stage는 전투 단계 id입니다: {link!r}")
@@ -1070,7 +1081,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
         info["threat"] = None if total is None or info["threat"] is None else round(info["threat"] + total, 4)
         rows.append({"id": lv["id"], "name": lv.get("name"), "stage": sid, "encounters": mine, "kills": {k: round(v, 4) for k, v in kills.items()},
                      "kills_partial": not complete, "threat": None if total is None else round(total, 4),
-                     "greybox": _greybox_rows(lv, greybox_log, checks, errors, warnings)})
+                     "greybox": _greybox_rows(lv, greybox_log, checks, homes, errors, warnings)})
     kills_tol = cfg["kills_tolerance"] if cfg else DEFAULT_TOLERANCE
 
     def counted(sid: str) -> bool:
@@ -1120,6 +1131,8 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
         summary["unverified"] = ["pacing(페이싱 기준)"] + summary["unverified"]
         walk_notes = ["페이싱 기준의 출처가 가정입니다. 경고가 없어도 리듬이 좋다는 뜻이 아닙니다.", *walk_notes]
     stage_rows = _stage_rows(listed, by_stage, order, stages, counted, kill_times, kill_hits, links, unit, enemy_curve)
+    for s in stage_rows:   # 옮길 처치 수를 받을 재화 흐름 단계가 있는가. 재화 흐름을 읽지 않았으면 모른다
+        s["in_economy"] = None if economy is None else s["id"] in links
     _check_kill_ratio(stage_rows, by_stage, warnings)
     astray = {i for link, info in links.items() if link not in (stages or {}) for i in info["ids"]} if stages is not None else set()
     threats = [lv["threat"] for lv in rows]
@@ -1132,7 +1145,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
         "kill_measure": "hits" if any(s["kill_hits"] is not None for s in stage_rows) and all(s["kill_time"] is None for s in stage_rows) else "time",
         "run_threat": round(sum(threats), 4) if threats and None not in threats and not dropped and not empty else None,
         "notes": _notes(budget, cfg, stage_rows, _kill_check_note(listed, by_stage, links, economy, counted, dropped, astray),
-                        _gap_notes(stage_rows, economy, unit, enemy_curve)) + pace_notes + walk_notes + _greybox_note(rows, greybox_log, played_stages),
+                        _gap_notes(stage_rows, economy, unit, enemy_curve)) + pace_notes + walk_notes + _greybox_note(rows, greybox_log, played_stages, written),
         "pacing": {"used": _pace_used(data, ordered), "time_unit": unit, "carry_levels": settings["carry_levels"], "strong_at": round(settings["strong_at"], 4),
                    "order": [lv["id"] for lv in ordered], **pacing},
         "encounters": computed,
@@ -1318,7 +1331,8 @@ def table(data: dict, result: dict, ids: list[str] | None = None) -> str:
     counted = [s for s in result["stages"] if s["kills"]]
     if counted:
         rows += ["", "재화 흐름 kills로 옮길 값(조우로 센 처치 수, 단계는 전투 단계 id, 파일에 쓰지 않음):"]
-        rows += [f"- {s['id']}: {json.dumps({k: int(v) if float(v).is_integer() else v for k, v in s['kills'].items()}, ensure_ascii=False)}" for s in counted]
+        rows += [f"- {s['id']}: {json.dumps({k: int(v) if float(v).is_integer() else v for k, v in s['kills'].items()}, ensure_ascii=False)}"
+                 + (" (재화 흐름에 없음)" if s.get("in_economy") is False else "") for s in counted]
     rows += ["", "위협도는 스탯으로 낸 설계 가정입니다. 실제 난이도나 재미를 판정하지 않습니다."]
     return "\n".join(rows)
 

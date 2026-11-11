@@ -31,7 +31,7 @@ openspec init --tools claude --language ko
   명세는 design/systems.json의 규칙 id를 적고 뜻을 길게 옮기지 않는다.
   수치의 원본은 data/의 파일이다. 명세에 수치를 베끼지 않고 파일을 가리킨다.
   태스크를 시작하기 전과 변경을 닫기 전에 python3 .claude/skills/studio-data/scripts/studio.py scope를 돌린다.
-  요구사항 설명마다 SHALL이나 MUST를 한 번 넣는다. 한국어 문장이면 끝에 (SHALL)을 붙인다. 예: 보석은 숙성 시간이 지나면 다음 단계로 익어야 한다(SHALL).
+  요구사항 설명마다 SHALL이나 MUST를 한 번 넣는다. 한국어 문장이면 끝에 (SHALL)을 붙인다. 예: 템포는 tempo.tempo_up을 따라야 한다(SHALL).
   사용자가 한 요청에서 /opsx:propose와 /opsx:apply(또는 /opsx:update와 /opsx:apply)를 이름으로 함께 시켰으면 그 요청을 확인으로 보고 이어서 한다. 범위를 넓히는 일은 따로 묻는다.
 ```
 
@@ -44,6 +44,19 @@ python3 .claude/skills/studio-data/scripts/studio.py setup claude .
 ```
 
 Claude Code를 다시 시작하면 적용된다.
+
+## 규칙을 가리키는 명세
+
+규칙은 `시스템.규칙` id로 가리키고 뜻은 `design/systems.json`에만 둔다. 규칙 글이 바뀌면 `scope`가 `design_changed`로 알린다. 명세에 뜻을 옮겨 적으면 그 글은 바뀌어도 아무도 모른다.
+
+```markdown
+### Requirement: 패링 템포
+템포는 `tempo.tempo_up`과 `tempo.tempo_down`을 따라야 한다(SHALL). 단계 수는 `data/`의 파일을 따른다.
+
+#### Scenario: 패링 성공
+- **WHEN** 플레이어가 패링에 성공하면
+- **THEN** `tempo.tempo_up`대로 템포가 바뀐다
+```
 
 ## OpenSpec의 함정
 

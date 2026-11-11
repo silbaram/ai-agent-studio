@@ -468,7 +468,7 @@ def cmd_scope(args) -> int:
         return 2
     project = project.resolve()
     if args.refresh and args.link is None:
-        print("--refresh는 --link와 함께 씁니다: studio.py scope --link <변경> <시스템 id> … --refresh", file=sys.stderr)
+        print(f"--refresh는 --link와 함께 씁니다: {scope.CMD} scope --link <변경> <시스템 id> … --refresh", file=sys.stderr)
         return 2
     if args.link is not None:
         code, lines = scope.link(project, args.link[0], args.link[1:], refresh=args.refresh)

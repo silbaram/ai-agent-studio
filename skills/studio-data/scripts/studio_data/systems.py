@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+import unicodedata
+
 from . import common as c
 from .common import add_issue as _err, did_you_mean
 
@@ -13,6 +15,12 @@ TOP_FIELDS = {"concept", "systems", "note"}
 SYSTEM_FIELDS = {"id", "name", "intent", "scope", "foundation", "pillars", "mvp", "out_of_scope", "rules", "depends_on", "status", "provenance", "acknowledged", "note"}
 RULE_FIELDS = {"id", "text", "note"}
 LINKS = (("pillars", "unknown_pillar", "필러"), ("mvp", "unknown_mvp", "MVP 항목"), ("out_of_scope", "unknown_out_of_scope", "범위 밖 항목"))  # 키, 오류 코드, 이름
+LISTS = ("pillars", "mvp", "out_of_scope", "depends_on")
+
+
+def _nfc(text: str) -> str:
+    """같아 보이는 문구를 같게 비교하려고 글자 조합을 맞춘다(NFD로 저장된 한글)."""
+    return unicodedata.normalize("NFC", text)
 
 
 def _pick_concept(data: dict, concepts: list, errors: list, warnings: list) -> dict | None:
@@ -30,7 +38,10 @@ def _pick_concept(data: dict, concepts: list, errors: list, warnings: list) -> d
                  "선택했던 컨셉을 되돌렸으면 다음 컨셉을 고를 때까지 그대로 두고, 고른 뒤 그 컨셉에 다시 잇습니다.")
         return found
     approved = [x for x in concepts if x.get("status") == "approved"]
-    if len(approved) != 1:
+    if not approved:
+        _err(errors, "schema", "concept", "승인된 컨셉이 없어 이을 브리프가 없습니다. concept-exploration에서 사용자가 컨셉 하나를 승인한 뒤 잇습니다.")
+        return None
+    if len(approved) > 1:
         _err(errors, "schema", "concept", f"승인된 컨셉이 {len(approved)}개라 고를 수 없습니다. 최상위에 concept(컨셉 id)을 적습니다.")
         return None
     return approved[0]
@@ -45,15 +56,15 @@ def _brief_items(concept: dict | None, errors: list) -> dict | None:
         _err(errors, "brief_missing", "concept", f"컨셉 {concept.get('id')}에 brief가 없습니다. concept-exploration으로 브리프를 먼저 씁니다.")
         return None
     pillars = brief.get("pillars")
-    texts = {k: [x for x in brief.get(k) or [] if isinstance(x, str)] if isinstance(brief.get(k) or [], list) else [] for k in ("mvp", "out_of_scope")}
-    return {"pillars": [p["name"] for p in pillars if isinstance(p, dict) and isinstance(p.get("name"), str)] if isinstance(pillars, list) else [], **texts}
+    texts = {k: [_nfc(x) for x in brief.get(k) or [] if isinstance(x, str)] if isinstance(brief.get(k) or [], list) else [] for k in ("mvp", "out_of_scope")}
+    return {"pillars": [_nfc(p["name"]) for p in pillars if isinstance(p, dict) and isinstance(p.get("name"), str)] if isinstance(pillars, list) else [], **texts}
 
 
 def _text_list(s: dict, key: str, errors: list) -> bool:
     v = s.get(key, [])
     if isinstance(v, list) and all(isinstance(x, str) and x.strip() for x in v):
         return True
-    _err(errors, "schema", s["id"], f"{c.josa(key, '은는')} 글의 배열입니다: {c.json_text(v)}")
+    _err(errors, "schema", s["id"], f"{key} 값은 빈 문자열이 없는 문자열 배열이어야 합니다: {c.json_text(v)}")
     return False
 
 
@@ -62,7 +73,7 @@ def _check_rules(s: dict, errors: list) -> bool:
     if not isinstance(raw, list):
         _err(errors, "schema", s["id"], f"rules는 규칙 {{id, text}} 배열입니다: {c.json_text(raw)}")
         return False
-    found = c.check_identity(raw, f"{s['id']}.rules", errors)
+    found = c.check_identity(raw, f"{s['id']}.rules", errors, qualified=True)
     ok = len(found) == len(raw)
     for _, r in found:
         text = c.unknown_keys_text(r, RULE_FIELDS)
@@ -82,12 +93,12 @@ def _check_system(s: dict, errors: list) -> bool:
         _err(errors, "schema", s["id"], text)
         ok = False
     if not isinstance(s.get("foundation", False), bool):
-        _err(errors, "schema", s["id"], f"foundation(기반 시스템인가)은 true나 false입니다: {c.json_text(s['foundation'])}")
+        _err(errors, "schema", s["id"], f"foundation(기반 시스템인가) 값은 true나 false입니다: {c.json_text(s['foundation'])}")
         ok = False
     if s.get("scope") not in SCOPES:
         _err(errors, "schema", s["id"], f"scope는 {', '.join(SCOPES)} 중 하나입니다: {c.json_text(s.get('scope'))}")
         ok = False
-    for key in ("pillars", "mvp", "out_of_scope", "depends_on"):
+    for key in LISTS:
         ok = _text_list(s, key, errors) and ok
     return _check_rules(s, errors) and ok
 
@@ -95,10 +106,26 @@ def _check_system(s: dict, errors: list) -> bool:
 def _check_links(s: dict, items: dict, errors: list) -> None:
     for key, code, label in LINKS:
         for x in s.get(key, []):
-            if x not in items[key]:
+            if _nfc(x) in items[key]:
+                if key == "out_of_scope" and s["scope"] != "out":
+                    _err(errors, "out_of_scope_claimed", s["id"], f"브리프가 범위 밖이라고 한 항목을 맡습니다: {x}. 브리프를 바꾸거나 범위를 out으로 둡니다.")
+            elif _nfc(x) in items["out_of_scope"]:
+                _err(errors, "out_of_scope_claimed", s["id"], f"브리프가 범위 밖이라고 한 항목을 {key}에 적었습니다: {x}. 가리키기만 하려면 out_of_scope로 옮기고 범위를 out으로 둡니다. "
+                     "만들려면 브리프를 바꿀지 사용자에게 묻습니다.")
+            else:
                 _err(errors, code, s["id"], f"브리프에 없는 {label}입니다: {x}.{did_you_mean(x, items[key])} 브리프의 문구 그대로 적습니다.")
-            elif key == "out_of_scope" and s["scope"] != "out":
-                _err(errors, "out_of_scope_claimed", s["id"], f"브리프가 범위 밖이라고 한 항목을 맡습니다: {x}. 브리프를 바꾸거나 범위를 out으로 둡니다.")
+
+
+def _check_repeats(s: dict, warnings: list) -> None:
+    """같은 항목을 두 번 적으면 표에 두 번 나온다."""
+    for key in LISTS:
+        seen, twice = set(), []
+        for x in s.get(key, []):
+            if _nfc(x) in seen and _nfc(x) not in twice:
+                twice.append(_nfc(x))
+            seen.add(_nfc(x))
+        if twice:
+            _err(warnings, "duplicate_item", s["id"], f"{key}에 같은 항목이 두 번 있습니다: {', '.join(twice)}. 하나만 남깁니다.", owner=s["id"])
 
 
 def _check_text(s: dict, items: dict, errors: list) -> None:
@@ -155,9 +182,13 @@ def _steps(live: dict) -> dict:
     while True:
         ready = [k for k, s in built.items() if k not in steps and all(d in steps or d not in built for d in s.get("depends_on", []))]
         if not ready:
-            return steps
+            break
         for k in ready:
             steps[k] = 1 + max([steps[d] for d in built[k].get("depends_on", []) if d in steps], default=0)
+    last = max((n for k, n in steps.items() if built[k]["scope"] == "mvp"), default=0)   # 나중 시스템은 MVP를 다 만든 뒤다
+    for k in sorted((k for k in steps if built[k]["scope"] == "later"), key=steps.get):
+        steps[k] = 1 + max([last] + [steps[d] for d in built[k].get("depends_on", []) if d in steps])
+    return steps
 
 
 def _cycle(live: dict, steps: dict) -> list:
@@ -179,11 +210,11 @@ def _check_coverage(live: dict, items: dict, warnings: list) -> None:
         owner = next((k for k, s in live.items() if c.ack_reason(s, code, part)), next(iter(live), None))
         _err(warnings, code, "brief", text, part=part, **({"owner": owner} if owner else {}))
 
-    served = {x for s in now for x in s.get("pillars", [])}
+    served = {_nfc(x) for s in now for x in s.get("pillars", [])}
     for p in items["pillars"]:
         if p not in served:
             issue("pillar_unserved", p, f"범위가 MVP인 시스템이 맡지 않는 필러입니다: {p}. 이대로 만들면 이 필러를 시험할 수 없습니다.")
-    claimed = {x for s in now for x in s.get("mvp", [])}
+    claimed = {_nfc(x) for s in now for x in s.get("mvp", [])}
     for m in items["mvp"]:
         if m not in claimed:
             issue("mvp_unserved", m, f"어떤 시스템도 맡지 않는 MVP 항목입니다: {m}.")
@@ -203,6 +234,8 @@ def validate(data: dict, concepts: list | None = None, concepts_unreadable: bool
     entries = [s for _, s in c.check_identity(raw, "systems", errors) if c.check_common(s, s["id"], errors)]
     known = {s["id"] for s in entries}
     good = [s for s in entries if _check_system(s, errors)]
+    kept, names = {id(s) for s in good}, {s["id"] for s in good}
+    dropped = [s["id"] if isinstance(s, dict) and isinstance(s.get("id"), str) and s["id"] not in names else f"systems[{i}]" for i, s in enumerate(raw) if id(s) not in kept]
     live = {s["id"]: s for s in good if c.is_active(s)}
     cut = {s["id"] for s in entries if not c.is_active(s)}
     missing: set = set()
@@ -220,6 +253,7 @@ def validate(data: dict, concepts: list | None = None, concepts_unreadable: bool
             _check_links(s, items, errors)
             _check_text(s, items, errors)
         _check_scope(s, warnings)
+        _check_repeats(s, warnings)
     lost = {s.get("id") for s in raw if isinstance(s, dict)} - set(live) - cut
     _check_dependencies(live, cut, known, lost, errors, warnings)
     steps = _steps(live)
@@ -234,7 +268,8 @@ def validate(data: dict, concepts: list | None = None, concepts_unreadable: bool
             for s in sorted(live.values(), key=lambda x: (steps.get(x["id"], 10 ** 6), order.index(x["scope"]), x["id"]))]
     return {
         "kind": "systems",
-        "count": len(entries),
+        "count": len(raw),   # 형식 오류로 빠진 시스템도 센다. 빠진 것은 dropped
+        "dropped": dropped,
         **c.summary_counts(entries),
         "unverified": [],   # 시스템과 규칙은 설계 결정이다. 측정으로 올릴 수치가 아니라 출처 게이트에 걸지 않는다
         "concept": concept.get("id") if concept else None,
@@ -255,6 +290,8 @@ def _title(x: dict) -> str:
 def print_extra(result: dict) -> None:
     if result["concept"]:
         print(f"연결한 컨셉: {result['concept']}")
+    if result["dropped"]:
+        print(f"형식 오류로 계산과 표에서 빠진 시스템: {', '.join(result['dropped'])}. 오류를 고치면 다시 셉니다.")
     for x in result["rows"]:
         step = f"{x['order']}단계" if x["order"] else "단계 없음"
         print(f"시스템 {_title(x)}: {SCOPES[x['scope']]} · {step} · 규칙 {x['rules']}개")
@@ -278,4 +315,5 @@ def print_counts(result: dict) -> None:
     tail = f"오류 {len(result['errors'])} · 경고 {len(result['warnings'])}"
     if result.get("acknowledged"):
         tail += f" · 확인한 경고 {len(result['acknowledged'])}"
-    print(f"시스템 {result['count']}개 · {tail}")
+    lost = f"(형식 오류로 빠짐 {len(result['dropped'])})" if result.get("dropped") else ""
+    print(f"시스템 {result['count']}개{lost} · {tail}")

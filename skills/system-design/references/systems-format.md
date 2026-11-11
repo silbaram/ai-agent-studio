@@ -52,22 +52,23 @@
 
 ## 계산
 
-- **만드는 순서**: 의존이 없으면 1, 있으면 의존하는 시스템의 가장 큰 순서 + 1이다. 범위 밖 시스템과 순환에 걸리거나 매달린 시스템은 순서가 없다. 표는 순서, 범위, id 순이다.
+- **만드는 순서**: 의존이 없으면 1, 있으면 의존하는 시스템의 가장 큰 순서 + 1이다. `later` 시스템은 `mvp` 시스템의 가장 큰 순서보다 뒤다. 범위 밖 시스템과 순환에 걸리거나 매달린 시스템은 순서가 없다. 표는 순서, 범위, id 순이다.
 - **필러와 MVP를 맡는다**: 범위가 `mvp`인 시스템만 센다. `later`로 미룬 시스템은 지금 만들 것을 맡지 못한다.
+- **문구를 잇는다**: 필러, MVP, 범위 밖 항목은 유니코드 정규화(NFC)를 맞춰 비교한다. 같아 보이는 글자는 같은 문구다.
 
 ## 검사
 
 | 코드 | 수준 | 조건 |
 |---|---|---|
-| `schema`, `duplicate_id` | 오류 | 형식 위반, 모르는 키, 시스템이나 규칙의 id 중복. 승인된 컨셉이 하나가 아닌데 `concept`이 없음 |
+| `schema`, `duplicate_id` | 오류 | 형식 위반, 모르는 키, 시스템이나 규칙의 id 중복(규칙은 `시스템.rules.규칙`에 알림). 승인된 컨셉이 하나가 아닌데 `concept`이 없음 |
 | `unknown_concept` | 오류 | 컨셉 데이터에 없는 컨셉 |
 | `brief_missing` | 오류 | 컨셉에 브리프가 없음 |
-| `unknown_pillar`, `unknown_mvp`, `unknown_out_of_scope` | 오류 | 브리프에 없는 문구 |
+| `unknown_pillar`, `unknown_mvp`, `unknown_out_of_scope` | 오류 | 브리프에 없는 문구. 브리프의 범위 밖 항목이면 이 코드 대신 `out_of_scope_claimed` |
 | `unknown_system` | 오류 | `depends_on`이 없는 시스템을 가리킴 |
 | `cut_referenced` | 경고 | 삭제된 시스템에 의존함, 삭제된 컨셉에 이음. 되돌리며 `cut`한 컨셉이면 다음 컨셉을 고를 때까지 그대로 둔다 |
 | `pillar_unserved` | 경고 | 범위가 `mvp`인 시스템이 맡지 않는 필러. 일부러 미룬 것이면 어느 시스템에서든 `{"pillar_unserved": {필러 이름: 이유}}`로 확인한다 |
 | `mvp_unserved` | 경고 | 범위가 `mvp`인 시스템이 맡지 않는 MVP 항목. 확인은 `pillar_unserved`와 같다 |
-| `out_of_scope_claimed` | 오류 | `out`이 아닌 시스템이 브리프의 범위 밖 항목을 맡거나, 이름·의도·규칙 글에 그 문구가 있음. 확인으로 끄지 못한다 |
+| `out_of_scope_claimed` | 오류 | `out`이 아닌 시스템이 브리프의 범위 밖 항목을 맡거나, 이름·의도·규칙 글에 그 문구가 있음. 범위와 상관없이 `pillars`나 `mvp`에 범위 밖 항목을 적음. 확인으로 끄지 못한다 |
 | `scope_dependency` | 오류 | `mvp`가 `later`나 `out`에, `later`가 `out`에 의존함. 그대로면 만들 수 없다 |
 | `dependency_cycle` | 오류 | 시스템이 서로 의존함. 순환을 이루는 시스템을 말한다 |
 | `concept_not_approved` | 경고 | 승인되지 않은 컨셉에 이음. 되돌린 컨셉이면 다음 컨셉을 고를 때까지 그대로 둔다 |
@@ -75,8 +76,9 @@
 | `scope_mismatch` | 경고 | `mvp`인데 MVP 항목이 없음(기반 시스템 제외), `mvp`가 아닌데 MVP 항목을 맡음, `out`인데 범위 밖 항목이 없음 |
 | `system_without_pillar` | 경고 | `out`이 아닌데 필러가 없음(기반 시스템 제외) |
 | `system_without_rules` | 경고 | `out`이 아닌데 규칙이 없음 |
+| `duplicate_item` | 경고 | `pillars`, `mvp`, `out_of_scope`, `depends_on`에 같은 항목이 두 번 있음 |
 
-형식 오류로 빠진 시스템이 있으면 그 시스템에 대한 의존을 없는 시스템으로 말하지 않고, `pillar_unserved`와 `mvp_unserved`를 보지 않는다.
+형식 오류가 난 시스템은 계산과 표에서 빠지고, `check`가 빠진 시스템과 그 수를 적는다. 시스템 수는 빠진 것도 센다. 상태별 수는 id와 상태를 읽은 시스템만 센다(형식 오류로 빠졌어도 id와 상태가 맞으면 센다). 빠진 시스템이 있으면 그 시스템에 대한 의존을 없는 시스템으로 말하지 않고, `pillar_unserved`와 `mvp_unserved`를 보지 않는다.
 
 미확인(`INCOMPLETE`): 컨셉을 함께 읽지 않음, 컨셉 파일을 읽지 못함, 계산한 시스템이 하나도 없음.
 

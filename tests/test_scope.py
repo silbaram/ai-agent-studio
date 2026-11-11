@@ -92,6 +92,7 @@ class Declaration(Project):
 
     def test_a_folder_without_metadata_counts_as_undeclared(self):
         (self.root / "openspec/changes/old-change").mkdir()
+        (self.root / "openspec/changes/old-change/proposal.md").write_text("템포\n", encoding="utf-8")   # 빈 폴더는 알리기만 한다(222)
         self.assertEqual(self.codes(), ["change_without_system"])
 
     def test_a_hand_written_form_is_an_error_not_a_pass(self):
