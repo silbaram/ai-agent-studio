@@ -142,21 +142,27 @@
 | `zone` | 예 | 처음 나오는 구역(1 이상의 정수). 뷰어에서 표를 나누는 기준. 전투 계산의 단계가 `zone`으로 적을 고를 때 기본은 이 값이 같은 적만이다(앞 구역의 적이 계속 나오면 그 단계에 `zone_rule: "up_to"`) |
 | `reward` | 아니오 | 처치 보상(0 이상). 어느 재화인지는 [economy-flow](../../economy-flow/SKILL.md)의 `economy.kill_reward`가 정한다 |
 | `drop_table` | 아니오 | 아이템 데이터의 `drop_tables` id |
+| `growth`, `level` | 아니오 | 레벨로 자라는 적의 레벨당 상승치(`{스탯: 수}`, `stats`에 있는 스탯만)와 `stats`의 레벨(기본 1). `level_of` 행이 쓴다 |
+| `level_of` | 아니오 | 같은 적의 다른 레벨. 기본 적 id와 `level`만 적는다(`{"id": "slime_l3", "level_of": "slime", "level": 3}`). 스탯은 기본 적의 `stats` + `growth` × (레벨 차이)로 계산하고, 적지 않은 칸(이름·등급·구역·보상·드랍·상태·출처)은 기본 적에서 받는다. 구역처럼 다른 칸은 그 행에 적는다. `stats`는 적지 않는다. 다른 데이터(전투 계산·레벨 구성·재화 흐름)는 이 행의 id로 가리킨다 |
 
 위협도 = Σ(스탯 × `threat_weights`), 지정하지 않은 스탯의 가중치는 1이다. 가중치는 설계 가정이며 실제 난이도 판정이 아니다. `data/budget.json`이 있으면 그 원가(`budget.enemies.costs`)를 `threat_weights` 대신 쓴다.
 
 | 코드 | 수준 | 조건 |
 |---|---|---|
 | `unknown_drop_table` | 오류 | 아이템 데이터에 없는 드랍 테이블을 가리킴 (`check`나 뷰어가 아이템 파일을 함께 읽은 경우) |
+| `unknown_enemy` | 오류 | `level_of`가 기본 적(`level_of`가 없는 행)을 가리키지 않음 |
+| `schema` | 오류 | 형식 위반. `growth`에 `stats`에 없는 스탯이 있음(오타). `level_of` 행: `stats`를 적음, `level`이 1 이상의 정수가 아님, 기본 적에 `growth`가 없음. 기본 적의 형식 오류 때문에 계산하지 못한 행은 따로 알리지 않는다 |
 | `zone_inversion` | 경고 | 같은 등급의 평균 위협도가 다음 구역에서 줄어듦 |
 | `rank_inversion` | 경고 | 같은 구역에서 상위 등급 평균 위협도가 하위 등급보다 높지 않음 |
 | `weights_ignored` | 경고 | `budget.json`이 있는데 `threat_weights`가 그 원가와 비율이 달라 무시함(원가를 쓴다) |
+
+`level_of` 행을 하나라도 계산하지 못하면 다른 데이터(전투 계산·레벨 구성·재화 흐름 등)의 적 참조는 없는 적으로 보고하지 않고 미확인으로 둔다(`INCOMPLETE`). 적 파일의 오류를 먼저 고친다.
 
 아이템 파일 없이 적 파일만 검사하거나 아이템 파일을 읽지 못하면 드랍 테이블 참조는 `drop_table_not_checked`에 "미확인"으로 남고, 이유(아이템 데이터 없음 / 아이템 파일 읽기 실패)가 함께 표시된다. 미확인이 있으면 `check`의 최종 판정은 PASS가 아니라 INCOMPLETE다.
 
 ## CSV
 
-스탯은 `stat.` 접두사 열, 출처는 `provenance_kind`·`provenance_source`·`provenance_note` 열로 쓴다. 강화의 `requires`는 `;`로 구분한다. UTF-8(BOM 허용). 드랍 테이블, 가중치, 표시 이름은 CSV로 담을 수 없으므로 필요하면 JSON을 쓴다.
+스탯은 `stat.` 접두사 열, 적의 레벨당 상승치는 `growth.` 접두사 열, 출처는 `provenance_kind`·`provenance_source`·`provenance_note` 열로 쓴다. 강화의 `requires`는 `;`로 구분한다. UTF-8(BOM 허용). 드랍 테이블, 가중치, 표시 이름은 CSV로 담을 수 없으므로 필요하면 JSON을 쓴다.
 
 아이템 예:
 

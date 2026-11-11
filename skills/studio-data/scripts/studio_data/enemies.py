@@ -25,6 +25,69 @@ def load(path: Path) -> dict:
     return data
 
 
+INHERITED = ("name", "rank", "zone", "reward", "drop_table", "status", "provenance")   # level_of 행이 적지 않으면 기본 적에서 받는 칸
+
+
+def _growth_problem(base: dict) -> str | None:
+    """기본 적의 growth가 쓸 수 있는가. 레벨당 상승치는 기본 적의 stats에 있는 스탯에만 붙는다(오타가 새 스탯이 되지 않게)."""
+    growth, stats = base.get("growth"), base.get("stats")
+    if not (isinstance(growth, dict) and all(isinstance(k, str) and c.is_number(v) for k, v in growth.items())):
+        return "growth는 레벨당 상승치 {스탯: 수}입니다."
+    extra = [k for k in growth if not (isinstance(stats, dict) and k in stats)]
+    if extra:
+        known = list(stats) if isinstance(stats, dict) else []
+        return f"growth의 {', '.join(extra)} 스탯이 stats에 없습니다.{''.join(c.did_you_mean(k, known) for k in extra)}"
+    return None
+
+
+def expand(raw, errors: list | None = None, blocked: list | None = None):
+    """level_of 행(같은 적의 다른 레벨)을 기본 적의 stats와 growth(레벨당 상승치)로 채운 목록. 다른 행은 그대로 둔다.
+    적지 않은 칸 중 INHERITED는 기본 적에서 받는다. 계산할 수 없는 행은 빼고 errors에 남긴다.
+    기본 적의 형식 오류 때문에 계산하지 못한 행은 그 행에서 이미 알리므로 errors 대신 blocked에 id만 남긴다.
+    검사기와 다른 데이터의 적 참조(datasets.indexes)가 같은 결과를 쓴다."""
+    if not isinstance(raw, list):
+        return raw
+    errors = [] if errors is None else errors
+    bases = {e["id"]: e for e in raw if isinstance(e, dict) and isinstance(e.get("id"), str) and "level_of" not in e}
+    out = []
+    for e in raw:
+        if not (isinstance(e, dict) and "level_of" in e):
+            out.append(e)
+            continue
+        where = e["id"] if isinstance(e.get("id"), str) else "enemies"
+        ref = e["level_of"]
+        base = bases.get(ref) if isinstance(ref, str) else None
+        if base is None:
+            others = [k for k in bases if k != where]
+            errors.append({"code": "unknown_enemy", "where": where,
+                           "message": f"level_of가 가리키는 기본 적이 없습니다: {ref!r}. 기본 적은 level_of가 없는 행입니다."
+                                      + (c.did_you_mean(ref, others) if isinstance(ref, str) else "")})
+            continue
+        growth = base.get("growth")
+        start = 1 if base.get("level") is None else base["level"]   # CSV의 빈 칸은 None이다
+        problem = None
+        if e.get("stats"):
+            problem = "level_of로 계산하는 행에는 stats를 적지 않습니다. 기본 적의 stats와 growth에서 계산합니다."
+        elif not c.is_int(e.get("level"), 1):
+            problem = f"level은 1 이상의 정수입니다: {e.get('level')!r}"
+        elif growth is None:
+            problem = f"기본 적 {base['id']}에 growth(레벨당 상승치 {{스탯: 수}})가 필요합니다."
+        elif _growth_problem(base) or not c.is_int(start, 1) or not isinstance(base.get("stats"), dict):
+            if blocked is not None:
+                blocked.append(where)
+            continue
+        if problem:
+            errors.append({"code": "schema", "where": where, "message": problem})
+            continue
+        steps = e["level"] - start
+        stats = {k: v + growth.get(k, 0) * steps if c.is_number(v) else v for k, v in base["stats"].items()}
+        row = {k: base[k] for k in INHERITED if base.get(k) is not None}
+        row.update({k: v for k, v in e.items() if k != "stats" and v is not None})
+        row["stats"] = {k: round(v, 4) if isinstance(v, float) else v for k, v in stats.items()}
+        out.append(row)
+    return out
+
+
 def zone_key(zone: int) -> str:
     return f"zone_{zone}"
 
@@ -48,6 +111,13 @@ def check_schema(enemies: list, errors: list) -> list[dict]:
             errors.append({"code": "schema", "where": where, "message": "drop_table은 문자열이어야 합니다."})
             ok = False
         ok = c.check_stats(e, where, errors) and ok
+        problem = _growth_problem(e) if e.get("growth") is not None and "level_of" not in e else None
+        if problem:
+            errors.append({"code": "schema", "where": where, "message": problem})
+            ok = False
+        if e.get("level") is not None and "level_of" not in e and not c.is_int(e["level"], 1):
+            errors.append({"code": "schema", "where": where, "message": f"level은 1 이상의 정수입니다: {e['level']!r}"})
+            ok = False
         ok = c.check_common(e, where, errors) and ok
         if ok:
             valid.append(e)
@@ -86,7 +156,7 @@ def validate(data: dict, drop_tables: dict | None = None, items_unreadable: bool
     if not isinstance(raw, list):
         errors.append({"code": "schema", "where": "enemies", "message": "enemies 배열이 필요합니다."})
         raw = []
-    enemies = check_schema(raw, errors)
+    enemies = check_schema(expand(raw, errors), errors)
     weights, source = c.pick_weights(data.get("threat_weights"), weights, [e for e in enemies if c.is_active(e)],
                                      "threat_weights", "budget.enemies.costs", warnings)
     threat = {e["id"]: round(c.weighted(e, weights), 4) for e in enemies}
@@ -109,6 +179,7 @@ def validate(data: dict, drop_tables: dict | None = None, items_unreadable: bool
         "count": len(enemies),
         **c.summary_counts(enemies),
         "scores": threat,
+        "leveled": {e["id"]: {"of": e["level_of"], "level": e["level"], "stats": e["stats"]} for e in enemies if "level_of" in e},
         "weights_source": source,
         "zone_rank_mean_threat": zone_means,
         "drop_table_not_checked": sorted(unchecked),
