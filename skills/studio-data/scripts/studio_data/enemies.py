@@ -40,6 +40,60 @@ def _growth_problem(base: dict) -> str | None:
     return None
 
 
+class Index(dict):
+    """다른 데이터가 가리키는 적 {id: 항목}. templates: 틀 id → 그 틀을 쓰는 level_of 행 id. 틀을 직접 가리킬 때 안내에 쓴다."""
+    templates: dict = {}
+
+
+def missing_text(eid: str, index) -> str | None:
+    """적 참조가 틀(template)을 가리키면 그 안내. 아니면 None(호출하는 쪽이 '없는 id'로 알린다)."""
+    rows = getattr(index, "templates", {}).get(eid)
+    if rows is None:
+        return None
+    return (f"{c.josa(eid, '은는')} 틀(template)이라 적으로 세지 않습니다. 그 레벨로 나오는 행"
+            + (f"({', '.join(rows)})" if rows else "(level_of 행)") + "을 가리킵니다.")
+
+
+def _base_problem(e: dict) -> str | None:
+    """level_of의 기본이 되는 적의 칸 중 적혀 있는데 틀린 값. 레벨 행이 그 값을 물려받아 행마다 같은 오류가 나지 않게 기본 적에서 한 번 막는다."""
+    if "rank" in e and e["rank"] not in RANKS:
+        return f"rank는 {', '.join(RANKS)} 중 하나입니다: {e['rank']!r}"
+    if e.get("zone") is not None and not c.is_int(e["zone"], 1):
+        return f"zone은 1 이상의 정수여야 합니다: {e['zone']!r}"
+    if e.get("reward") is not None and not (c.is_number(e["reward"]) and e["reward"] >= 0):
+        return f"reward는 0 이상의 수여야 합니다: {e['reward']!r}"
+    if e.get("drop_table") is not None and not isinstance(e["drop_table"], str):
+        return "drop_table은 문자열이어야 합니다."
+    if e.get("level") is not None and not c.is_int(e["level"], 1):
+        return f"level은 1 이상의 정수입니다: {e['level']!r}"
+    if not isinstance(e.get("stats"), dict) or not all(isinstance(k, str) and c.is_number(v) for k, v in e["stats"].items()):
+        return "stats는 {이름: 수} 형태여야 합니다."
+    return _growth_problem(e) if e.get("growth") is not None else None
+
+
+def is_template(e) -> bool:
+    """틀로만 쓰는 기본 적. 게임에 그 레벨로 나오지 않고 level_of 행의 기본으로만 쓴다. 적 목록·위협도·다른 데이터의 참조에 들지 않는다."""
+    return isinstance(e, dict) and e.get("template") is True and "level_of" not in e
+
+
+def check_templates(raw: list, errors: list) -> list[str]:
+    """틀 행의 형식. 틀은 적 검사(check_schema)를 거치지 않으므로 여기서 id·스탯·상승치를 본다. 쓸 수 있는 틀의 id를 돌려준다."""
+    others = {e.get("id") for e in raw if isinstance(e, dict) and not is_template(e)}
+    good = []
+    for _, e in c.check_identity([e for e in raw if is_template(e)], "enemies", errors):
+        where = e["id"]
+        if where in others:
+            errors.append({"code": "duplicate_id", "where": where, "message": "id가 중복됩니다(틀과 적이 같은 id)."})
+            continue
+        problem = (_base_problem(e) if e.get("growth") is not None
+                   else "틀(template)에는 growth(레벨당 상승치 {스탯: 수})가 필요합니다. level_of 행의 기본으로만 쓰입니다.")
+        if problem:
+            errors.append({"code": "schema", "where": where, "message": problem})
+        elif c.check_common(e, where, errors):
+            good.append(where)
+    return good
+
+
 def expand(raw, errors: list | None = None, blocked: list | None = None):
     """level_of 행(같은 적의 다른 레벨)을 기본 적의 stats와 growth(레벨당 상승치)로 채운 목록. 다른 행은 그대로 둔다.
     적지 않은 칸 중 INHERITED는 기본 적에서 받는다. 계산할 수 없는 행은 빼고 errors에 남긴다.
@@ -51,6 +105,8 @@ def expand(raw, errors: list | None = None, blocked: list | None = None):
     bases = {e["id"]: e for e in raw if isinstance(e, dict) and isinstance(e.get("id"), str) and "level_of" not in e}
     out = []
     for e in raw:
+        if is_template(e):
+            continue   # 틀은 적이 아니다
         if not (isinstance(e, dict) and "level_of" in e):
             out.append(e)
             continue
@@ -64,7 +120,7 @@ def expand(raw, errors: list | None = None, blocked: list | None = None):
                                       + (c.did_you_mean(ref, others) if isinstance(ref, str) else "")})
             continue
         growth = base.get("growth")
-        start = 1 if base.get("level") is None else base["level"]   # CSV의 빈 칸은 None이다
+        start = 1 if base.get("level") is None else base.get("level")   # CSV의 빈 칸은 None이다
         problem = None
         if e.get("stats"):
             problem = "level_of로 계산하는 행에는 stats를 적지 않습니다. 기본 적의 stats와 growth에서 계산합니다."
@@ -72,7 +128,7 @@ def expand(raw, errors: list | None = None, blocked: list | None = None):
             problem = f"level은 1 이상의 정수입니다: {e.get('level')!r}"
         elif growth is None:
             problem = f"기본 적 {base['id']}에 growth(레벨당 상승치 {{스탯: 수}})가 필요합니다."
-        elif _growth_problem(base) or not c.is_int(start, 1) or not isinstance(base.get("stats"), dict):
+        elif _base_problem(base):
             if blocked is not None:
                 blocked.append(where)
             continue
@@ -115,6 +171,11 @@ def check_schema(enemies: list, errors: list) -> list[dict]:
         if problem:
             errors.append({"code": "schema", "where": where, "message": problem})
             ok = False
+        if "template" in e and e["template"] is not False:   # template: true인 기본 적은 expand에서 빠져 여기 오지 않는다
+            message = ("level_of 행은 틀(template)이 될 수 없습니다. 틀은 level_of가 없는 기본 적입니다." if "level_of" in e
+                       else f"template은 true(틀로만 쓰는 기본 적)나 false입니다: {e['template']!r}")
+            errors.append({"code": "schema", "where": where, "message": message})
+            ok = False
         if e.get("level") is not None and "level_of" not in e and not c.is_int(e["level"], 1):
             errors.append({"code": "schema", "where": where, "message": f"level은 1 이상의 정수입니다: {e['level']!r}"})
             ok = False
@@ -156,6 +217,7 @@ def validate(data: dict, drop_tables: dict | None = None, items_unreadable: bool
     if not isinstance(raw, list):
         errors.append({"code": "schema", "where": "enemies", "message": "enemies 배열이 필요합니다."})
         raw = []
+    templates = check_templates(raw, errors)
     enemies = check_schema(expand(raw, errors), errors)
     weights, source = c.pick_weights(data.get("threat_weights"), weights, [e for e in enemies if c.is_active(e)],
                                      "threat_weights", "budget.enemies.costs", warnings)
@@ -180,6 +242,7 @@ def validate(data: dict, drop_tables: dict | None = None, items_unreadable: bool
         **c.summary_counts(enemies),
         "scores": threat,
         "leveled": {e["id"]: {"of": e["level_of"], "level": e["level"], "stats": e["stats"]} for e in enemies if "level_of" in e},
+        "templates": templates,
         "weights_source": source,
         "zone_rank_mean_threat": zone_means,
         "drop_table_not_checked": sorted(unchecked),

@@ -191,7 +191,13 @@ def _index(entries: list[dict], kind: str) -> dict | None:
     loaded = [d for d in entries if d["ok"] and d["kind"] == kind]
     if not loaded or any(not isinstance(d["data"].get(kind), list) for d in loaded):
         return None
-    out: dict = {}
+    out: dict = enemies.Index() if kind == "enemies" else {}
+    if kind == "enemies":   # 틀을 직접 가리키면 '없는 적' 대신 그 틀의 레벨 행을 안내한다
+        out.templates = {e["id"]: [] for d in loaded for e in d["data"][kind] if enemies.is_template(e) and isinstance(e.get("id"), str)}
+        for d in loaded:
+            for e in d["data"][kind]:
+                if isinstance(e, dict) and e.get("level_of") in out.templates and isinstance(e.get("id"), str):
+                    out.templates[e["level_of"]].append(e["id"])
     for d in loaded:
         rows = d["data"][kind]
         if kind == "enemies":   # 레벨로 자라는 적은 계산한 스탯으로. 계산하지 못한 행이 있으면 참조를 미확인으로 둔다(없는 적으로 연쇄 보고하지 않는다)

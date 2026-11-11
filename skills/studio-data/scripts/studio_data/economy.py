@@ -11,6 +11,7 @@ import math
 
 from . import combat as cb
 from . import common as c
+from . import enemies as en
 from . import crafting as cr
 from . import meta_sim
 from .common import add_issue as _err, did_you_mean
@@ -183,7 +184,7 @@ def _stage_income(s: dict, settings: dict, refs: dict, errors: list, warnings: l
             for eid, n in kills.items():
                 e = refs["enemies"].get(eid)
                 if e is None:
-                    _err(errors, "unknown_enemy", where, f"적 데이터에 없는 id입니다: {eid}")
+                    _err(errors, "unknown_enemy", where, en.missing_text(eid, refs["enemies"]) or f"적 데이터에 없는 id입니다: {eid}")
                     ok = False
                 elif not c.is_active(e):
                     _err(warnings, "cut_referenced", where, f"삭제(cut)된 적 {eid}의 처치를 셉니다. 수입에서 뺍니다.", owner=where)
