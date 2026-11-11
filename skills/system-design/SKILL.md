@@ -56,14 +56,14 @@ description: "Lists the systems a game needs with their rules and dependencies, 
 python3 .claude/skills/studio-data/scripts/studio.py check . --table systems
 ```
 
-순서는 의존이 없는 시스템이 1이고, 의존하는 시스템보다 하나 뒤다. 같은 숫자는 나란히 만들 수 있다. 1단계가 시험할 수 없을 만큼 크면 시스템을 나눈다.
+순서를 세는 법은 [형식 문서의 '계산'](references/systems-format.md#계산)에 있다. 같은 숫자는 나란히 만들 수 있다. 1단계가 시험할 수 없을 만큼 크면 시스템을 나눈다.
 
 ### 6. 경고를 처리한다
 
 - `pillar_unserved`: 범위가 MVP인 시스템이 맡지 않는 필러다. 이대로 만들면 그 필러를 시험할 수 없다. 시스템에 잇거나, 필러가 맞는지 사용자와 다시 본다. 일부러 뒤로 미룬 것이면 어느 시스템의 `acknowledged`에든 `{"pillar_unserved": {필러 이름: 이유}}`로 적는다.
 - `mvp_unserved`: 어떤 시스템도 맡지 않는 MVP 항목이다. 확인하는 길은 위와 같다.
 - `scope_mismatch`: 시스템의 범위가 브리프와 다르다. 브리프를 바꾸는 일이면 사용자에게 묻는다.
-- `out_of_scope_claimed`(오류): 범위 밖 항목을 만들 시스템의 항목이나 글에 넣었다. 확인으로 끄지 못한다. 브리프를 바꾸려면 사용자에게 묻는다.
+- `out_of_scope_claimed`(오류): 범위 밖 항목을 시스템이 맡거나 글에 넣었다. 확인으로 끄지 못한다. 브리프를 바꾸려면 사용자에게 묻는다.
 - `scope_dependency`(오류): MVP 시스템이 나중이나 범위 밖 시스템에 기댄다. 그대로면 만들 수 없다. 범위를 맞추거나 의존을 끊는다.
 - `dependency_cycle`(오류): 먼저 만들 수 있는 쪽이 없다. 의존을 끊거나 한 시스템으로 합친다.
 - `concept_not_approved`: 승인되지 않은 컨셉에 이었다. 브리프가 확정되기 전이라 연결도 확정이 아니다. 선택했던 컨셉을 되돌렸으면([playtest-verdict](../playtest-verdict/references/changes.md#컨셉을-되돌릴-때)의 '컨셉을 되돌릴 때') 다음 컨셉을 고를 때까지 연결과 데이터를 그대로 두고, 고른 뒤 그 컨셉에 다시 잇는다. 되돌리며 `cut`했으면 같은 경우에 `cut_referenced`가 난다.

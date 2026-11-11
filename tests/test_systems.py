@@ -245,7 +245,7 @@ class Dependencies(unittest.TestCase):
 
     def test_a_dependency_on_an_out_system_does_not_block_the_order(self):
         r = run(system(), system("hud", "later", mvp=[], depends_on=["net"]), system("net", "out", pillars=[], mvp=[], out_of_scope=["멀티플레이"]))
-        self.assertEqual(row(r, "hud")["order"], 1)   # 범위 의존 오류는 따로 난다
+        self.assertEqual(row(r, "hud")["order"], 2)   # 범위 의존 오류는 따로 난다. 나중 시스템이라 MVP(1단계) 뒤다
 
     def test_mvp_comes_before_later_within_a_step(self):
         r = run(system("a", "later", mvp=[]), system("b"))

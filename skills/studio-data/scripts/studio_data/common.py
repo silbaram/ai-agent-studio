@@ -27,6 +27,7 @@ KIND_LABELS = {"concepts": "컨셉", "systems": "시스템 설계", "items": "�
 LIST_KEYS = {"combat": ("stages",), "budget": ("archetypes",), "crafting": ("enhance", "recipes"), "economy": ("stages", "purchases"),
              "growth": ("choices", "builds")}  # 항목 배열의 키가 종류 이름과 다른 경우
 ACK_CHECKED = ("levels", "economy", "systems")  # 확인이 그 파일 안에서만 쓰이는 종류. 아이템·적의 확인은 다른 파일의 검사가 읽는다
+TARGET_ONLY_ACK_CODES = ("greybox_failed",)  # 대상마다만 확인하는 경고. 한 줄로 덮으면 나중에 실패하는 대상까지 가려진다
 LEVEL_ACK_CODES = ("curve_unused_point", "enemy_not_in_stage", "enemy_unplaced", "greybox_failed", "kill_time_over_length", "kills_differ", "kills_not_linked", "long_stretch", "purchase_off_span",
                    "reward_drought", "strong_run", "time_gap", "time_outside_stage")  # 레벨 구성이 내는 경고. 테스트가 검사기와 맞춰 본다
 ECONOMY_ACK_CODES = ("currency_piles_up", "duplicate_purchase", "enhance_gap", "gear_before_purchase", "kill_not_in_stage", "meta_income_differs", "meta_order_differs",
@@ -108,9 +109,14 @@ def valid_date(v) -> bool:
         return False
     return True
 
+def _shown(v):
+    """사람에게 보이는 수. 부동소수 오차를 지운다. 범위 비교도 이 수로 해서 보이는 수와 판정이 어긋나지 않게 한다."""
+    return round(v, 6) if isinstance(v, float) else v
+
+
 def num_text(v) -> str:
     """수를 사람이 읽는 형태로(부동소수 오차를 지운다). 1.2000000000000002 → 1.2"""
-    return f"{round(v, 6):g}" if isinstance(v, float) else str(v)
+    return f"{_shown(v):g}" if isinstance(v, float) else str(v)
 
 
 def match_text(filt) -> str:
@@ -127,7 +133,8 @@ def valid_range(rng) -> bool:
 
 
 def out_of_range(v, rng) -> bool:
-    lo, hi = rng
+    """보이는 수(num_text)로 견준다. 0.1 × 3이 범위 [0, 0.3] 밖으로 나오지 않게 한다."""
+    v, (lo, hi) = _shown(v), (_shown(x) for x in rng)
     return (lo is not None and v < lo) or (hi is not None and v > hi)
 
 
@@ -356,8 +363,9 @@ def effective_kind(entry: dict) -> str:
     return next(k for k in ("measured", "computed", "decided") if k in kinds)   # 측정이 있으면 측정, 다음 계산, 모두 결정이면 결정
 
 
-def check_identity(entries: list, label: str, errors: list) -> list[tuple[int, dict]]:
-    """객체이고 id 규칙을 지키며 중복되지 않은 항목만 (원래 위치, 항목)으로 돌려준다."""
+def check_identity(entries: list, label: str, errors: list, qualified: bool = False) -> list[tuple[int, dict]]:
+    """객체이고 id 규칙을 지키며 중복되지 않은 항목만 (원래 위치, 항목)으로 돌려준다.
+    qualified: 중복 오류의 자리를 '{label}.{id}'로 적는다(시스템 안의 규칙처럼 id가 밖에서 겹칠 수 있을 때)."""
     out, seen = [], set()
     for idx, entry in enumerate(entries):
         where = f"{label}[{idx}]"
@@ -369,7 +377,7 @@ def check_identity(entries: list, label: str, errors: list) -> list[tuple[int, d
             errors.append({"code": "schema", "where": where, "message": f"id는 소문자·숫자·밑줄만 씁니다: {eid!r}"})
             continue
         if eid in seen:
-            errors.append({"code": "duplicate_id", "where": eid, "message": "id가 중복됩니다."})
+            errors.append({"code": "duplicate_id", "where": f"{label}.{eid}" if qualified else eid, "message": "id가 중복됩니다."})
             continue
         seen.add(eid)
         out.append((idx, entry))
@@ -446,11 +454,14 @@ def valid_acknowledged(ack) -> bool:
 def ack_reason(entry: dict, code: str, part: str | None = None) -> str | None:
     """항목이 그 경고 코드를 확인한 이유. 다른 파일의 검사기(예: 스탯 예산)가 항목의 확인을 읽을 때 같은 규칙을 쓴다.
     이유가 {대상: 이유}이면 경고의 대상(part)이 맞을 때만 확인으로 본다. 문자열 이유는 그 항목의 그 코드 경고 전부를 덮는다.
+    TARGET_ONLY_ACK_CODES의 경고는 대상마다만 확인하므로 문자열 이유를 읽지 않는다(형식 오류는 그 검사기가 알린다).
     형식이 틀린 확인은 무시한다. 그 오류는 항목이 있는 파일의 검사(apply_acknowledged)가 보고한다."""
     ack = entry.get("acknowledged") if isinstance(entry, dict) else None
     if not (valid_acknowledged(ack) and code in ack):
         return None
     reason = ack[code]
+    if isinstance(reason, str) and code in TARGET_ONLY_ACK_CODES:
+        return None
     if isinstance(reason, dict):
         reason = reason.get(part) if part is not None else None
     return reason.strip() if reason else None
