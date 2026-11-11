@@ -37,7 +37,7 @@
 |---|---|---|
 | `id` | 예 | 소문자·숫자·밑줄. `pt_날짜_순번`을 권한다. `[측정: data/playtests.json#id]`의 출처가 된다 |
 | `date` | 예 | 달력에 있는 `YYYY-MM-DD` 날짜 |
-| `concept` | 예 | 시험한 컨셉 id (`design/concepts.json`) |
+| `concept` | 예 | 시험한 컨셉 id (`design/concepts.json`). `observations`, `events`, `notes[].hypotheses`가 없는 세션(그레이박스·단계 기록만)은 빼도 된다. 뺀 세션은 판정의 근거가 되지 못한다 |
 | `build` | 예 | 빌드를 다시 만들 수 있는 이름. 보통 커밋 해시 |
 | `game_build` | 아니오 | 프로토타입이 판 로그에 남긴 빌드 지문(예: `cfg721feeb5`). 가설의 `builds`는 `build`나 이 값과 맞춘다 |
 | `players` | 예 | 플레이한 사람 이름 배열. 같은 사람은 같은 이름으로 쓴다(사람 수를 센다). 근거 세션의 빌드가 섞이면 판정 줄에 `빌드 2개(…)`가 붙는다. 합쳐 세도 되는지 판정 `reason`에 적는다 |
@@ -101,7 +101,7 @@
 | `unknown_concept`, `unknown_hypothesis` | 오류 | 컨셉 데이터에 없는 컨셉·가설 id. 가설에 id가 없으면 그렇게 알린다 |
 | `verdict_without_evidence` | 오류 | 버팀·틀림인데 근거 세션이 없음 |
 | `unknown_session` | 오류 | 판정이 가리킨 세션이 기록에 없음 |
-| `session_concept_mismatch` | 오류 | 판정이 다른 컨셉의 세션을 가리킴 |
+| `session_concept_mismatch` | 오류 | 판정이 다른 컨셉의 세션이나 `concept` 없이 적은 세션을 가리킴 |
 | `observation_missing` | 오류 | 버팀·틀림인데 근거 세션에 그 가설의 관찰값이 없음 |
 | `duplicate_verdict` | 오류 | 한 가설에 `cut`이 아닌 판정이 둘 이상 |
 | `verdict_session_wrong_build` | 오류 | 버팀·틀림인데, 가설의 `builds`가 있고 근거 세션의 `build`와 `game_build`가 어느 것도 거기에 없음 |

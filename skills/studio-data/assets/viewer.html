@@ -208,7 +208,7 @@ const LABEL = {
           unknown_drop_table: "없는 드랍 테이블", missing_field: "빈 항목", signature_too_small: "구조 축 부족",
           evidence_missing: "근거 없음", reject_unsupported: "탈락 근거 부족", unknown_origin: "없는 출신",
           brief_missing: "브리프 없음", brief_incomplete: "브리프 불완전", near_duplicate: "구조 중복",
-          axis_collapse: "축 쏠림", dominant_policy: "단순 전략 지배", next_test_missing: "다음 시험 없음", hypothesis_id_missing: "가설 id 없음", hypothesis_sample_missing: "가설의 최소 표본 없음",
+          axis_collapse: "축 쏠림", dominant_policy: "단순 전략 지배", next_test_missing: "다음 시험 없음", existing_game_many: "기존 게임 표시가 여럿", hypothesis_id_missing: "가설 id 없음", hypothesis_sample_missing: "가설의 최소 표본 없음",
           rejected_but_active: "탈락인데 활성", signature_missing_axis: "필수 축 없음", unknown_axis: "모르는 축",
           fixed_axis_mismatch: "고정 축과 다름", unknown_policy: "모르는 전략", untagged_number: "태그 없는 수치", criteria_tag_mismatch: "칸마다 다른 잣대 태그", criteria_history_mismatch: "기준 이력이 맞지 않음", criteria_history_invalid: "기준 이력 형식", criteria_points_to_data: "기준이 데이터 파일을 가리킴",
           item_unchecked: "아이템 미확인", requirement_unchecked: "선행 조건 미확인",
@@ -704,7 +704,7 @@ function renderConcepts(ds, idx) {
         class: "res " + (s && s.result), title: (s && s.evidence) || "근거 없음 (미확인)",
         text: `${(s && s.policy) || "?"}: ${LABEL.result[s && s.result] || (s && s.result) || "?"}` })) : dash();
       const sig = e.signature && typeof e.signature === "object" ? Object.entries(e.signature).map(([k, v]) => el("span", { class: "sig", text: `${k}: ${v}` })) : dash();
-      const origin = !e.origin || e.origin === "root" ? "처음" : (ids.has(e.origin) ? `${names[e.origin]}에서 변이` : e.origin);
+      const origin = e.existing_game === true ? "기존 게임" : !e.origin || e.origin === "root" ? "처음" : (ids.has(e.origin) ? `${names[e.origin]}에서 변이` : e.origin);
       const memo = e.hard_reject && e.hard_reject.reason ? "탈락: " + e.hard_reject.reason : (e.notes || "");
       const cost = e.cost && e.cost.level ? `${LABEL.cost[e.cost.level] || e.cost.level}: ${e.cost.reason || ""}` : "";
       return el("tr", { "data-id": e.id || "", class: [e.status === "cut" ? "cut" : "", hasErr ? "has-err" : hasWarn ? "has-warn" : ""].join(" ").trim() },

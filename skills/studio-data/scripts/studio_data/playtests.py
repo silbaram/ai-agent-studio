@@ -243,6 +243,13 @@ def _check_greybox(s: dict, where: str, errors: list) -> bool:
     return ok
 
 
+def _hypothesis_ties(s: dict) -> list[str]:
+    """세션에서 컨셉의 가설에 대어 보는 칸. 하나도 없으면 concept를 적지 않아도 된다."""
+    notes = s.get("notes")
+    return ([k for k in ("observations", "events") if s.get(k)]
+            + (["notes의 hypotheses"] if isinstance(notes, list) and any(isinstance(x, dict) and x.get("hypotheses") for x in notes) else []))
+
+
 def check_session(s: dict, errors: list, warnings: list) -> bool:
     where, ok = s["id"], True
     if not valid_date(s.get("date")):
@@ -251,10 +258,16 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
     unknown = unknown_keys_text(s, SESSION_FIELDS)
     if unknown:
         _err(errors, "schema", where, f"{unknown} 빠진 값은 판정에 들어가지 않습니다.")
-    for f in ("concept", "build"):
-        if not _text(s.get(f)):
-            _err(errors, "schema", where, f"{josa(f, '이가')} 비어 있습니다." + (" 빌드는 커밋 해시나 빌드 이름입니다." if f == "build" else ""))
-            ok = False
+    ties = _hypothesis_ties(s)
+    if "concept" not in s and not ties:   # 그레이박스·단계 기록만 적은 세션은 가설에 대어 보지 않는다
+        pass
+    elif not _text(s.get("concept")):
+        _err(errors, "schema", where, f"{josa('concept', '이가')} 비어 있습니다."
+             + (f" {josa(', '.join(ties), '은는')} 컨셉의 가설에 대어 보므로 컨셉 id를 적습니다." if "concept" not in s else ""))
+        ok = False
+    if not _text(s.get("build")):
+        _err(errors, "schema", where, f"{josa('build', '이가')} 비어 있습니다. 빌드는 커밋 해시나 빌드 이름입니다.")
+        ok = False
     if "game_build" in s and not _text(s["game_build"]):
         _err(errors, "schema", where, f"game_build는 프로토타입이 판 로그에 남긴 빌드 지문입니다(예: cfg721feeb5): {s['game_build']!r}")
         ok = False
@@ -587,6 +600,8 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
             _check_files(s, root, warnings)
             _check_values(s, root, warnings, numbers)
         observed = [o["hypothesis"] for o in s.get("observations", [])] + [h for x in s.get("notes") or [] for h in x.get("hypotheses") or []]
+        if "concept" not in s:
+            continue
         if concepts is None:
             unchecked += 1
         elif s["concept"] not in concepts:
@@ -630,8 +645,9 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                 if not any(isinstance(x, dict) and x.get("id") == sid for x in raw):
                     _err(errors, "unknown_session", where, f"플레이 기록에 없는 세션입니다: {sid}")
                 continue  # 형식 오류가 있는 세션은 그 세션 쪽에서 이미 보고했다
-            if s["concept"] != v["concept"]:
-                _err(errors, "session_concept_mismatch", where, f"세션 {josa(sid, '은는')} {s['concept']}의 기록입니다.")
+            if s.get("concept") != v["concept"]:
+                _err(errors, "session_concept_mismatch", where, f"세션 {josa(sid, '은는')} {s['concept']}의 기록입니다." if "concept" in s
+                     else f"세션 {josa(sid, '은는')} 컨셉 없이 적은 기록(그레이박스·단계 기록)이라 판정의 근거가 아닙니다.")
                 continue
             found.append(s)
         if v["result"] in DECIDED and found and not any(o["hypothesis"] == v["hypothesis"] for s in found for o in s.get("observations", [])):
