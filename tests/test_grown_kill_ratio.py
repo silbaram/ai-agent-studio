@@ -31,7 +31,8 @@ class StageRow(unittest.TestCase):
     def test_the_range_over_builds_is_given(self):
         s = stage(self.over(grown_kills=grown({"blade": 0.5, "wall": 0.8})))
         self.assertEqual(s["kill_ratio"], 1.77)
-        self.assertEqual(s["grown_ratio"], {"low": 0.88, "high": 1.41, "builds": 2, "unknown": []})
+        self.assertEqual(s["grown_ratio"], {"by_build": {"blade": 0.88, "wall": 1.41}, "unknown": []})   # 최소·최대와 그 빌드는 by_build에서 낸다
+        self.assertEqual(lv._spread(s["grown_ratio"]), (0.88, 1.41, "blade", "wall"))
 
     def test_the_warning_is_kept_and_names_the_growth_range(self):
         r = self.over(grown_kills=grown({"blade": 0.5, "wall": 0.5}))
@@ -79,7 +80,7 @@ class StageRow(unittest.TestCase):
                 grown_kills=grown({"blade": 0.5}, "hits_to_kill"))
         s = stage(r)
         self.assertIsNotNone(s["hits_per_unit"])
-        self.assertEqual(s["grown_ratio"]["low"], round(s["kill_hits"] * 0.5 / s["duration"], 2))
+        self.assertEqual(s["grown_ratio"]["by_build"]["blade"], round(s["kill_hits"] * 0.5 / s["duration"], 2))
         self.assertIn("타/", lv._grown_text(s))
 
 
@@ -87,10 +88,12 @@ class Text(unittest.TestCase):
     ROW = {"kill_ratio": 1.2, "time_unit": "초", "kill_time_unknown": []}
 
     def test_one_build_or_equal_values_show_one_number(self):
-        self.assertEqual(lv._grown_text(dict(self.ROW, grown_ratio={"low": 0.9, "high": 0.9, "builds": 1, "unknown": []})), "0.90배")
+        g = {"by_build": {"a": 0.9, "b": 0.9}, "unknown": []}
+        self.assertEqual(lv._grown_text(dict(self.ROW, grown_ratio=g)), "0.90배")
 
-    def test_a_range_is_low_to_high(self):
-        self.assertEqual(lv._grown_text(dict(self.ROW, grown_ratio={"low": 0.5, "high": 0.9, "builds": 2, "unknown": []})), "0.50~0.90배")
+    def test_a_range_names_the_low_and_high_builds_341(self):
+        g = {"by_build": {"a": 0.5, "b": 0.9}, "unknown": []}
+        self.assertEqual(lv._grown_text(dict(self.ROW, grown_ratio=g)), "0.50(a)~0.90(b)배")
 
     def test_no_value_is_a_dash(self):
         self.assertEqual(lv._grown_text(dict(self.ROW, grown_ratio=None)), "–")
@@ -110,11 +113,12 @@ class Project(unittest.TestCase):
 
     def test_the_sample_stages_get_the_growth_range(self):
         rows = {s["id"]: s for s in self.report()["stages"]}
-        self.assertEqual(rows["zone_1"]["grown_ratio"]["low"], rows["zone_1"]["kill_ratio"])   # 첫 단계는 레벨 1이라 성장이 없다
+        self.assertEqual(lv._spread(rows["zone_1"]["grown_ratio"])[0], rows["zone_1"]["kill_ratio"])   # 첫 단계는 레벨 1이라 성장이 없다
         z2 = rows["zone_2"]
-        self.assertEqual(z2["grown_ratio"]["builds"], 3)
-        self.assertLess(z2["grown_ratio"]["high"], z2["kill_ratio"])
-        self.assertLessEqual(z2["grown_ratio"]["low"], z2["grown_ratio"]["high"])
+        low, high, _, _ = lv._spread(z2["grown_ratio"])
+        self.assertEqual(len(z2["grown_ratio"]["by_build"]), 3)
+        self.assertLess(high, z2["kill_ratio"])
+        self.assertLessEqual(low, high)
 
     def test_the_table_has_the_column(self):
         code, out = run_cli("check", self.root, "--table", "levels")
@@ -122,7 +126,7 @@ class Project(unittest.TestCase):
         head = next(x for x in out.splitlines() if x.startswith("| 단계 |"))
         self.assertIn("성장 반영(들어설 때 레벨)", head)
         row = next(x for x in out.splitlines() if x.startswith("| zone_2 |"))
-        self.assertRegex(row, r"\| 0\.\d\d~0\.\d\d배 \|")
+        self.assertRegex(row, r"\| 0\.\d\d\(\w+\)~0\.\d\d\(\w+\)배 \|")
 
     def test_without_growth_the_column_is_left_out(self):
         (self.root / "data/growth.json").unlink()
@@ -215,7 +219,8 @@ class ViewerCells(unittest.TestCase):
     def test_the_viewer_cells_match_the_check_table(self):
         shown = self.same_as_check()
         self.assertIn("성장 반영(들어설 때 레벨)", shown[0])
-        self.assertRegex(shown[2][7], r"^0\.\d\d~0\.\d\d배$")
+        self.assertRegex(shown[2][7], r"^0\.\d\d\(\w+\)~0\.\d\d\(\w+\)배$")
+        self.assertIn("성장 반영(나갈 때 레벨)", shown[0])
 
     def test_without_growth_the_viewer_has_no_column(self):
         (self.root / "data/growth.json").unlink()
@@ -223,9 +228,9 @@ class ViewerCells(unittest.TestCase):
 
     def test_a_lower_bound_and_hits_read_the_same_in_both(self):
         ds = next(d for d in datasets.collect([self.root]) if d["kind"] == "levels")
-        cases = [{"grown_ratio": {"low": 0.5, "high": 0.7, "builds": 2, "unknown": ["x"]}},
-                 {"grown_ratio": {"low": 0.5, "high": 0.5, "builds": 1, "unknown": ["x"]}, "kill_time_unknown": ["x"]},
-                 {"grown_ratio": {"low": 1.0, "high": 1.25, "builds": 2, "unknown": []}, "kill_ratio": None, "kill_time": None, "kill_hits": 9.0, "hits_per_unit": 1.5}]
+        cases = [{"grown_ratio": {"by_build": {"a": 0.7, "b": 0.5, "c": 0.7}, "unknown": ["x"]}},
+                 {"grown_ratio": {"by_build": {"a": 0.5, "b": 0.5}, "unknown": ["x"]}, "kill_time_unknown": ["x"]},
+                 {"grown_ratio": {"by_build": {"a": 1.25, "b": 1.0, "c": 1.0}, "unknown": []}, "kill_ratio": None, "kill_time": None, "kill_hits": 9.0, "hits_per_unit": 1.5}]
         for over in cases:
             with self.subTest(over):
                 ds["report"]["stages"][1].update(over)

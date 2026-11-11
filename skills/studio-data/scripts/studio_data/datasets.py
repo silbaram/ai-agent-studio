@@ -347,19 +347,22 @@ def _kill_costs(entries: list[dict], metric: str) -> dict | None:
     return out
 
 
-def _grown_kills(entries: list[dict]) -> tuple[dict | None, bool]:
-    """(판 안 성장이 낸 빌드마다의 처치 시간과 타수 {빌드: {단계: {적: {time_to_kill, hits_to_kill}}}}, 오류가 있어 쓰지 않았는가).
-    레벨 구성보다 먼저 검사하므로 보고서가 있다. 오류가 있으면 빠진 선택지 없이 계산한 값이 아니라서 쓰지 않는다."""
+def _grown_kills(entries: list[dict]) -> tuple[dict | None, dict | None, bool]:
+    """(판 안 성장이 낸 빌드마다의 처치 시간과 타수 {빌드: {단계: {적: {time_to_kill, hits_to_kill}}}}, 같은 형식의 나갈 때 레벨 값,
+    오류가 있어 쓰지 않았는가). 레벨 구성보다 먼저 검사하므로 보고서가 있다. 오류가 있으면 빠진 선택지 없이 계산한 값이 아니라서 쓰지 않는다."""
     report = next((d.get("report") for d in entries if d["ok"] and d["kind"] == "growth"), None)
     if not report or not report["builds"]:
-        return None, False
+        return None, None, False
     if report["errors"]:
-        return None, True
-    out: dict = {}
-    for bid, info in report["builds"].items():
-        for r in info["rows"]:
-            out.setdefault(bid, {}).setdefault(r["stage"], {})[r["enemy"]] = {"time_to_kill": r["time_to_kill"], "hits_to_kill": r["hits_to_kill"]}
-    return out, False
+        return None, None, True
+
+    def by_build(key: str) -> dict:
+        out: dict = {}
+        for bid, info in report["builds"].items():
+            for r in info[key]:
+                out.setdefault(bid, {}).setdefault(r["stage"], {})[r["enemy"]] = {"time_to_kill": r["time_to_kill"], "hits_to_kill": r["hits_to_kill"]}
+        return out
+    return by_build("rows"), by_build("exit_rows"), False
 
 
 def validate_all(entries: list[dict]) -> list[dict]:
@@ -431,11 +434,11 @@ def validate_all(entries: list[dict]) -> list[dict]:
                                                meta=_meta_configs(d))
             elif d["kind"] == "levels":
                 enemy_side = (budget_settings or {}).get("sides", {}).get("enemies") or {}
-                grown, grown_unread = _grown_kills(entries)
+                grown, grown_exit, grown_unread = _grown_kills(entries)
                 d["report"] = levels.validate(d["data"], enemies=by_id["enemies"], threat=_threat_scores(entries), combat=combat_data, economy=economy_data,
                                               kill_times=_kill_costs(entries, "time_to_kill"), kill_hits=_kill_costs(entries, "hits_to_kill"),
                                               enemy_curve=enemy_side.get("curve"), purchases=_purchase_plan(entries), greybox_log=_greybox_log(entries),
-                                              played_stages=_played_stages(entries), grown_kills=grown, grown_unread=grown_unread)
+                                              played_stages=_played_stages(entries), grown_kills=grown, grown_exit_kills=grown_exit, grown_unread=grown_unread)
                 first = next(x for x in entries if x["ok"] and x["kind"] == "levels")
                 if d is not first:  # 단계 범위와 처치 수는 파일을 넘어 세지 않는다. 일부만 세어 틀린 결과를 내지 않게 한 파일로 둔다
                     c.add_issue(d["report"]["errors"], "schema", "levels", f"레벨 구성 파일은 하나만 씁니다. {first['name']}에 합칩니다.")

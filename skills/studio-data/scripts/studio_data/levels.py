@@ -34,7 +34,7 @@ FLAG_LABEL = {"ok": "예산 안", "over": "넘침", "under": "모자람", "quiet
 UNCHECKED_LABEL = {"enemies": "적", "combat": "전투 계산", "economy": "재화 흐름"}
 SOURCE_LABEL = {**c.PROVENANCE_LABEL, "unspecified": "미지정"}
 SECOND_UNITS = ("초", "s", "sec", "secs", "second", "seconds")  # 전투 계산의 처치 시간(초)과 나눌 수 있는 재화 흐름 time_unit
-GROWN_HEAD = "성장 반영(들어설 때 레벨)"   # 판 안 성장 빌드마다의 같은 비율, 최소~최대
+GROWN_HEADS = {"grown_ratio": "성장 반영(들어설 때 레벨)", "grown_exit_ratio": "성장 반영(나갈 때 레벨)"}   # 판 안 성장 빌드마다의 같은 비율, 최소~최대
 KILL_HEADS = {"time": ("처치 시간(초)", "단일 대상 처치 시간(초)", "처치 시간 ÷ 길이"), "hits": ("처치 타수", "단일 대상 처치 타수", "타수 ÷ 길이")}  # 조우 표, 단계 표, 비율
 LATE_ADVICE = {"money": "돈이 늦습니다. 가격이나 수입을 보고, 그때도 열려 있으면 조우에 open_for를 적습니다.",
                "after": "재화 흐름의 after 때문에 늦습니다. after를 고치거나, 그때도 열려 있으면 조우에 open_for를 적습니다.",
@@ -430,23 +430,34 @@ def _stage_cost(kills: dict | None, each: dict | None) -> tuple:
 
 
 def _grown_ratio(kills: dict | None, grown: dict | None, sid: str, metric: str, length) -> dict | None:
-    """판 안 성장 빌드마다 같은 계산(처치 수 × 그 빌드의 처치 시간이나 타수 ÷ 길이)을 해서 낸 {low, high, builds, unknown}.
-    빌드는 그 단계에 들어설 때의 레벨이다. 그 단계를 계산하지 않은 빌드는 뺀다. unknown: 어느 빌드에서든 값을 모른 적. 있으면 하한이다."""
+    """판 안 성장 빌드마다 같은 계산(처치 수 × 그 빌드의 처치 시간이나 타수 ÷ 길이)을 해서 낸 {by_build, unknown}. 최소·최대는 _spread로 낸다.
+    빌드의 레벨은 grown을 낸 쪽(들어설 때나 나갈 때)이 정한다. 그 단계를 계산하지 않은 빌드는 뺀다. unknown: 어느 빌드에서든 값을 모른 적. 있으면 하한이다."""
     if not kills or not grown or not length:
         return None
-    ratios, unknown = [], set()
-    for stages in grown.values():
+    ratios, unknown = {}, set()
+    for bid, stages in grown.items():
         spent, left = _stage_cost(kills, {e: v.get(metric) for e, v in (stages.get(sid) or {}).items()})
         if spent is not None:
-            ratios.append(spent / length)
+            ratios[bid] = round(spent / length, 2)
             unknown.update(left)
     if not ratios:
         return None
-    return {"low": round(min(ratios), 2), "high": round(max(ratios), 2), "builds": len(ratios), "unknown": sorted(unknown)}
+    return {"by_build": ratios, "unknown": sorted(unknown)}
+
+
+def _spread(g: dict) -> tuple:
+    """(최소, 최대, 최소인 빌드, 최대인 빌드). 같은 값이면 앞에 적힌 빌드다. 뷰어의 spread와 같은 규칙이다."""
+    low = high = None
+    for bid, v in g["by_build"].items():
+        if low is None or v < g["by_build"][low]:
+            low = bid
+        if high is None or v > g["by_build"][high]:
+            high = bid
+    return g["by_build"][low], g["by_build"][high], low, high
 
 
 def _stage_rows(listed: list, by_stage: dict, order: list | None, stages: dict | None, whole, kill_times: dict | None, kill_hits: dict | None,
-                links: dict, unit: str, enemy_curve: dict | None, grown: dict | None = None) -> list:
+                links: dict, unit: str, enemy_curve: dict | None, grown: dict | None = None, grown_exit: dict | None = None) -> list:
     """단계별 요약. listed: 전투 단계 순서대로, 순서를 모르면 나온 순서대로. 레벨이 없는 단계도 빈 행으로 낸다.
     처치 시간을 낼 수 없는 게임(공격 속도가 없는 턴제)은 타수를 낸다.
     비율은 여기서 한 번만 소수 둘째 자리로 줄인다. check와 뷰어가 따로 줄이면 0.625가 0.62와 0.63으로 갈린다."""
@@ -458,6 +469,11 @@ def _stage_rows(listed: list, by_stage: dict, order: list | None, stages: dict |
         spent, left_out = _stage_cost(kills, (kill_times or {}).get(sid))
         hits, left_hits = (None, []) if spent is not None else _stage_cost(kills, (kill_hits or {}).get(sid))
         length = links.get(sid, {}).get("length") or None
+
+        def with_growth(by_build):   # 그 단계의 비율과 같은 지표와 단위로 잰다
+            if spent is not None:
+                return _grown_ratio(kills, by_build, sid, "time_to_kill", length if _in_seconds(unit) else None)
+            return _grown_ratio(kills, by_build, sid, "hits_to_kill", length) if hits is not None else None
         rows.append({"id": sid, "position": order.index(sid) + 1 if sid in (order or []) else None,
                      "curve": info["base"] if info else None, "threat": info["threat"] if counted else None,
                      "kills": None if kills is None else {k: round(v, 4) for k, v in kills.items()},
@@ -466,14 +482,35 @@ def _stage_rows(listed: list, by_stage: dict, order: list | None, stages: dict |
                      "duration": length, "time_unit": unit,
                      "kill_ratio": round(spent / length, 2) if spent is not None and length and _in_seconds(unit) else None,
                      "hits_per_unit": round(hits / length, 2) if hits is not None and length else None,
-                     "grown_ratio": _grown_ratio(kills, grown, sid, "time_to_kill", length if _in_seconds(unit) else None) if spent is not None
-                     else _grown_ratio(kills, grown, sid, "hits_to_kill", length) if hits is not None else None,
+                     "grown_ratio": with_growth(grown), "grown_exit_ratio": with_growth(grown_exit),
                      "group_size": _group_size(info["base"] if info else None, (stages or {}).get(sid), enemy_curve)})
     previous = None
     for row in rows:   # 값이 없는 단계를 건너뛰고 앞뒤를 잇는다
         row["vs_previous"] = round(row["threat"] / previous, 4) if row["threat"] is not None and previous else None
         previous = row["threat"] if row["threat"] is not None else previous
     return rows
+
+
+def _grown_sentence(row: dict) -> str:
+    """처치 시간 경고에 붙는 성장 반영 문장. 들어설 때 값은 단계 안 레벨업을 넣지 않은 쪽, 나갈 때 값은 모두 넣은 쪽이다."""
+    g, out = row["grown_ratio"], row["grown_exit_ratio"]
+    if not g:
+        return ""
+    low, high, _, _ = _spread(g)
+    builds = len(g["by_build"])
+    same = low == high == row["kill_ratio"]   # 첫 단계처럼 들어설 때 레벨업이 없는 단계
+    if out:
+        enter = "들어설 때는 기준 장비와 같고" if same else f"들어설 때 {_grown_text(row)},"
+        text = f"판 안 성장을 넣으면 {enter} 나갈 때 {_grown_text(row, 'grown_exit_ratio')}입니다(빌드 {builds}개). "
+    elif same:
+        text = f"판 안 성장을 넣어도 그 단계에 들어설 때는 기준 장비와 같습니다(빌드 {builds}개). 단계 안 레벨업은 넣지 않은 값입니다. "
+    else:
+        text = f"판 안 성장을 넣으면 {_grown_text(row)}입니다(빌드 {builds}개, 그 단계에 들어설 때의 레벨). 단계 안 레벨업은 넣지 않은 값입니다. "
+    bound = " 이상" if g["unknown"] else ""   # 값을 모르는 적을 뺀 하한
+    over = [f"{b} {v:.2f}배{bound}" for b, v in g["by_build"].items() if v > 1] if row["kill_ratio"] is not None else []
+    if over and len(over) < builds:   # 일부 빌드만 넘으면 어느 빌드인지 적는다
+        text += f"들어설 때 1배를 넘는 빌드: {', '.join(over)}. "
+    return text
 
 
 def _check_kill_ratio(rows: list, by_stage: dict, warnings: list) -> None:
@@ -483,14 +520,9 @@ def _check_kill_ratio(rows: list, by_stage: dict, warnings: list) -> None:
             continue
         owner = _stage_owner(by_stage[row["id"]]["levels"], "kill_time_over_length", row["id"])
         bound = " 이상" if row["kill_time_unknown"] else ""
-        g = row["grown_ratio"]
-        same = g and g["low"] == g["high"] == row["kill_ratio"]   # 첫 단계처럼 들어설 때 레벨업이 없는 단계. 단계 안 레벨업은 이 값에 없다
-        grown = "" if not g else (f"판 안 성장을 넣어도 그 단계에 들어설 때는 기준 장비와 같습니다(빌드 {g['builds']}개). " if same
-                                  else f"판 안 성장을 넣으면 {_grown_text(row)}입니다(빌드 {g['builds']}개, 그 단계에 들어설 때의 레벨). ")
-        grown += "단계 안 레벨업은 넣지 않은 값입니다. " if g else ""
         _err(warnings, "kill_time_over_length", owner,
              f"단계 {row['id']}: 단일 대상 처치 시간 {_fmt(row['kill_time'])}초{bound} / 길이 {_fmt(row['duration'])}초 = {row['kill_ratio']:g}배{bound}입니다. "
-             + grown + "그 단계의 기준 장비로 한 마리씩 잡으면 단계 안에 다 잡지 못합니다. 범위 공격·관통·판 안 성장이 메우면 그 이유를 이 단계 레벨의 "
+             + _grown_sentence(row) + "그 단계의 기준 장비로 한 마리씩 잡으면 단계 안에 다 잡지 못합니다. 범위 공격·관통·판 안 성장이 메우면 그 이유를 이 단계 레벨의 "
              "acknowledged에 적고, 아니면 조우 수나 기준 장비를 고칩니다.", owner=owner, part=row["id"])
 
 
@@ -1022,10 +1054,12 @@ def _notes(budget, cfg, rows: list, kill_check: list, gaps: list) -> list:
 
 def validate(data: dict, enemies: dict | None = None, threat: dict | None = None, combat: dict | None = None, economy: dict | None = None,
              kill_times: dict | None = None, kill_hits: dict | None = None, enemy_curve: dict | None = None, purchases: dict | None = None,
-             greybox_log: dict | None = None, played_stages: dict | None = None, grown_kills: dict | None = None, grown_unread: bool = False) -> dict:
+             greybox_log: dict | None = None, played_stages: dict | None = None, grown_kills: dict | None = None, grown_exit_kills: dict | None = None,
+             grown_unread: bool = False) -> dict:
     """enemies: 함께 읽은 적의 {id: 항목}, threat: 적의 위협도 {id: 값}(적 검사와 같은 값), combat·economy: 전투 계산·재화 흐름 파일 내용.
     kill_times·kill_hits: 전투 계산의 처치 시간과 타수 {단계: {적: 값}}, enemy_curve: 스탯 예산의 적 곡선. 참고 값이라 없어도 미확인이 아니다.
     grown_kills: 판 안 성장 빌드마다의 처치 시간과 타수 {빌드: {단계: {적: {time_to_kill, hits_to_kill}}}}. 단계 표의 성장 반영 칸에만 쓴다. 없어도 미확인이 아니다.
+    grown_exit_kills: 같은 형식으로 그 단계를 나갈 때(다음 단계에 들어설 때) 레벨의 값.
     grown_unread: 판 안 성장에 오류가 있어 그 값을 쓰지 않았다. 성장 반영 칸이 빈 이유를 참고 줄로 알린다.
     purchases: 재화 흐름이 계산한 구매 {id: 행}, greybox_log: 플레이 기록의 그레이박스 확인 {항목 id: 날짜순 기록}.
     played_stages: 플레이 기록의 단계 기록 {단계 id: 세션 수}. 확인 항목이 없는 레벨의 단계를 플레이했으면 알린다.
@@ -1167,7 +1201,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
     if _limits_assumed(data):
         summary["unverified"] = ["pacing(페이싱 기준)"] + summary["unverified"]
         walk_notes = ["페이싱 기준의 출처가 가정입니다. 경고가 없어도 리듬이 좋다는 뜻이 아닙니다.", *walk_notes]
-    stage_rows = _stage_rows(listed, by_stage, order, stages, counted, kill_times, kill_hits, links, unit, enemy_curve, grown_kills)
+    stage_rows = _stage_rows(listed, by_stage, order, stages, counted, kill_times, kill_hits, links, unit, enemy_curve, grown_kills, grown_exit_kills)
     for s in stage_rows:   # 옮길 처치 수를 받을 재화 흐름 단계가 있는가. 재화 흐름을 읽지 않았으면 모른다
         s["in_economy"] = None if economy is None else s["id"] in links
     _check_kill_ratio(stage_rows, by_stage, warnings)
@@ -1231,13 +1265,14 @@ def _ratio(s: dict) -> str:
     return "–" if s["hits_per_unit"] is None else _at_least(s, f"{s['hits_per_unit']:.2f}타/{s['time_unit']}")
 
 
-def _grown_text(s: dict) -> str:
-    """성장 반영 비율. 빌드마다 값이 같으면 한 수만 쓴다. 단위는 그 단계의 비율과 같다(배, 아니면 타/단위)."""
-    g = s["grown_ratio"]
+def _grown_text(s: dict, key: str = "grown_ratio") -> str:
+    """성장 반영 비율. 빌드마다 값이 같으면 한 수만 쓰고, 다르면 가장 낮은 빌드와 높은 빌드를 붙인다. 단위는 그 단계의 비율과 같다(배, 아니면 타/단위)."""
+    g = s[key]
     if not g:
         return "–"
     tail = "배" if s["kill_ratio"] is not None else f"타/{s['time_unit']}"
-    text = f"{g['low']:.2f}" + ("" if g["low"] == g["high"] else f"~{g['high']:.2f}") + tail
+    low, high, low_build, high_build = _spread(g)
+    text = (f"{low:.2f}" if low == high else f"{low:.2f}({low_build})~{high:.2f}({high_build})") + tail
     if not g["unknown"]:
         return text
     named = [e for e in g["unknown"] if e not in s["kill_time_unknown"]]   # 기준 장비 칸이 이미 밝힌 적은 다시 적지 않는다
@@ -1255,7 +1290,7 @@ def _spent(s: dict) -> str:
     if _ratio(s) != "–":
         text += f" = {_ratio(s)}"
     if s["grown_ratio"]:
-        text += f" (성장 반영 {_grown_text(s)})"
+        text += f" (성장 반영 들어설 때 {_grown_text(s)}" + (f", 나갈 때 {_grown_text(s, 'grown_exit_ratio')})" if s["grown_exit_ratio"] else ")")
     return text + (f" (처치 {c.josa(noun, '을를')} 모르는 적 제외: {', '.join(s['kill_time_unknown'])})" if s["kill_time_unknown"] else "")
 
 
@@ -1375,12 +1410,12 @@ def table(data: dict, result: dict, ids: list[str] | None = None) -> str:
         for x in lv["encounters"]:
             rows.append("| " + " | ".join((lv["id"], x["id"], x["role"] or "–", _fmt(x["repeat"]), _mix(x), _fmt(x["threat"]), _vs(x), _cost(x),
                                             "–" if x["expected"] is None else f"{_fmt(x['expected'])} ({_fmt(x['low'])}~{_fmt(x['high'])})", _verdict(x))) + " |")
-    grown = any(s.get("grown_ratio") for s in result["stages"])   # 판 안 성장이 없는 게임의 표는 그대로 둔다
-    rows += ["", f"| 단계 | 순서 | 위협도 합 | 앞 단계 대비 | {total} | 길이 | {pace} |" + (f" {GROWN_HEAD} |" if grown else "") + " 평범한 조우의 적 수 |",
-             "|---|---|---|---|---|---|---|" + ("---|" if grown else "") + "---|"]
+    shown = [k for k in GROWN_HEADS if any(s.get(k) for s in result["stages"])]   # 판 안 성장이 없는 게임의 표는 그대로 둔다
+    rows += ["", f"| 단계 | 순서 | 위협도 합 | 앞 단계 대비 | {total} | 길이 | {pace} |" + "".join(f" {GROWN_HEADS[k]} |" for k in shown) + " 평범한 조우의 적 수 |",
+             "|---|---|---|---|---|---|---|" + "---|" * len(shown) + "---|"]
     for s in result["stages"]:
         length = "–" if s["duration"] is None else f"{_fmt(s['duration'])}{s['time_unit']}"
-        cells = (s["id"], _fmt(s["position"]), _fmt(s["threat"]), _vs(s), _stage_time(s), length, _ratio(s)) + ((_grown_text(s),) if grown else ()) + (_fmt(s["group_size"]),)
+        cells = (s["id"], _fmt(s["position"]), _fmt(s["threat"]), _vs(s), _stage_time(s), length, _ratio(s)) + tuple(_grown_text(s, k) for k in shown) + (_fmt(s["group_size"]),)
         rows.append("| " + " | ".join(cells) + " |")
     rows += _pace_table(result) + _greybox_table(result)
     counted = [s for s in result["stages"] if s["kills"]]
