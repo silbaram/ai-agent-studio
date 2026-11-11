@@ -1068,12 +1068,24 @@ function renderLevels(ds, idx) {
   const given = (v) => v !== null && v !== undefined;
   const cost = (x) => (given(x.kill_time) ? fmt(x.kill_time) : given(x.kill_hits) ? `${fmt(x.kill_hits)}타` : null);  // 처치 시간이 없는 게임은 타수
   const pace = (s) => (given(s.kill_ratio) ? `${s.kill_ratio.toFixed(2)}배` : given(s.hits_per_unit) ? `${s.hits_per_unit.toFixed(2)}타/${s.time_unit || ""}` : null);
+  const grownOf = (s) => (object(s.grown_ratio) ? s.grown_ratio : null);  // 판 안 성장 빌드마다의 같은 비율. 없는 게임은 열을 두지 않는다
+  const grown = stages.some(grownOf);
+  const grownText = (s) => {
+    const g = grownOf(s);
+    if (!g) return null;
+    const text = g.low.toFixed(2) + (g.low === g.high ? "" : `~${g.high.toFixed(2)}`) + (given(s.kill_ratio) ? "배" : `타/${s.time_unit || ""}`);
+    const unknown = Array.isArray(g.unknown) ? g.unknown : [];
+    if (!unknown.length) return text;
+    const named = unknown.filter((e) => !leftOut(s).includes(e));  // 기준 장비 칸이 이미 밝힌 적은 다시 적지 않는다
+    return `${text} 이상` + (named.length ? ` (${named.join(", ")} 제외)` : "");
+  };
   const stageRows = stages.map((s) => el("tr", {},
     el("td", { class: "mono", text: s.id }), el("td", { class: "num" }, num(s.position)), el("td", { class: "num" }, num(s.threat)),
     el("td", { class: "num" }, given(s.vs_previous) ? `×${fmt(Math.round(s.vs_previous * 100) / 100)}` : dash()),
     el("td", { class: "num" }, cost(s) === null ? dash() : atLeast(s, cost(s)) + (leftOut(s).length ? ` (${leftOut(s).join(", ")} 제외)` : "")),
     el("td", { class: "num" }, s.duration === null || s.duration === undefined ? dash() : `${fmt(s.duration)}${s.time_unit || ""}`),
     el("td", { class: "num" + (s.kill_ratio > 1 ? " off" : "") }, pace(s) === null ? dash() : atLeast(s, pace(s))),
+    ...(grown ? [el("td", { class: "num" }, grownText(s) === null ? dash() : grownText(s))] : []),
     el("td", { class: "num" }, num(s.group_size))));
   const pacing = object(r.pacing) ? r.pacing : { spans: [], strong_runs: [] };  // 페이싱을 쓰지 않는 게임의 표는 그대로 둔다
   const unit = pacing.time_unit || "";
@@ -1103,7 +1115,7 @@ function renderLevels(ds, idx) {
       : el("p", { class: "muted", text: "threat_budget이 없어 예산과 비교하지 않습니다." }),
       r.run_threat === null || r.run_threat === undefined ? null : el("p", { text: `판 전체 위협도 ${fmt(r.run_threat)}` })),
     ...[...(Array.isArray(r.notes) ? r.notes : []), ...(Array.isArray(r.ack_notes) ? r.ack_notes : [])].map(hint),
-    stageRows.length ? small(["단계", "순서", "위협도 합", "앞 단계 대비", byHits ? "단일 대상 처치 타수" : "단일 대상 처치 시간(초)", "길이", byHits ? "타수 ÷ 길이" : "처치 시간 ÷ 길이", "평범한 조우의 적 수"], stageRows, "") : null)];
+    stageRows.length ? small(["단계", "순서", "위협도 합", "앞 단계 대비", byHits ? "단일 대상 처치 타수" : "단일 대상 처치 시간(초)", "길이", byHits ? "타수 ÷ 길이" : "처치 시간 ÷ 길이", ...(grown ? ["성장 반영(들어설 때 레벨)"] : []), "평범한 조우의 적 수"], stageRows, "") : null)];
   if (spanRows.length || runRows.length) {
     out.push(el("section", { class: "panel" },
       el("div", { class: "ph" }, el("h2", {}, "페이싱"), el("span", { class: "group-meta", text: `부담은 평범한 조우 몇 개 분량입니다. 강함은 세기 ${fmt(pacing.strong_at)} 이상입니다. 플레이어의 체력을 보지 않는 설계 가정입니다.` })),
