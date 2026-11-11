@@ -501,6 +501,8 @@ def cmd_hook(args) -> int:
         out, err = "", message
     elif args.event == "scope-guard":
         code, out, err = claude.scope_guard(payload)
+    elif args.event == "session-start":
+        code, out, err = claude.session_start(payload)
     else:
         code, out, err = claude.post_edit(payload)
     if out:
@@ -602,7 +604,7 @@ def build_parser() -> argparse.ArgumentParser:
     u.set_defaults(func=cmd_setup)
 
     h = sub.add_parser("hook", help="Claude Code 훅 처리기. setup이 settings.json에 등록하며 직접 실행하지 않습니다.")
-    h.add_argument("event", choices=("post-edit", "judge-guard", "scope-guard"))
+    h.add_argument("event", choices=("post-edit", "judge-guard", "scope-guard", "session-start"))
     h.set_defaults(func=cmd_hook)
     return ap
 

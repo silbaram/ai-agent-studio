@@ -8,11 +8,15 @@ setup은 게임 프로젝트의 .claude/agents/studio-judge.md를 쓰고 .claude
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
 import re
 import shlex
+import tempfile
+import time
+from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path, PurePosixPath
 
@@ -39,7 +43,9 @@ UNSURE = re.compile(r"\$\(|`|[<>]\(|\\[\s;&|'\"]")   # 명령 치환, 프로세�
 HELP = {"--help", "-h"}
 GUARDED = "|".join(WRITE_TOOLS + ("Bash",))
 SELF = (".claude/settings.json", ".claude/settings.local.json", ".claude/skills/studio-data", ".claude/skills/scope-guard")  # 고치면 범위 훅이 꺼진다
-HOOKS = (("PostToolUse", "Write|Edit|MultiEdit", "post-edit"), ("PreToolUse", GUARDED, "judge-guard"), ("PreToolUse", GUARDED, "scope-guard"))
+STATE_DIR = Path(tempfile.gettempdir()) / "studio-data-hook"   # 세션마다 이미 보인 경고. 게임 프로젝트에는 쓰지 않는다
+HOOKS = (("PostToolUse", "Write|Edit|MultiEdit", "post-edit"), ("PreToolUse", GUARDED, "judge-guard"), ("PreToolUse", GUARDED, "scope-guard"),
+         ("SessionStart", "compact|clear|resume", "session-start"))   # 압축·지움·이어 열기 뒤에는 경고를 다시 모두 보인다
 
 
 # ---------- setup ----------
@@ -95,7 +101,7 @@ def setup(project: Path, python: str) -> tuple[int, list[str]]:
     agent_path.write_text(template.rstrip("\n") + "\n\n" + MARKER + "\n", encoding="utf-8")
     settings_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return 0, [f"판정 에이전트: {agent_path}",
-               f"훅: {settings_path} (PostToolUse 데이터 검사, PreToolUse 판정 에이전트 쓰기 차단과 범위 이탈 차단)",
+               f"훅: {settings_path} (PostToolUse 데이터 검사, PreToolUse 판정 에이전트 쓰기 차단과 범위 이탈 차단, SessionStart 경고 다시 보이기)",
                f"훅 명령: {python} {script_ref} hook …",
                "Claude Code를 다시 시작하거나 /hooks에서 확인하면 적용됩니다. 스킬을 다시 설치한 뒤에는 setup도 다시 실행합니다."]
 
@@ -421,6 +427,133 @@ def _check_lines(payload: dict) -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
+STATE_DAYS = 7   # 이보다 오래된 세션 기록은 지운다
+
+
+def _session_key(project: Path, session: str) -> str:
+    return hashlib.sha256(f"{project.resolve()}\n{session}".encode("utf-8")).hexdigest()[:16]
+
+
+def _state_dir() -> Path | None:
+    """세션 기록 폴더. 남이 만든 폴더면 쓰지 않는다(None: 경고를 모두 보인다). 내 폴더인데 남이 읽을 수 있으면 막는다."""
+    try:
+        STATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if hasattr(os, "getuid"):
+            st = STATE_DIR.stat()
+            if st.st_uid != os.getuid():
+                return None
+            if st.st_mode & 0o077:
+                os.chmod(STATE_DIR, 0o700)
+    except OSError:
+        return None
+    return STATE_DIR
+
+
+def _prune(folder: Path) -> None:
+    cutoff = time.time() - STATE_DAYS * 86400
+    for f in folder.glob("*.json"):
+        try:
+            if f.stat().st_mtime < cutoff:
+                f.unlink()
+        except OSError:
+            pass
+
+
+def _diff(before: list[str], now: list[str]) -> tuple[list[str], list[str], list[str]]:
+    """(새 경고, 바뀐 경고, 풀린 경고). 같은 줄이 여러 번이면 그 수로 견준다.
+    파일·코드·대상이 같고 글만 다른 줄(수치가 바뀜)은 새 경고와 풀린 경고 대신 바뀐 경고 하나로 본다."""
+    new, gone, changed = _minus(now, before), _minus(before, now), []
+    for w in list(new):
+        k = _warning_key(w)
+        twin = next((g for g in gone if k and _warning_key(g) == k), None)
+        if twin is not None:
+            gone.remove(twin)
+            new.remove(w)
+            changed.append(w)
+    return new, changed, gone
+
+
+def _minus(lines: list[str], other: list[str]) -> list[str]:
+    """lines에서 other에 있는 줄을 그 수만큼 뺀다. 순서는 lines대로다."""
+    left, out = Counter(other), []
+    for w in lines:
+        if left[w] > 0:
+            left[w] -= 1
+        else:
+            out.append(w)
+    return out
+
+
+def _warning_key(line: str) -> str | None:
+    """check 경고 줄 '파일: [코드] 대상: 글'의 '파일: [코드] 대상'. 다른 꼴이면 None."""
+    parts = line.split(": ", 2)
+    return ": ".join(parts[:2]) if len(parts) == 3 and parts[1].startswith("[") else None
+
+
+def _seen(payload: dict, project: Path, topic: str, warnings: list[str]) -> tuple[list[str], list[str], list[str]] | None:
+    """이 세션의 이 에이전트에게 이 주제(check, 문서 하나)의 경고를 보인 적이 있으면 _diff의 결과. 지금 목록을 기록한다.
+    하위 에이전트는 세션 id가 같아도 따로 센다. 세션 id가 없거나, 처음이거나, 기록을 읽고 쓰지 못하면 None이다. 그때는 경고를 모두 보인다."""
+    session = payload.get("session_id")
+    if not (isinstance(session, str) and session):
+        return None
+    folder = _state_dir()
+    if folder is None:
+        return None
+    agent = payload.get("agent_id") or payload.get("agent_type") or "main"
+    agent_key = hashlib.sha256(str(agent).encode("utf-8")).hexdigest()[:8]
+    path = folder / f"{_session_key(project, session)}-{agent_key}.json"
+    try:
+        state = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    except (OSError, ValueError):
+        state = {}
+    state = state if isinstance(state, dict) else {}
+    before = state.get(topic)
+    state[topic] = warnings
+    tmp = path.with_name(f"{path.stem}.{os.getpid()}.tmp")
+    try:   # 다른 편집의 훅이 반쯤 쓴 파일을 읽지 않게 바꿔 끼운다
+        tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        return None
+    _prune(folder)
+    if not (isinstance(before, list) and all(isinstance(w, str) for w in before)):
+        return None
+    return _diff(before, warnings)
+
+
+def _warning_lines(warnings: list[str], seen: tuple[list[str], list[str], list[str]] | None, again: str) -> list[str]:
+    """보일 경고 줄. 이미 보인 경고는 파일별 개수로만 적는다. again: 전부 다시 보는 명령."""
+    if seen is None:
+        return warnings
+    new, changed, gone = seen
+    out = [line for title, lines in (("새 경고", new), ("바뀐 경고", changed), ("풀린 경고", gone)) if lines
+           for line in [f"{title} {len(lines)}개:"] + lines]
+    rest = list((Counter(warnings) - Counter(new + changed)).elements())
+    if rest:
+        files = Counter(w.split(": [", 1)[0] for w in rest if ": [" in w)
+        where = f"({', '.join(f'{k} {n}' for k, n in sorted(files.items()))})" if files else ""
+        out.append(f"다시 적지 않음: 이 세션에서 이미 보인 경고 {len(rest)}개{where}. 전부 보려면 `{again}`")
+    return out
+
+
+def session_start(payload_text: str, project: Path | None = None) -> tuple[int, str, str]:
+    """대화를 압축하거나 지우거나 이어 열면 앞서 보인 경고가 맥락에 없을 수 있다. 그 세션의 기록을 지워 다음 편집에 모두 보인다."""
+    payload = _payload(payload_text)
+    session = payload.get("session_id") if payload else None
+    if not (isinstance(session, str) and session):
+        return 0, "", ""
+    for f in STATE_DIR.glob(f"{_session_key(_project(payload, project), session)}-*.json"):
+        try:
+            f.unlink()
+        except OSError:
+            pass
+    return 0, "", ""
+
+
 def post_edit(payload_text: str, project: Path | None = None) -> tuple[int, str, str]:
     """(종료 코드, 표준 출력, 표준 오류). 오류는 2와 표준 오류로, 경고는 additionalContext로 에이전트에게 보인다."""
     payload = _payload(payload_text)
@@ -445,7 +578,7 @@ def post_edit(payload_text: str, project: Path | None = None) -> tuple[int, str,
         errors, warnings = _check_lines(result)
         # 건너뛴 파일이 게임 자기 파일일 수 있어 그 파일을 고칠 때만 알린다. 다른 편집마다 되풀이하지 않는다
         notes = [datasets.skipped_note(rel.as_posix()) for p in result.get("skipped", []) if Path(p).resolve() == path]
-        title = "studio.py check"
+        title, topic, again = "studio.py check", "check", f"{scope.CMD} check ."
     elif suffix == ".md":
         code, out = _run(["provenance", str(path), "--json"])
         try:
@@ -455,13 +588,16 @@ def post_edit(payload_text: str, project: Path | None = None) -> tuple[int, str,
         findings = [f for fr in result.get("files", []) for f in fr.get("findings", [])]
         errors = [f"{rel.as_posix()}:{f['line']}: {f['message']}" for f in findings if f["level"] == "error"]
         warnings = [f"{rel.as_posix()}:{f['line']}: {f['message']}" for f in findings if f["level"] != "error"]
-        title = "studio.py provenance"
+        title, topic, again = "studio.py provenance", f"provenance:{rel.as_posix()}", f"{scope.CMD} provenance {rel.as_posix()}"
     else:
         return 0, "", ""
+    seen = _seen(payload, project, topic, warnings)
+    shown = _warning_lines(warnings, seen, again)
     if errors:
-        return 2, "", f"{title}: 오류 {len(errors)}개 (편집은 이미 반영됨, 고쳐야 합니다)\n" + "\n".join(errors + warnings + notes) + "\n"
-    if warnings or notes:
-        context = f"{title}: 경고 {len(warnings)}개\n" + "\n".join(warnings + notes)
+        return 2, "", f"{title}: 오류 {len(errors)}개 (편집은 이미 반영됨, 고쳐야 합니다)\n" + "\n".join(errors + shown + notes) + "\n"
+    if warnings or notes or (seen and seen[2]):
+        same = " · 지난 편집과 같습니다" if seen is not None and warnings and not any(seen) else ""
+        context = f"{title}: 경고 {len(warnings)}개{same}\n" + "\n".join(shown + notes)
         out = json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": context}})
         return 0, out, ""
     return 0, "", ""

@@ -82,15 +82,16 @@ python3 .claude/skills/studio-data/scripts/studio.py setup claude .
 | 파일 | 내용 |
 |---|---|
 | `.claude/agents/studio-judge.md` | 읽기 전용 판정 에이전트. 원본은 `assets/claude/studio-judge.md` |
-| `.claude/settings.json`의 `hooks` | 아래 두 훅. 사용자의 다른 훅과 설정은 그대로 둔다 |
+| `.claude/settings.json`의 `hooks` | 아래 훅들. 사용자의 다른 훅과 설정은 그대로 둔다 |
 
-- **PostToolUse(Write·Edit)**: `design/`·`data/` 아래 파일을 고치면 데이터는 `check`, md는 `provenance`를 돌린다. 오류는 에이전트에게 바로 보이고(종료 코드 2), 경고는 참고 정보로 붙는다. 편집을 되돌리지는 않는다.
+- **PostToolUse(Write·Edit)**: `design/`·`data/` 아래 파일을 고치면 데이터는 `check`, md는 `provenance`를 돌린다. 오류는 에이전트에게 바로 보이고(종료 코드 2), 경고는 참고 정보로 붙는다. 편집을 되돌리지는 않는다. 한 세션(훅 입력의 `session_id`)의 두 번째 편집부터는 새 경고, 수치가 바뀐 경고, 풀린 경고만 적고 이미 보인 경고는 파일별 개수로 줄인다. 하위 에이전트는 따로 센다. 오류는 늘 모두 적는다. 지난 목록은 임시 폴더의 `studio-data-hook`(나만 읽는 권한)에 세션마다 남고 7일 지나면 지운다. 세션 id가 없거나 그 폴더에 쓰지 못하면 경고를 모두 적는다.
+- **SessionStart(압축·지움·이어 열기)**: 앞서 보인 경고가 맥락에서 빠졌을 수 있어 그 세션의 지난 목록을 지운다. 다음 편집에 경고를 모두 적는다.
 - **PreToolUse**: 판정 에이전트(`studio-judge`)가 파일을 쓰거나(Write·Edit·MultiEdit·NotebookEdit) `studio.py check`·`provenance` 밖의 명령을 실행하면 막는다. `--out`(파일 쓰기)과 셸 연결(`;`, `&&`, `|`, `>`, `$` 등)도 막는다. 다른 에이전트에는 관여하지 않는다.
 - **PreToolUse(범위)**: OpenSpec과 시스템 설계가 다 있는 프로젝트에서 `scope`에 오류가 있으면 게임을 만드는 파일의 편집, 메인 스펙 편집, `openspec archive`를 막는다. 범위를 넓히는 설계 편집은 사용자에게 묻는다. 자세한 내용은 [scope-guard](../scope-guard/SKILL.md).
 
 다시 실행하면 이 도구가 넣은 훅만 바꾼다. `settings.json`이 JSON이 아니거나, `studio-judge.md`가 이미 있는데 setup이 만든 파일이 아니면 아무것도 바꾸지 않고 종료 코드 2로 끝난다. 훅이 쓸 파이썬은 `--python`으로 바꾼다(기본: Windows `py`, 그 밖 `python3`).
 
-확인 범위: Claude Code 2.1.316, WSL(Linux)에서 실제 세션으로 확인했다. 판정 에이전트의 `check`는 통과하고 셸 리다이렉트 쓰기는 막혔으며, 메인 에이전트의 데이터 오류 편집은 오류로 되돌아왔고 메인 에이전트는 막히지 않았다. Windows에서의 훅 명령 실행은 아직 확인하지 않았다. Codex에는 같은 장치가 없다.
+확인 범위: Claude Code 2.1.316, WSL(Linux)에서 실제 세션으로 확인했다. 판정 에이전트의 `check`는 통과하고 셸 리다이렉트 쓰기는 막혔으며, 메인 에이전트의 데이터 오류 편집은 오류로 되돌아왔고 메인 에이전트는 막히지 않았다. Windows에서의 훅 명령 실행은 아직 확인하지 않았다. 편집 훅의 경고 줄이기는 실제 세션에서 확인하지 않았다(훅 함수에 `session_id`와 `agent_id`를 넣어 확인했다). Claude Code가 그 값을 넘기지 않으면 경고를 모두 적는다. Codex에는 같은 장치가 없다.
 
 범위 훅의 확인 범위: Claude Code 2.1.318, WSL(Linux), OpenSpec 1.16.0의 `claude -p` 세션에서 게임 파일 쓰기와 `openspec archive`가 막히고, 고친 뒤 통과하며, 범위를 넓히는 편집이 거부되는 것을 확인했다. 대화형 세션은 가상 터미널로 띄워 편집 자동 허용 모드에서 확인했다: 범위를 넓히는 편집은 확인 창이 뜨고, 거부하면 파일이 그대로이고 허락하면 바뀌며, 범위를 줄이는 편집은 창 없이 지나갔다. 창에 훅의 이유는 나오지 않았다. `bypassPermissions` 모드와 Windows는 확인하지 못했다.
 
