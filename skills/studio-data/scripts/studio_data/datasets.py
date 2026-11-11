@@ -193,7 +193,13 @@ def _index(entries: list[dict], kind: str) -> dict | None:
         return None
     out: dict = {}
     for d in loaded:
-        for e in d["data"][kind]:
+        rows = d["data"][kind]
+        if kind == "enemies":   # 레벨로 자라는 적은 계산한 스탯으로. 계산하지 못한 행이 있으면 참조를 미확인으로 둔다(없는 적으로 연쇄 보고하지 않는다)
+            broken: list = []
+            rows = enemies.expand(rows, broken, broken)
+            if broken:
+                return None
+        for e in rows:
             if isinstance(e, dict) and isinstance(e.get("id"), str):
                 out.setdefault(e["id"], e)  # 검사기와 같이 첫 항목을 쓴다
     return out

@@ -103,26 +103,37 @@ def read_settings(data: dict, errors: list) -> dict | None:
               or (formula["form"] == "flat" and (formula["factor"] < 0 or formula["min_damage"] < 0))):
             _err(errors, "schema", "combat.defense", "공식 값의 범위: ratio k > 0, percent 0 < cap ≤ 100, flat factor ≥ 0·min_damage ≥ 0.")
             ok = False
-    targets = cfg.get("targets", {})
+    targets = read_targets(cfg.get("targets", {}), "combat.targets", errors)
+    if not ok or targets is None:
+        return None
+    return {"roles": roles, "formula": formula, "targets": targets}
+
+
+def read_targets(targets, where: str, errors: list) -> dict | None:
+    """{등급: {지표: [최소, 최대]}}. 형식이 틀리면 오류를 남기고 None. 전투 계산 전체와 단계의 targets가 같은 형식이다."""
     if not isinstance(targets, dict):
-        _err(errors, "schema", "combat.targets", "targets는 {등급: {지표: [최소, 최대]}} 객체여야 합니다.")
-        ok = False
-        targets = {}
+        _err(errors, "schema", where, "targets는 {등급: {지표: [최소, 최대]}} 객체여야 합니다.")
+        return None
+    ok = True
     for rank, metrics in targets.items():
         if rank not in RANKS or not isinstance(metrics, dict):
-            _err(errors, "schema", "combat.targets", f"targets의 등급은 {', '.join(RANKS)} 중 하나입니다: {rank!r}")
+            _err(errors, "schema", where, f"targets의 등급은 {', '.join(RANKS)} 중 하나입니다: {rank!r}")
             ok = False
             continue
         for m, rng in metrics.items():
             if m not in METRICS:
-                _err(errors, "schema", f"combat.targets.{rank}", f"알 수 없는 지표 '{m}'.{did_you_mean(m, METRICS)}")
+                _err(errors, "schema", f"{where}.{rank}", f"알 수 없는 지표 '{m}'.{did_you_mean(m, METRICS)}")
                 ok = False
             elif not c.valid_range(rng):
-                _err(errors, "schema", f"combat.targets.{rank}.{m}", "목표 범위는 [최소, 최대]이고 한쪽은 null로 비울 수 있습니다(최소 ≤ 최대).")
+                _err(errors, "schema", f"{where}.{rank}.{m}", "목표 범위는 [최소, 최대]이고 한쪽은 null로 비울 수 있습니다(최소 ≤ 최대).")
                 ok = False
-    if not ok:
-        return None
-    return {"roles": roles, "formula": formula, "targets": targets}
+    return targets if ok else None
+
+
+def rank_targets(targets: dict, stage_targets, rank) -> dict:
+    """그 단계에서 그 등급에 쓰는 목표. 단계의 targets가 같은 등급·지표를 적었으면 그 값을, 아니면 전투 계산 전체의 값을 쓴다."""
+    own = (stage_targets or {}).get(rank) if isinstance(stage_targets, dict) else None
+    return {**(targets.get(rank) or {}), **(own if isinstance(own, dict) else {})}
 
 
 def _stats_of(entry) -> dict | None:
@@ -314,7 +325,7 @@ def prepare(data: dict, items: dict | None = None, upgrades: dict | None = None,
             if foe is not None and _side_problem(foe, roles["enemy"], formula) is None:
                 sides.append((e["id"], e.get("rank"), foe))
         if sides:
-            stages[s["id"]] = {"player": stats, "foes": sides, "level": s.get("level")}
+            stages[s["id"]] = {"player": stats, "foes": sides, "level": s.get("level"), "targets": s.get("targets")}
     return {"settings": settings, "stages": stages}
 
 
@@ -482,6 +493,8 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
             if "variant_of" in s and not (isinstance(s["variant_of"], str) and s["variant_of"]):
                 _err(errors, "schema", s["id"], f"variant_of는 이 파일의 다른 단계 id입니다: {s['variant_of']!r}")
                 continue
+            if "targets" in s and read_targets(s["targets"], f"{s['id']}.targets", errors) is None:
+                continue
             stages.append(s)
     mains = {s["id"] for s in raw if isinstance(s, dict) and isinstance(s.get("id"), str) and c.is_active(s) and not is_variant(s)}
     for s in [s for s in stages if is_variant(s) and c.is_active(s)]:
@@ -571,7 +584,7 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
                 if r["enemy_hit"] <= 0:
                     _err(warnings, "zero_damage", ewhere,
                          f"{c.josa(e['id'], '이가')} 이 단계 기준 장비에 피해를 줄 수 없습니다(버티는 타수·시간 없음).", **row_issue)
-                for m, rng in (targets.get(e.get("rank")) or {}).items():
+                for m, rng in rank_targets(targets, s.get("targets"), e.get("rank")).items():
                     v = r[m]
                     if v is None:
                         hits = r["hits_to_kill"] if m in ("hits_to_kill", "time_to_kill") else r["hits_to_die"]

@@ -35,13 +35,14 @@ ECONOMY_ACK_CODES = ("currency_piles_up", "duplicate_purchase", "enhance_gap", "
 FOREIGN_NAMES = ("levels", "systems")  # 게임이 자기 형식으로도 흔히 쓰는 파일 이름. 종류 키가 없으면 이 도구의 파일로 보지 않는다
 SUBFOLDERS = ("design", "data")
 STAT_PREFIX = "stat."
+GROWTH_PREFIX = "growth."   # 적의 레벨당 상승치 열(level_of로 계산하는 행의 기본 적)
 
 # CSV 열 중 수로 읽을 것과 목록(;로 구분)으로 읽을 것. 아이템·영구 강화·적만 CSV를 지원한다.
 CSV_KINDS = ("items", "upgrades", "enemies")
 CSV_NUMERIC = {
     "items": ("tier", "price"),
     "upgrades": ("cost", "power", "level"),
-    "enemies": ("zone", "reward"),
+    "enemies": ("zone", "reward", "level"),
 }
 CSV_LISTS = {"upgrades": ("requires",)}
 
@@ -224,6 +225,9 @@ def read_csv(path: Path, kind: str) -> list[dict]:
                 if key.startswith(STAT_PREFIX):
                     if raw != "":
                         entry["stats"][key[len(STAT_PREFIX):]] = _num(raw)
+                elif key.startswith(GROWTH_PREFIX):
+                    if raw != "":
+                        entry.setdefault("growth", {})[key[len(GROWTH_PREFIX):]] = _num(raw)
                 elif key in numeric:
                     entry[key] = _num(raw) if raw else None
                 elif key in lists:

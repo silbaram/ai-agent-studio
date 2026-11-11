@@ -62,6 +62,7 @@
 | `enemies` | 아니오 | 계산할 적 id 배열. 없으면 `zone` |
 | `zone` | 아니오 | 적 데이터의 `zone`(처음 나오는 구역)이 이 값인 적(삭제 제외)을 모두 계산 |
 | `zone_rule` | 아니오 | `first_seen`(기본): 위와 같다 / `up_to`: `zone`이 이 값 이하인 적, 곧 이 구역까지 나온 적을 모두 계산(앞 구역의 적이 모두 계속 나오는 게임. 일부만 이어지면 `enemies` 목록을 쓴다). `up_to`는 `zone`이 수여야 한다 |
+| `targets` | 아니오 | 이 단계에만 쓰는 목표. 형식은 `combat.targets`와 같고, 적은 등급·지표만 덮어쓴다. 처치가 원래 느린 직업의 변형 단계처럼 같은 등급에 다른 기준이 맞는 단계에 쓴다 |
 | `variant_of` | 아니오 | 이 파일의 다른 단계 id. 무기나 직업 하나만 든 기준 장비를 따로 볼 때 쓰는 **변형 단계**다. 처치·버팀과 원가 제안만 계산하고, 레벨 구성·판 안 성장·재화 흐름·메타 성장의 단계 순서에는 들지 않는다. 레벨, 재화 흐름 단계, `level_at`은 원래 단계에 잇는다 |
 | `status`, `provenance`, `acknowledged` | 아니오 | 공통 필드 ([data-format](../../progression-economy/references/data-format.md#공통-필드)) |
 

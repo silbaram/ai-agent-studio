@@ -547,11 +547,11 @@ class LaterDeciders(MetaWorkspace):
 
     def test_rank_that_decides_only_later_is_pointed_out(self):
         early, late = {"enemy": "a", "rank": "normal"}, {"enemy": "b", "rank": "boss"}
-        self.assertIn("s1: b", "\n".join(sm.margin_notes(1.0, [("s1", early), ("s1", late)], {}, [])))
+        self.assertIn("s1: b", "\n".join(sm.margin_notes(1.0, [("s1", early), ("s1", late)], {"settings": {"targets": {}}, "stages": {}}, [])))
 
     def test_the_same_enemy_is_named_once(self):
         boss = {"enemy": "b", "rank": "boss"}
-        self.assertEqual("\n".join(sm.margin_notes(1.0, [("s1", boss), ("s1", boss)], {}, [])).count("s1: b"), 1)
+        self.assertEqual("\n".join(sm.margin_notes(1.0, [("s1", boss), ("s1", boss)], {"settings": {"targets": {}}, "stages": {}}, [])).count("s1: b"), 1)
 
     def test_every_case_of_a_stage_is_looked_at(self):
         with mock.patch.object(sm, "margin_notes", wraps=sm.margin_notes) as notes_call:
