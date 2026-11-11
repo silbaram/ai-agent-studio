@@ -1084,7 +1084,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
             dropped.add(c.combat_link(e))
     stages = {x["id"]: x for x in (combat or {}).get("stages") or [] if isinstance(x, dict) and isinstance(x.get("id"), str)} \
         if isinstance((combat or {}).get("stages"), list) else None
-    order = [k for k, x in stages.items() if c.is_active(x)] if stages is not None else None
+    order = cb.main_stage_ids(combat) if stages is not None else None   # 변형 단계(variant_of)는 단계 순서와 예산에 들지 않는다
     missing = {k for k, gap in (("enemies", enemies is None or threat is None), ("combat", stages is None),
                                 ("threat_budget", data.get("threat_budget") is None)) if gap}
     rows, seen, computed, unscored, sourced, checks = [], set(), 0, [], [], set()
@@ -1113,6 +1113,10 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
             continue
         if stages is not None and not c.is_active(stages[sid]):
             _err(warnings, "cut_referenced", lv["id"], f"삭제(cut)된 전투 단계 {sid}에 이었습니다.", owner=lv["id"])
+            continue
+        if stages is not None and cb.is_variant(stages[sid]):
+            _err(errors, "unknown_stage", lv["id"], cb.variant_hint(stages[sid]))
+            dropped.add(None)
             continue
         found, whole = _encounters(lv, cfg, seen, errors)
         base = _stage_budget(cfg, sid, order, lv["id"], errors)

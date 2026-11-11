@@ -73,7 +73,7 @@
 | 코드 | 수준 | 조건 |
 |---|---|---|
 | `schema`, `duplicate_id` | 오류 | 형식 위반(레벨·제시 수·시행·선택지 스탯·최대 횟수·빌드 규칙), id 중복 |
-| `unknown_stage` | 오류 | `level_at`(또는 빌드의 `level_at`)의 단계가 전투 계산에 없음 |
+| `unknown_stage` | 오류 | `level_at`(또는 빌드의 `level_at`)의 단계가 전투 계산에 없거나 변형 단계(`variant_of`)임 |
 | `unknown_item` | 오류 | 선택지의 `item`이 아이템 데이터에 없음 |
 | `unknown_choice` | 오류 | 빌드의 `priority`에 없는 선택지 |
 | `build_invalid` | 오류 | 빌드의 성장 스탯이 전투 계산에 쓸 수 없는 값이 됨. 그 빌드는 비교에서 뺀다 |

@@ -637,7 +637,7 @@ def _attach_combat(cfg: dict, entries: list, ups: dict) -> None:
         if isinstance(s, dict) and isinstance(s.get("player"), dict):
             s["player"]["upgrades"] = []  # 단계에 적은 강화 대신 그 판까지 산 영구 강화를 더한다
     prep = cb.prepare(data, crafting=crafting, **refs)
-    active = [s["id"] for s in data["stages"] if isinstance(s, dict) and c.is_active(s)]
+    active = cb.main_stage_ids(data)   # 변형 단계(variant_of)는 판에서 지나는 단계가 아니다
     stages = cfg["stages"] or active
     for sid in stages:
         if sid not in active:

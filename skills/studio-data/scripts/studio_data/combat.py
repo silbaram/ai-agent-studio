@@ -21,7 +21,7 @@ FORMS = {
 }
 FORM_LABEL = {"flat": "고정값 감산", "ratio": "비율", "level_ratio": "레벨 비율", "percent": "직접 퍼센트"}
 REQUIRED_ROLES = ("hp", "attack")
-OPTIONAL_ROLES = ("defense", "attack_rate", "crit_chance", "crit_multiplier")
+OPTIONAL_ROLES = ("defense", "attack_rate", "crit_chance", "crit_multiplier", "armor_pierce")
 ROLES = REQUIRED_ROLES + OPTIONAL_ROLES
 SIDES = ("player", "enemy")
 RANKS = ("normal", "elite", "boss")
@@ -230,7 +230,14 @@ def _side(stats: dict, roles: dict) -> dict:
     get = lambda role, default=None: stats.get(roles[role], default) if role in roles else default  # noqa: E731
     return {"hp": get("hp"), "attack": get("attack"), "defense": get("defense", 0) or 0,
             "attack_rate": get("attack_rate"), "crit_chance": get("crit_chance", 0) or 0,
-            "crit_multiplier": get("crit_multiplier", 2.0) if "crit_chance" in roles else 1.0}
+            "crit_multiplier": get("crit_multiplier", 2.0) if "crit_chance" in roles else 1.0,
+            "armor_pierce": get("armor_pierce", 0) or 0}
+
+
+def _faced(defense: float, pierce: float) -> float:
+    """공격하는 쪽의 방어 무시 비율(armor_pierce, 0~1)을 뺀, 실제로 받는 방어. 양수 방어만 무시한다(약화로 음수가 된 방어는 그대로).
+    비율은 0~1로 자른다. 검사는 범위 밖을 bad_stat으로 알리고, 원가 제안의 작은 증가가 범위를 넘어도 방어를 음수로 만들지 않는다."""
+    return defense * (1 - min(max(pierce, 0), 1)) if defense > 0 else defense
 
 
 def _bad_stats(side: dict, roles: dict) -> list[str]:
@@ -247,6 +254,8 @@ def _bad_stats(side: dict, roles: dict) -> list[str]:
         bad.append(f"{roles['crit_chance']} {n(side['crit_chance'])}({hint})")
     if side["crit_multiplier"] < 1:
         bad.append(f"{roles['crit_multiplier']} {n(side['crit_multiplier'])}(1 이상)")
+    if not (c.is_number(side["armor_pierce"]) and 0 <= side["armor_pierce"] <= 1):
+        bad.append(f"{roles['armor_pierce']} {n(side['armor_pierce']) if c.is_number(side['armor_pierce']) else side['armor_pierce']!r}(무시하는 방어 비율, 0~1)")
     return bad
 
 
@@ -259,8 +268,8 @@ def _metric(hp: float, hit: float, rate) -> tuple:
 
 def _row_metrics(me: dict, foe: dict, formula: dict, level) -> dict:
     """한 단계·한 적의 처치·버팀. 검사(validate)와 반복 계산(evaluate)이 같은 식을 쓴다."""
-    my_hit = expected_hit(me["attack"], foe["defense"], formula, level, me["crit_chance"], me["crit_multiplier"])
-    their_hit = expected_hit(foe["attack"], me["defense"], formula, level, foe["crit_chance"], foe["crit_multiplier"])
+    my_hit = expected_hit(me["attack"], _faced(foe["defense"], me["armor_pierce"]), formula, level, me["crit_chance"], me["crit_multiplier"])
+    their_hit = expected_hit(foe["attack"], _faced(me["defense"], foe["armor_pierce"]), formula, level, foe["crit_chance"], foe["crit_multiplier"])
     htk, ttk = _metric(foe["hp"], my_hit, me["attack_rate"])
     htd, ttd = _metric(me["hp"], their_hit, foe["attack_rate"])
     return {"player_hit": round(my_hit, 4), "enemy_hit": round(their_hit, 4),
@@ -321,6 +330,23 @@ def evaluate(prep: dict, stage_id: str, bonus: dict) -> tuple[list[dict] | None,
     if problem:
         return None, problem
     return [{"enemy": eid, "rank": rank, **_row_metrics(me, foe, formula, st["level"])} for eid, rank, foe in st["foes"]], None
+
+
+def is_variant(stage: dict) -> bool:
+    """다른 단계의 변형(variant_of): 무기나 직업마다 따로 보는 단계. 처치·버팀만 계산하고 다른 검사의 단계 순서에는 들지 않는다."""
+    return "variant_of" in stage
+
+
+def main_stage_ids(data: dict | None) -> list[str]:
+    """삭제되지 않은 전투 단계 중 변형이 아닌 것의 id. 레벨 구성·판 안 성장·재화 흐름·메타 성장이 쓰는 단계 순서다."""
+    raw = (data or {}).get("stages")
+    return [s["id"] for s in raw if isinstance(s, dict) and isinstance(s.get("id"), str) and c.is_active(s) and not is_variant(s)] \
+        if isinstance(raw, list) else []
+
+
+def variant_hint(stage: dict) -> str:
+    """변형 단계에 이으려 할 때의 안내."""
+    return f"{c.josa(stage['id'], '은는')} {stage['variant_of']}의 변형 단계입니다. 변형 단계에는 잇지 않습니다. 원래 단계 {stage['variant_of']}에 잇습니다."
 
 
 def stage_enemies(stage: dict, enemies: dict, errors: list, warnings: list) -> list[dict] | None:
@@ -453,7 +479,16 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
             if s.get("zone_rule") == "up_to" and not c.is_number(s.get("zone")):
                 _err(errors, "schema", s["id"], f"zone_rule up_to는 zone이 수여야 합니다(그 구역 이하의 적을 고른다): {s.get('zone')!r}")
                 continue
+            if "variant_of" in s and not (isinstance(s["variant_of"], str) and s["variant_of"]):
+                _err(errors, "schema", s["id"], f"variant_of는 이 파일의 다른 단계 id입니다: {s['variant_of']!r}")
+                continue
             stages.append(s)
+    mains = {s["id"] for s in raw if isinstance(s, dict) and isinstance(s.get("id"), str) and c.is_active(s) and not is_variant(s)}
+    for s in [s for s in stages if is_variant(s) and c.is_active(s)]:
+        if s["variant_of"] not in mains:
+            others = sorted(mains - {s["id"]})
+            _err(errors, "unknown_stage", s["id"], f"variant_of가 가리키는 단계가 이 파일의 변형이 아닌 단계에 없습니다: {s['variant_of']}.{did_you_mean(s['variant_of'], others)}")
+            stages.remove(s)
     refs = {"items": items, "upgrades": upgrades, "enemies": enemies, "crafting": crafting}
     rows: list = []
     stage_info: dict = {}
@@ -616,8 +651,8 @@ def _power(me_stats: dict, me_roles: dict, foes: list[dict], foe_roles: dict, fo
         if formula["form"] in ("ratio", "level_ratio") and (me["defense"] < 0 or foe["defense"] < 0):
             return None
         rate = me["attack_rate"] if c.is_number(me["attack_rate"]) and me["attack_rate"] > 0 else 1.0
-        dealt = expected_hit(me["attack"], foe["defense"], formula, level, me["crit_chance"], me["crit_multiplier"]) * rate
-        taken = expected_hit(foe["attack"], me["defense"], formula, level, foe["crit_chance"], foe["crit_multiplier"])
+        dealt = expected_hit(me["attack"], _faced(foe["defense"], me["armor_pierce"]), formula, level, me["crit_chance"], me["crit_multiplier"]) * rate
+        taken = expected_hit(foe["attack"], _faced(me["defense"], foe["armor_pierce"]), formula, level, foe["crit_chance"], foe["crit_multiplier"])
         if dealt <= 0 or taken <= 0:
             return None
         total += math.log(dealt) + math.log(me["hp"] / taken)

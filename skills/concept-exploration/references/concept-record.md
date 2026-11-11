@@ -50,7 +50,7 @@
 | `cost` | 아니오 | `{level: small/medium/large, reason}`. 제작 부담 추정이며 가정이다 |
 | `next_test` | 아니오 | 이 가설을 가장 싸게 확인할 시험. 활성 후보에 없으면 경고 |
 | `notes` | 아니오 | 변이 이유, 기대 변화, 사용자 의견 |
-| `brief` | 선택 시 | `approved`면 필수. [brief.md](brief.md) |
+| `brief` | 선택 시 | `approved`면 필수. [brief.md](brief.md). `proposed`인 컨셉의 브리프는 검사하지 않아 일부만 적어도 된다. `approved`로 바꾸면 전부 검사한다 |
 | `existing_game` | 아니오 | `true`면 이미 만들고 있는 게임의 컨셉이다. 후보 칸을 비워도 된다(아래 검사 표). [existing-game.md](existing-game.md) |
 | `acknowledged` | 아니오 | 확인을 마친 경고 `{경고 코드: 이유}`. 경고 수에서 빠지고 이유와 함께 따로 보인다 |
 
