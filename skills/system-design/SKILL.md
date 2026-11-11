@@ -25,7 +25,7 @@ description: "Lists the systems a game needs with their rules and dependencies, 
 
 ### 1. 브리프를 읽는다
 
-승인된 컨셉의 필러, MVP, 범위 밖, 안티필러를 읽는다. 브리프가 없으면 시스템을 적지 않고 [concept-exploration](../concept-exploration/SKILL.md)으로 돌아간다. 승인된 컨셉이 둘 이상이면 최상위 `concept`에 하나를 적는다.
+승인된 컨셉의 필러, MVP, 범위 밖, 안티필러를 읽는다. 브리프가 없으면 시스템을 적지 않고 [concept-exploration](../concept-exploration/SKILL.md)으로 돌아간다. 이미 만들고 있는 게임이면 후보를 만들지 않고 [기존 게임의 컨셉](../concept-exploration/references/existing-game.md)으로 브리프만 적는다. 승인된 컨셉이 둘 이상이면 최상위 `concept`에 하나를 적는다.
 
 ### 2. 시스템을 나눈다
 

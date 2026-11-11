@@ -33,6 +33,8 @@ KNOWN_AXES = REQUIRED_AXES + ("space", "pressure", "progression")
 KNOWN_POLICIES = ("idle", "spam", "kite", "rush", "corner", "safe_only", "greedy", "one_build", "random")
 DUPLICATE_THRESHOLD = 0.8
 MVP_LIMIT = 7
+EXISTING_HINT = (" 이미 만들고 있는 게임의 컨셉이면 existing_game: true를 적고 브리프만 채웁니다"
+                 "(concept-exploration references/existing-game.md의 '순서').")
 
 
 def _text(v) -> bool:
@@ -72,16 +74,25 @@ def check_concept(c: dict, where: str, errors: list, warnings: list, ctx: dict |
     fixed = ctx["fixed"]
     known = set(KNOWN_AXES) | ctx["extra"] | set(fixed)
     ok = True
-    for f in REQUIRED_TEXT:
+    existing = c.get("existing_game", False)
+    if not isinstance(existing, bool):   # 적으려던 것은 기존 게임이다. 후보 칸 오류를 줄줄이 내지 않는다
+        errors.append({"code": "schema", "where": where, "message": f"existing_game은 true나 false입니다: {existing!r}"})
+        existing, ok = True, False
+    hint = "brief" in c   # 브리프만 적은 컨셉은 이미 만들고 있는 게임일 수 있다
+    for f in ("name",) if existing else REQUIRED_TEXT:
         if not _text(c.get(f)):
-            errors.append({"code": "missing_field", "where": where, "message": f"{josa(f, '이가')} 비어 있습니다."})
+            errors.append({"code": "missing_field", "where": where, "message": f"{josa(f, '이가')} 비어 있습니다."
+                           + (EXISTING_HINT if hint and f != "name" else "")})
+            hint = hint and f == "name"
             ok = False
     status = c.get("status")
     if status is not None and status not in STATUSES:
         errors.append({"code": "schema", "where": where, "message": f"status는 {', '.join(STATUSES)} 중 하나입니다: {status!r}"})
         ok = False
     sig = c.get("signature")
-    if not isinstance(sig, dict) or not all(isinstance(k, str) and _text(v) for k, v in sig.items()):
+    if existing and sig is None:   # 견줄 후보가 없어 구조 축을 적지 않아도 된다
+        pass
+    elif not isinstance(sig, dict) or not all(isinstance(k, str) and _text(v) for k, v in sig.items()):
         errors.append({"code": "schema", "where": where, "message": "signature는 {축: 값(문자열)} 객체여야 합니다."})
         ok = False
     else:
@@ -586,8 +597,12 @@ def validate(data: dict, root: Path | None = None) -> dict:
         elif origin is not None and origin != "root" and origin not in ids:
             errors.append({"code": "unknown_origin", "where": c["id"], "message": f"origin '{origin}'가 없습니다. 처음 만든 컨셉은 'root'로 둡니다."})
     active = [c for c in valid if is_active(c)]
+    for c in [c for c in active if c.get("existing_game")][1:]:
+        warnings.append({"code": "existing_game_many", "where": c["id"],
+                         "message": "existing_game은 이미 만들고 있는 게임 하나에만 적습니다. 후보에 적으면 후보 칸 검사와 구조 비교를 건너뜁니다. "
+                                    "새 후보면 키를 지우고 후보 칸을 채웁니다."})
     for c in active:
-        if not _text(c.get("next_test")):
+        if not _text(c.get("next_test")) and not c.get("existing_game"):
             warnings.append({"code": "next_test_missing", "where": c["id"], "message": "이 가설을 가장 싸게 확인할 다음 시험(next_test)이 없습니다."})
         if any(s.get("result") == "dominates" for s in c.get("stress", [])):
             warnings.append({"code": "dominant_policy", "where": c["id"],
@@ -605,7 +620,7 @@ def validate(data: dict, root: Path | None = None) -> dict:
             check_brief(c, c["id"], errors, warnings)
             if isinstance(c.get("brief"), dict):
                 unverified += check_brief_numbers(c, errors, warnings, root, gate_notes, ack_notes)
-    structure = check_structure(active, warnings, ctx["fixed"])
+    structure = check_structure([c for c in active if "signature" in c], warnings, ctx["fixed"])
     status_counts = {s: 0 for s in STATUSES + ("unspecified",)}
     for c in valid:
         status_counts[_status(c)] += 1
@@ -676,7 +691,7 @@ def table(data: dict, result: dict, ids: list[str] | None = None) -> str:
         cost = c.get("cost")
         cost_txt = f"{COST_LABEL[cost['level']]}: {cost['reason']}" if isinstance(cost, dict) and cost.get("level") in COST_LABEL else "–"
         rows.append("| " + " | ".join(_cell(x) for x in (
-            cid, c.get("name"), STATUS_LABEL.get(_status(c), _status(c)), c.get("decision"), c.get("skill_expression"),
+            cid, c.get("name"), STATUS_LABEL.get(_status(c), _status(c)) + (" · 기존 게임" if c.get("existing_game") is True else ""), c.get("decision"), c.get("skill_expression"),
             stress, c.get("risk"), cost_txt, c.get("next_test"))) + " |")
     if missing:
         rows += ["", "표에 넣지 못한 id(없거나 형식 오류): " + ", ".join(missing)]

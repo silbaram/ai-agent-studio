@@ -51,13 +51,14 @@
 | `next_test` | 아니오 | 이 가설을 가장 싸게 확인할 시험. 활성 후보에 없으면 경고 |
 | `notes` | 아니오 | 변이 이유, 기대 변화, 사용자 의견 |
 | `brief` | 선택 시 | `approved`면 필수. [brief.md](brief.md) |
+| `existing_game` | 아니오 | `true`면 이미 만들고 있는 게임의 컨셉이다. 후보 칸을 비워도 된다(아래 검사 표). [existing-game.md](existing-game.md) |
 | `acknowledged` | 아니오 | 확인을 마친 경고 `{경고 코드: 이유}`. 경고 수에서 빠지고 이유와 함께 따로 보인다 |
 
 ## 검사 내용
 
 | 코드 | 수준 | 조건 |
 |---|---|---|
-| `missing_field`, `schema`, `duplicate_id` | 오류 | 필수 항목 누락, 형식 위반, id 중복 |
+| `missing_field`, `schema`, `duplicate_id` | 오류 | 필수 항목 누락, 형식 위반, id 중복. `existing_game`이 `true`면 `pitch`부터 `risk`까지 필수가 아니고, `signature`는 적었을 때만 본다 |
 | `signature_missing_axis` | 오류 | 필수 축(`decision`, `information`, `commitment`, `risk_reward`)이 없음. 고정 축은 없어도 됨 |
 | `signature_too_small` | 오류 | 비교할 구조 축(고정 축 제외)이 4개 미만 |
 | `evidence_missing` | 오류 | `unknown`이 아닌 반증 결과에 근거가 없음 |
@@ -75,10 +76,11 @@
 | `criteria_history_mismatch` | 오류 | 가설의 `criteria_history`에 적은 고치기 전 값으로 계산한 지문이 적힌 지문과 다름, 또는 기준이 바뀌지 않은 이력(태그·띄어쓰기만 바꿈). 이력은 오래된 것이 앞이다. 범위 훅은 이 오류로 게임 편집을 막지 않는다 |
 | `criteria_history_invalid` | 오류 | `criteria_history`의 형식이 틀림(배열이 아님, `date`가 달력에 없는 날, `stamp`가 지문 꼴이 아님, `before`가 비었거나 지문에 드는 칸이 아님, `why`가 빔) |
 | `criteria_points_to_data` | 경고 | 판정 기준 문장(`claim`, `failure_signal`, `test`, `success_criteria`)이 게임 데이터 파일의 경로를 적음("값은 data/growth.json의 …"). 종류는 내용으로, 파일이 없거나 게임 고유 형식이면 이름으로 본다. 판정 기록·컨셉·시스템 설계·시뮬레이터 설정·종류를 알 수 없는 JSON은 보지 않는다(출처 태그 안의 경로도). 경고가 없다고 그 파일을 가리켜도 된다는 뜻은 아니다. 그 파일은 다음 조정에서 바뀌어 문장이 다른 빌드를 가리키게 된다. 변경 이름이나 빌드 id(세션의 `build` 커밋, `game_build` 지문)로 가리킨다. 판정한 가설이면 `builds`를 새로 더하지 않고 문장의 변경 이름으로 가리키며(없으면 묻는다), 사용자와 확인한 뒤 고친다. 판정한 가설에 대한 이 안내는 가설 문장의 경고에만 붙는다(`success_criteria`는 지문에 들지 않는다)([playtest-verdict](../../playtest-verdict/references/changes.md#판정한-가설의-문장을-고칠-때)의 '판정한 가설의 문장을 고칠 때'). 그대로 두려면 `acknowledged`에 `{"criteria_points_to_data": {"data/growth.json": 까닭}}` |
-| `near_duplicate` | 경고 | 활성 후보 둘의 구조 축이 80% 이상 같음(고정 축 제외, 공통 축 4개 이상일 때). 변이와 원본이면 원본을 `cut`으로 둘지 안내한다 |
+| `near_duplicate` | 경고 | 활성 후보 둘의 구조 축이 80% 이상 같음(고정 축 제외, 공통 축 4개 이상일 때. `signature`가 없는 기존 게임 컨셉은 겹침·쏠림 비교에서 빠진다). 변이와 원본이면 원본을 `cut`으로 둘지 안내한다 |
 | `axis_collapse` | 경고 | 활성 후보 3개 이상이 한 축에서 모두 같은 값(고정 축 제외) |
 | `dominant_policy` | 경고 | 활성 후보에 단순 전략이 지배하는 결과가 있음 |
-| `next_test_missing` | 경고 | 활성 후보에 다음 시험이 없음 |
+| `existing_game_many` | 경고 | `existing_game`이 `true`인 활성 컨셉이 둘 이상. 첫 컨셉 말고 나머지에 나온다 |
+| `next_test_missing` | 경고 | 활성 후보에 다음 시험이 없음(기존 게임 컨셉은 보지 않는다. 다음 시험은 브리프의 `prototype`이다) |
 | `rejected_but_active` | 경고 | `hard_reject`가 있는데 `cut`이 아님 |
 
 `cut` 후보는 겹침·쏠림·다음 시험 검사에서 빠진다. 검사기는 재미나 우열을 판정하지 않고, 브리프의 구조만 본다. `--fail-on-assumed`는 선택한 컨셉의 브리프에 `[가정]` 태그가 남아 있으면 실패한다.

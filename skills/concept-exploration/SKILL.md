@@ -1,6 +1,6 @@
 ---
 name: concept-exploration
-description: "Explores game concepts as testable mechanic hypotheses instead of ranked pitches: gathers constraints, generates structurally varied concepts, removes only demonstrated dead ends and structural duplicates, attacks survivors with simple-play strategies, keeps every concept in one concepts.json record, and turns the user's chosen concept into a falsifiable brief with pillars, anti-pillars, a core loop, hypotheses, and the smallest prototype. Use when the user has only a vague genre or feeling, wants concept ideas, needs to compare or choose concepts, or wants a chosen concept sharpened before prototyping."
+description: "Explores game concepts as testable mechanic hypotheses instead of ranked pitches: gathers constraints, generates structurally varied concepts, removes only demonstrated dead ends and structural duplicates, attacks survivors with simple-play strategies, keeps every concept in one concepts.json record, and turns the user's chosen concept into a falsifiable brief with pillars, anti-pillars, a core loop, hypotheses, and the smallest prototype. Use when the user has only a vague genre or feeling, wants concept ideas, needs to compare or choose concepts, or wants a chosen concept sharpened before prototyping. Also use when an existing, already playable game needs a brief before system design or playtests."
 ---
 
 # 컨셉 탐색
@@ -19,10 +19,12 @@ description: "Explores game concepts as testable mechanic hypotheses instead of 
 
 ## 쓰지 않을 때
 
-- 이미 컨셉이 정해졌고 수치·데이터를 다룰 때: [progression-economy](../progression-economy/SKILL.md)
+- 이미 브리프가 있고 수치·데이터를 다룰 때: [progression-economy](../progression-economy/SKILL.md)
 - 기획 문서 수치의 출처 표시: [numeric-provenance](../numeric-provenance/SKILL.md)
 
 ## 흐름
+
+이미 만들고 있는 게임이면 후보를 만들지 않는다. 1~7단계를 건너뛰고 [references/existing-game.md](references/existing-game.md)로 8단계의 브리프만 적는다.
 
 ### 1. 제약 모으기
 
