@@ -652,7 +652,7 @@ class Docs(unittest.TestCase):
         self.assertIn("다시 차는 주기", self.fmt)
 
     def test_free_order_games_are_told_what_not_to_read(self):  # 102
-        self.assertIn("순서가 자유로운", self.skill)
+        self.assertIn("순서를 고르는", self.skill)   # 갈래 묶음(branches)으로 적는다(136번)
 
     def test_acknowledging_unused_curve_points_is_documented(self):  # 103
         self.assertIn('{"curve_unused_point"', self.fmt)

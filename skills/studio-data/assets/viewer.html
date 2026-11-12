@@ -1041,7 +1041,8 @@ function renderEconomy(ds, idx) {
       el("td", { class: "num" + (bad ? " off" : "") }, when), el("td", { class: "mono" }, p.stage ? p.stage + (r.purchase_timing === "stage_end" ? " 끝" : "") : dash()));
   });
   const left = Object.entries(r.leftover || {}).map(([k, v]) => el("tr", {}, el("td", { class: "mono", text: k }), el("td", { class: "num" }, num(v.amount)),
-    el("td", { class: "num" + ((r.warnings || []).some((w) => w.code === "currency_piles_up" && w.where.endsWith("." + k)) ? " off" : "") }, Math.round(v.share * 100) + "%")));
+    el("td", { class: "num" + ((r.warnings || []).some((w) => w.code === "currency_piles_up" && w.where.endsWith("." + k)) ? " off" : "") }, Math.round(v.share * 100) + "%"),
+    el("td", { class: "num" }, v.last_income ? `${fmt(v.before_last)} (${v.last_stage} 수입 ${fmt(v.last_income)} 없이)` : dash())));  // 마지막 단계의 수입은 그 판에 쓸 곳이 없다
   return [
     ...(general.length || ackNotes.length ? [el("section", { class: "panel" }, el("div", { class: "ph" }, el("h2", {}, "전체")), ...general, ...ackNotes)] : []),
     el("section", { class: "panel", id: "group-all" },
@@ -1053,7 +1054,7 @@ function renderEconomy(ds, idx) {
         el("span", { class: "group-meta", text: "판 안 재화는 살 수 있는 시점, 판 사이에 남는 재화는 몇 번째 판에 사는지 봅니다." })),
       small(["구매", "재화", "가격", "시점", "단계"], buyRows, ds.report ? "구매 계획이 없습니다." : "계산은 서버 모드에서 보입니다.")),
     ...(left.length ? [el("section", { class: "panel" }, el("div", { class: "ph" }, el("h2", {}, "판 끝에 남는 재화")),
-      small(["재화", "남는 양", "한 판 수입 중"], left, ""))] : []),
+      small(["재화", "남는 양", "한 판 수입 중", "마지막 단계 수입 없이"], left, ""))] : []),
   ];
 }
 
@@ -1102,10 +1103,12 @@ function renderLevels(ds, idx) {
     const named = unknown.filter((e) => !leftOut(s).includes(e));  // 기준 장비 칸이 이미 밝힌 적은 다시 적지 않는다
     return `${text} 이상` + (named.length ? ` (${named.join(", ")} 제외)` : "");
   };
+  const variantCol = stages.some((s) => s.variants && typeof s.variants === "object");  // 직업·무기 하나만 든 변형 단계의 같은 계산
   const stageRows = stages.map((s) => el("tr", {},
-    el("td", { class: "mono", text: s.id }), el("td", { class: "num" }, num(s.position)), el("td", { class: "num" }, num(s.threat)),
+    el("td", { class: "mono", text: s.id }), el("td", { class: "num" }, s.position === null || s.position === undefined ? dash() : fmt(s.position) + (Array.isArray(s.branch) ? ` (갈래 ${s.branch.join("·")})` : "")), el("td", { class: "num" }, num(s.threat)),
     el("td", { class: "num" }, given(s.vs_previous) ? `×${fmt(Math.round(s.vs_previous * 100) / 100)}` : dash()),
     el("td", { class: "num" }, cost(s) === null ? dash() : atLeast(s, cost(s)) + (leftOut(s).length ? ` (${leftOut(s).join(", ")} 제외)` : "")),
+    ...(variantCol ? [el("td", { class: "num" }, s.variants && typeof s.variants === "object" ? Object.entries(s.variants).map(([k, v]) => `${k} ${fmt(v)}${given(s.kill_time) ? "초" : "타"}`).join(" · ") : dash())] : []),
     el("td", { class: "num" }, s.duration === null || s.duration === undefined ? dash() : `${fmt(s.duration)}${s.time_unit || ""}`),
     el("td", { class: "num" + (s.kill_ratio > 1 ? " off" : "") }, pace(s) === null ? dash() : atLeast(s, pace(s))),
     ...GROWN.map(([k]) => el("td", { class: "num" }, grownText(s, k) === null ? dash() : grownText(s, k))),
@@ -1136,9 +1139,11 @@ function renderLevels(ds, idx) {
     el("div", { class: "doc" }, Object.keys(cfg).length
       ? el("p", {}, `곡선: ${curveText} · 역할 배수: ${parts(cfg.roles)} · 허용 ±${Math.round((r.tolerance ?? cfg.tolerance ?? 0.2) * 100)}% `, sourcePill(cfg))
       : el("p", { class: "muted", text: "threat_budget이 없어 예산과 비교하지 않습니다." }),
-      r.run_threat === null || r.run_threat === undefined ? null : el("p", { text: `판 전체 위협도 ${fmt(r.run_threat)}` })),
+      r.run_threat === null || r.run_threat === undefined
+        ? (Array.isArray(r.run_threat_range) ? el("p", { text: `판 전체 위협도 ${fmt(r.run_threat_range[0])}~${fmt(r.run_threat_range[1])} (갈래 하나를 고름)` }) : null)
+        : el("p", { text: `판 전체 위협도 ${fmt(r.run_threat)}` })),
     ...[...(Array.isArray(r.notes) ? r.notes : []), ...(Array.isArray(r.ack_notes) ? r.ack_notes : [])].map(hint),
-    stageRows.length ? small(["단계", "순서", "위협도 합", "앞 단계 대비", byHits ? "단일 대상 처치 타수" : "단일 대상 처치 시간(초)", "길이", byHits ? "타수 ÷ 길이" : "처치 시간 ÷ 길이", ...GROWN.map(([, head]) => head), "평범한 조우의 적 수"], stageRows, "") : null)];
+    stageRows.length ? small(["단계", "순서", "위협도 합", "앞 단계 대비", byHits ? "단일 대상 처치 타수" : "단일 대상 처치 시간(초)", ...(variantCol ? ["변형 단계"] : []), "길이", byHits ? "타수 ÷ 길이" : "처치 시간 ÷ 길이", ...GROWN.map(([, head]) => head), "평범한 조우의 적 수"], stageRows, "") : null)];
   if (spanRows.length || runRows.length) {
     out.push(el("section", { class: "panel" },
       el("div", { class: "ph" }, el("h2", {}, "페이싱"), el("span", { class: "group-meta", text: `부담은 평범한 조우 몇 개 분량입니다. 강함은 세기 ${fmt(pacing.strong_at)} 이상입니다. 플레이어의 체력을 보지 않는 설계 가정입니다.` })),
