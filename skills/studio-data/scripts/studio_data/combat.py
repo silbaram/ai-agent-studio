@@ -603,7 +603,7 @@ def validate(data: dict, items: dict | None = None, upgrades: dict | None = None
                         r["out_of_range"].append(m)
                         _err(warnings, "target_out_of_range", ewhere,
                              f"{METRIC_LABEL[m]} {c.josa(c.num_text(v), '이가')} {RANK_LABEL.get(e.get('rank'), e.get('rank'))} 목표 {c.josa(c.range_text(rng), '을를')} 벗어납니다.",
-                             **row_issue)
+                             **row_issue, value=f"{METRIC_LABEL[m]} {c.num_text(v)}", **c.range_measured(v, rng, METRIC_LABEL[m].split("(")[0]))
                 rows.append(r)
     if settings is not None and upgrades is not None:
         _check_upgrade_stats(settings, stages, stage_info, upgrades, errors)

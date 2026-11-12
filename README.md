@@ -25,7 +25,7 @@ AI 에이전트와 함께 게임 프로젝트를 기획부터 완성까지 관�
 | [scope-guard](skills/scope-guard/SKILL.md) | OpenSpec 변경을 브리프와 시스템 설계에 잇고, MVP 밖의 일과 낡은 명세를 찾아 훅으로 막으며, 범위를 넓히는 편집은 사용자에게 묻기 |
 | [numeric-provenance](skills/numeric-provenance/SKILL.md) | 기획 수치를 `[가정]` / `[계산: 출처]` / `[측정: 출처]`로 표시하고, 확정 판정 전에 스크립트로 검사 |
 | [progression-economy](skills/progression-economy/SKILL.md) | 아이템·영구 강화·적 데이터의 단일 원본 관리와 뷰어(레벨마다 강해지는 적은 한 행과 성장으로), 티어 역전·완전 열위·드랍 천장·강화 사슬·적 위협도 진행 검사, 로그라이크 메타 성장 시뮬레이션 |
-| [run-growth](skills/run-growth/SKILL.md) | 레벨업 선택지와 빌드 정책(우선순위·고르게)으로 단계별로 얻는 스탯을 시뮬레이션해 전투 계산에 더하고, 빌드끼리 처치·버팀을 비교해 모든 곳에서 밀리는 빌드를 찾음 |
+| [run-growth](skills/run-growth/SKILL.md) | 레벨업 선택지와 빌드 정책(우선순위·고르게)으로 단계별로 얻는 스탯을 시뮬레이션해 전투 계산에 더하고, 빌드끼리 처치·버팀을 비교해 모든 곳에서 밀리는 빌드를 찾음. 경험치 곡선을 적으면 단계별 도달 레벨을 가정과 견줌 |
 | [stat-budget](skills/stat-budget/SKILL.md) | 티어·구역별 스탯 예산 곡선과 원가로 아이템·적의 넘침·모자람을 찾고, 원형(아키타입)으로 새 항목 초안을 만들고, 전투 공식으로 스탯 원가를 제안 |
 | [crafting-balance](skills/crafting-balance/SKILL.md) | 강화 단계별 기대 비용·시도(실패 시 유지·하락·파괴), 합성의 가치 비율과 무작위 합성의 특정 결과까지 기대 횟수, 아이템 증식 고리, 얻을 수 없는 아이템 |
 | [economy-flow](skills/economy-flow/SKILL.md) | 단계별 수입(처치 보상·드랍 판매·기타)과 구매 계획(아이템·강화·합성·영구 강화 가격)을 이어 구매 시점, 메타 재화의 판 수, 판 끝에 남는 재화를 계산 |

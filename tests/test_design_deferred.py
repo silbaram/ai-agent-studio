@@ -257,6 +257,17 @@ class SuccessCriteriaCoversHypotheses(unittest.TestCase):
         for text in ("세 가설의 틀렸다는 신호가 모두 나오지 않는다", "3개 가설 모두", "세 가설 중 두 가설 이상이 버틴다"):
             self.assertEqual(misses(text), [], text)
 
+    def test_a_threshold_is_not_the_number_of_hypotheses(self):
+        for text in ("가설 1개 이상이 버티면 다음 단계로 간다", "두 가설 이상이 버틴다", "가설 2개 넘게 버틴다", "가설 1개라도 틀리면 실패다", "가설 2개만 버텨도 된다"):
+            self.assertEqual(misses(text), [], text)
+        self.assertEqual(len(misses("가설 2개 중 1개 이상이 버틴다")), 1)   # '중' 앞은 전체 수다
+
+    def test_words_that_start_like_a_count_are_not_counts(self):
+        for text in ("가설 열거 순서대로 확인한다", "가설 셋업을 먼저 한다", "가설 둘째 줄을 본다", "가설 열린 결말"):
+            self.assertEqual(misses(text), [], text)
+        for text in ("가설 둘이 버틴다", "가설 둘을 본다", "가설 둘과 지표", "가설 둘 다"):
+            self.assertEqual(len(misses(text)), 1, text)
+
     def test_labels_and_any_one_are_not_counts(self):
         for text in ("한 가설이라도 신호가 나오면 실패다", "가설 1과 가설 2의 신호가 없다", "모든 가설의 신호가 없다", "세 갈래로 평균한 값이 2턴 이상이다"):
             self.assertEqual(misses(text), [], text)

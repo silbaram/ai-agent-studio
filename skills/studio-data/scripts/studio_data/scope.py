@@ -34,6 +34,7 @@ LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
 NON_GOALS = re.compile(r"^\s*(?:#+\s*|\*\*)?\s*non[- ]?goals\b", re.IGNORECASE)   # design.md의 "## Non-Goals"나 "**Non-Goals:**"
 MEASURED = ("proposal.md", "tasks.md")  # 무엇을 만들지 적는 문서. design.md는 Non-Goals에 범위 밖을 적는 자리라 재지 않는다
 TASK = re.compile(r"^\s*[-*]\s+\[([ xX])\]", re.MULTILINE)   # tasks.md의 작업 줄: - [ ] / - [x]
+ARCHIVE_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}-")   # openspec archive가 붙이는 폴더 이름 앞의 날짜
 MTIME_SLACK = 1.0   # 초. 같은 순간에 쓴 파일의 시각 차이는 고친 것으로 보지 않는다
 
 
@@ -132,12 +133,19 @@ def late_specs(change: Path) -> list[str]:
     return [p.relative_to(change).as_posix() for p in sorted((change / "specs").rglob("*.md")) if p.stat().st_mtime > after]
 
 
+def _closed_order(archived: Path) -> tuple:
+    """보관한 변경의 닫은 순서. 폴더 이름은 날짜-이름이라 같은 날에는 이름 순이 시간 순이 아니므로, 같은 날짜끼리는 폴더 안 파일의 마지막 수정 시각으로 가른다."""
+    day = archived.name[:10] if ARCHIVE_DAY.match(archived.name) else archived.name
+    latest = max((p.stat().st_mtime for p in archived.rglob("*") if p.is_file()), default=0.0)
+    return day, latest, archived.name
+
+
 def _closed_drift(root: Path, systems: dict, changes: list[Path]) -> list[str]:
-    """닫은 뒤 규칙이 바뀐 시스템. 그 시스템을 이은 마지막 보관 변경의 지문과 지금 규칙을 댄다. 보관 폴더 이름은 날짜로 시작해 이름 순이 시간 순이다.
+    """닫은 뒤 규칙이 바뀐 시스템. 그 시스템을 이은 마지막 보관 변경의 지문과 지금 규칙을 댄다.
     진행 중인 변경이 그 시스템을 이었으면 그 변경이 맞추는 중이라 알리지 않는다."""
     folder = root / CHANGES / "archive"
     newest: dict = {}
-    for archived in sorted(p for p in folder.iterdir() if p.is_dir()) if folder.is_dir() else []:
+    for archived in sorted((p for p in folder.iterdir() if p.is_dir()), key=_closed_order) if folder.is_dir() else []:
         newest.update({sid: (archived.name, mark) for sid, mark in (linked(archived) or {}).items()})
     active = {sid for change in changes for sid in (linked(change) or {})}
     return [f"닫은 뒤 바뀐 규칙: {sid}. {c.josa(name, '을를')} 닫은 뒤 규칙이 바뀌어 메인 스펙이 지금 규칙과 어긋날 수 있습니다. "

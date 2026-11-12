@@ -562,7 +562,8 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
             if target is not None and measure is not None and c.out_of_range(measure, target):
                 row["out_of_range"] = True
                 _err(warnings, "target_out_of_range", p["id"],
-                     f"{c.josa(p['id'], '을를')} {c.num_text(measure)}{unit}에 삽니다. 목표 {c.josa(c.range_text(target) + unit, '을를')} 벗어납니다.", owner=p["id"])
+                     f"{c.josa(p['id'], '을를')} {c.num_text(measure)}{unit}에 삽니다. 목표 {c.josa(c.range_text(target) + unit, '을를')} 벗어납니다.", owner=p["id"],
+                     value=f"{c.num_text(measure)}{unit}", **c.range_measured(measure, target))
         _check_gear(item_buys, enhance_buys, [x for x in stages if c.is_active(x)], combat_stages, settings["purchase_timing"] == "stage_end", warnings)
         if complete:
             for k in cur:

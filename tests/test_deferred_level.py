@@ -122,7 +122,8 @@ class Docs(unittest.TestCase):
 
     def test_148_166_an_ack_keeps_its_value(self):
         row = next(x for x in level_format().splitlines() if x.startswith("| `status`, `provenance`, `acknowledged`"))
-        self.assertIn("확인할 때의 값", row)
+        self.assertIn("확인 값", row)   # 값이 나빠지면 확인이 풀린다(test_ack_values). 규칙은 studio-data SKILL.md 한 곳에 있다
+        self.assertNotIn("나빠져도 풀리지 않는다", row)
         self.assertIn("새 세션", row)
 
     def test_169_171_greybox_guidance(self):

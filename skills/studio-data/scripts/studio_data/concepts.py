@@ -361,16 +361,21 @@ def check_brief(c: dict, where: str, errors: list, warnings: list | None = None)
 _COUNT_WORDS = {"두": 2, "둘": 2, "세": 3, "셋": 3, "네": 4, "넷": 4, "다섯": 5, "여섯": 6, "일곱": 7, "여덟": 8, "아홉": 9, "열": 10}
 _COUNTER = r"\s*(?:개|가지)"
 _BEFORE = "두|세|네|다섯|여섯|일곱|여덟|아홉|열"
+_PARTICLE = "을|이|은|의|과|도|만|에|으로|로|이라도|이다|이고|이며|이면"   # '가설 둘' 뒤에 붙는 조사
 HYPOTHESIS_COUNT = re.compile(
     rf"(?<![가-힣\w])(?:(?P<w1>{_BEFORE})(?:{_COUNTER})?|(?P<d1>\d+){_COUNTER})\s*(?:의\s*)?가설"     # 두 가설, 2개 가설, 두 개의 가설
-    rf"|가설\s*(?:(?P<d2>\d+){_COUNTER}|(?P<w2>{_BEFORE}){_COUNTER}|(?P<w3>둘|셋|넷|다섯|여섯|일곱|여덟|아홉|열)(?![가-힣]*째))")   # 가설 2개, 가설 두 개, 가설 둘
+    rf"|가설\s*(?:(?P<d2>\d+){_COUNTER}|(?P<w2>{_BEFORE}){_COUNTER}|(?P<w3>둘|셋|넷|다섯|여섯|일곱|여덟|아홉|열)(?=[^가-힣]|$|(?:{_PARTICLE})(?![가-힣])))")   # 가설 2개, 가설 두 개, 가설 둘(가설 열거·셋업·둘째는 수가 아니다)
+THRESHOLD = re.compile(r"\s*(?:이상|이하|미만|초과|넘|이라도|라도|만)")   # 수 뒤에 오면 전체 수가 아니라 문턱이다(가설 1개 이상). '중' 앞은 전체 수다
 SUCCESS_MISSES_HYPOTHESIS = ("브리프의 가설은 {n}개({ids})입니다. 가설을 더하거나 뺐으면 같은 편집에서 success_criteria와 prototype.scope를 맞춥니다"
                              "(concept-exploration references/brief.md의 '가설 (`hypotheses`, 1개 이상)' 절, '가설을 더하면 같은 편집에서 맞춘다'). 맞게 쓴 문장이면 컨셉의 acknowledged에 까닭을 적습니다.")
 
 
 def _stated_counts(text: str) -> list[int]:
     out = []
-    for m in HYPOTHESIS_COUNT.finditer(unicodedata.normalize("NFC", text)):
+    text = unicodedata.normalize("NFC", text)
+    for m in HYPOTHESIS_COUNT.finditer(text):
+        if THRESHOLD.match(text, m.end()):
+            continue
         word = m.group("w1") or m.group("w2") or m.group("w3")
         out.append(_COUNT_WORDS[word] if word else int(m.group("d1") or m.group("d2")))
     return out

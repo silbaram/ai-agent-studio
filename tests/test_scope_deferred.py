@@ -57,6 +57,27 @@ class ClosedThenChanged(Case):
         code, out = run_cli("scope", self.root, "--json")
         self.assertTrue(any(n.startswith("닫은 뒤 바뀐 규칙") for n in json.loads(out)["notes"]))
 
+    def test_the_last_one_closed_on_the_same_day_counts_not_the_name(self):
+        """207: 보관 폴더는 날짜-이름이라 같은 날에는 이름 순이 시간 순이 아니다. 파일 시각으로 가른다."""
+        self.linked()
+        old = self.close(name="add-tempo", day="2026-11-05")   # z보다 a가 앞이지만 나중에 닫았다
+        self.change_rule()
+        meta = (old / ".openspec.yaml").read_text(encoding="utf-8")
+        early = self.root / "openspec/changes/archive/2026-11-05-zz-early"
+        early.mkdir()
+        (early / ".openspec.yaml").write_text(meta, encoding="utf-8")   # 예전 지문으로 아침에 닫은 변경
+        stamp = time.time() - 3600
+        os.utime(early / ".openspec.yaml", (stamp, stamp))
+        from studio_data import scope as sc
+        late = self.root / "openspec/changes/archive/2026-11-05-a-late"
+        late.mkdir()
+        text = meta
+        for sid, mark in (sc.linked(old) or {}).items():
+            text = text.replace(mark, sc.stamp(self.system(self.design(), sid)))
+        (late / ".openspec.yaml").write_text(text, encoding="utf-8")   # 지금 지문으로 오후에 닫은 변경
+        shutil.rmtree(old)
+        self.assertEqual(self.note_with("닫은 뒤 바뀐 규칙"), [], self.notes())
+
     def test_unchanged_rules_say_nothing(self):
         self.linked()
         self.close()
