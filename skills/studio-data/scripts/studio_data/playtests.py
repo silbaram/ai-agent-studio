@@ -31,7 +31,7 @@ SOURCE_READ_LIMIT = 5_000_000
 STAGE_FIELDS = {"stage", "entered", "cleared", "level", "level_end", "duration", "timed", "kills", "kill_rate", "played_length", "income", "source", "note"}
 GROUP_FIELDS = {"upgrades", "growth_build", "variant", "runs", "players", "stage_stats"}
 GREYBOX_FIELDS = {"check", "value", "passed", "n", "source", "note"}
-SESSION_FIELDS = {"id", "date", "concept", "build", "game_build", "players", "runs", "events", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note"}
+SESSION_FIELDS = {"id", "date", "concept", "build", "game_build", "players", "runs", "events", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note", "simulated"}
 TOP_FIELDS = {"playtests", "verdicts", "note"}
 REF_LABEL = {"stages": "전투 단계", "upgrades": "영구 강화", "enemies": "적", "builds": "판 안 성장 빌드", "currencies": "재화", "greybox": "그레이박스 확인"}
 UNCHECKED_REASON = {
@@ -270,6 +270,9 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
         ok = False
     if "game_build" in s and not _text(s["game_build"]):
         _err(errors, "schema", where, f"game_build는 프로토타입이 판 로그에 남긴 빌드 지문입니다(예: cfg721feeb5): {s['game_build']!r}")
+        ok = False
+    if "simulated" in s and not isinstance(s["simulated"], bool):
+        _err(errors, "schema", where, f"simulated는 true(사람이 아니라 봇·스크립트가 한 플레이)나 false입니다: {s['simulated']!r}")
         ok = False
     players = s.get("players")
     if not (isinstance(players, list) and players and all(_text(p) for p in players)):
@@ -653,17 +656,23 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         if v["result"] in DECIDED and found and not any(o["hypothesis"] == v["hypothesis"] for s in found for o in s.get("observations", [])):
             _err(errors, "observation_missing", where,
                  f"근거로 든 세션에 가설 '{v['hypothesis']}'의 관찰값이 없습니다. 관찰값을 세션에 적거나 unknown(모름)으로 둡니다.")
+        bots = [s["id"] for s in found if s.get("simulated") is True]
+        if v["result"] in DECIDED and bots:
+            _err(errors, "verdict_simulated_session", where,
+                 f"{RESULT_LABEL[v['result']]} 판정의 근거 세션 {josa(', '.join(bots), '은는')} 사람이 하지 않은 플레이(simulated)입니다. "
+                 "사람의 플레이만 버팀·틀림의 근거가 됩니다. 근거에서 빼거나 unknown(모름)으로 둡니다.")
         seen = [s for s in found if any(o["hypothesis"] == v["hypothesis"] for o in s.get("observations", []))]
-        have = _sample(seen)   # 그 가설을 관찰한 근거 세션만 센다. 출력과 게이트가 같은 값을 쓴다
+        human = [s for s in seen if s.get("simulated") is not True]   # 표본은 사람의 플레이만 센다
+        have = _sample(human)   # 그 가설을 관찰한 근거 세션만 센다. 출력과 게이트가 같은 값을 쓴다
         need = concepts[v["concept"]].get("samples", {}).get(v["hypothesis"]) if concepts is not None else None
         if need and "events" in need:
-            have["events"] = _events(seen, need["events"])
-        if v["result"] in DECIDED and seen and need and any(have[k] < need[k] for k in ("players", "runs") if k in need):   # 관찰값이 없으면 observation_missing이 말한다
+            have["events"] = _events(human, need["events"])
+        if v["result"] in DECIDED and seen and need and not bots and any(have[k] < need[k] for k in ("players", "runs") if k in need):   # 자동 플레이가 원인이면 그 오류 하나로 알린다   # 관찰값이 없으면 observation_missing이 말한다
             _err(errors, "verdict_sample_short", where,
                  f"{RESULT_LABEL[v['result']]} 판정의 근거 표본({_sample_text(have)})이 가설의 최소 표본({_sample_text(need)})보다 적습니다. "
                  "세션을 더 하거나 unknown(모름)으로 둡니다. 표본을 줄이려면 playtest-verdict references/changes.md '표본을 줄이자는 말이 나올 때'를 따릅니다.")
         short = {k: e for k, e in have.get("events", {}).items() if e["count"] < need["events"][k]}
-        if v["result"] == "holds" and seen and short:   # 틀림은 사건에 기대지 않는 다른 쪽 신호로 낼 수 있어 막지 않는다
+        if v["result"] == "holds" and seen and short and not bots:   # 틀림은 사건에 기대지 않는 다른 쪽 신호로 낼 수 있어 막지 않는다
             _err(errors, "verdict_events_short", where,
                  f"버팀 판정의 근거 사건 수({_events_text(short, need['events'])})가 가설의 최소 사건 수보다 적습니다. "
                  "사건에 기대는 쪽 신호를 가리지 못했으면 버팀이 아니라 unknown(모름)입니다. 세션마다 그 세션에서 센 건수를 events에 적습니다(세지 않은 세션은 0으로 셉니다).")
@@ -690,7 +699,8 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                          if x.get("kind") == "deviation" and v["hypothesis"] in (x.get("hypotheses") or [v["hypothesis"]]))
         verdicts[where] = {"result": v["result"], "status": status, "reason": v["reason"], "sample": have, "need": need,
                            "deviations": deviations, "criteria": criteria, "proposed_result": v.get("proposed_result"), "next_needs": v.get("next_needs"),
-                           "sample_text": _sample_line(have, need, deviations, list(dict.fromkeys(s.get("game_build") or s["build"] for s in seen)))}
+                           "sample_text": _sample_line(have, need, deviations, list(dict.fromkeys(s.get("game_build") or s["build"] for s in seen)))
+                           + (f" · 자동 플레이 세션 {len(seen) - len(human)}개 뺌" if len(seen) > len(human) else "")}
 
     unverified: list = []
     unverified_reasons: dict = {}   # 확정 판정인데 게이트에 걸린 까닭. 데이터는 키 그대로 두고 화면(check 게이트 줄, 뷰어)이 붙인다

@@ -153,6 +153,7 @@
 | `unknown_drop_table` | 오류 | 아이템 데이터에 없는 드랍 테이블을 가리킴 (`check`나 뷰어가 아이템 파일을 함께 읽은 경우) |
 | `unknown_enemy` | 오류 | `level_of`가 기본 적(`level_of`가 없는 행)을 가리키지 않음 |
 | `schema` | 오류 | 형식 위반. `growth`에 `stats`에 없는 스탯이 있음(오타). `template`이 `true`/`false`가 아님, 틀에 `growth`가 없음, `level_of` 행에 `template: true`. 기본 적(틀 포함)에 적힌 등급·구역·보상·드랍·레벨·스탯이 틀리면 기본 적에서 한 번만 알린다. `level_of` 행: `stats`를 적음, `level`이 1 이상의 정수가 아님, 기본 적에 `growth`가 없음. 기본 적의 형식 오류 때문에 계산하지 못한 행은 따로 알리지 않는다 |
+| `level_duplicate` | 경고 | 틀이 아닌 기본 적과 레벨이 같은 `level_of` 행(같은 적을 두 번 센다). 다른 데이터가 기본 적을 가리키게 하고 그 행을 지우거나, 기본 적을 틀로 둔다 |
 | `zone_inversion` | 경고 | 같은 등급의 평균 위협도가 다음 구역에서 줄어듦 |
 | `rank_inversion` | 경고 | 같은 구역에서 상위 등급 평균 위협도가 하위 등급보다 높지 않음 |
 | `weights_ignored` | 경고 | `budget.json`이 있는데 `threat_weights`가 그 원가와 비율이 달라 무시함(원가를 쓴다) |

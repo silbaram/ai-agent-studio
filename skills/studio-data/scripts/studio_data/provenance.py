@@ -189,9 +189,13 @@ def _missing_session(path: Path, sids: list[str]) -> str | None:
         return None
     known = {s.get("id") for s in data["playtests"] if isinstance(s, dict)}
     missing = [sid for sid in sids if sid not in known]
-    if not missing:
-        return None
-    return f"플레이 기록 {path.name}에 없는 세션입니다: {', '.join(missing)}. 측정값은 기록된 세션만 출처로 씁니다."
+    if missing:
+        return f"플레이 기록 {path.name}에 없는 세션입니다: {', '.join(missing)}. 측정값은 기록된 세션만 출처로 씁니다."
+    bots = [s["id"] for s in data["playtests"] if isinstance(s, dict) and s.get("simulated") is True and s.get("id") in sids]
+    if bots:   # 사람이 하지 않은 플레이의 값은 계산이다
+        return (f"사람이 하지 않은 플레이(simulated) 세션은 측정값의 출처가 되지 못합니다: {', '.join(bots)}. "
+                f"자동 플레이로 낸 값은 [계산: {path.name}#세션 id]로 적습니다.")
+    return None
 
 
 def _tag_typo(name: str) -> str | None:

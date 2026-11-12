@@ -219,6 +219,13 @@ def validate(data: dict, drop_tables: dict | None = None, items_unreadable: bool
         raw = []
     templates = check_templates(raw, errors)
     enemies = check_schema(expand(raw, errors), errors)
+    bases = {e["id"]: e for e in raw if isinstance(e, dict) and isinstance(e.get("id"), str) and "level_of" not in e}
+    for e in enemies:   # 틀이 아닌 기본 적과 같은 레벨의 행은 같은 적을 두 번 센다
+        base = bases.get(e.get("level_of"))
+        if base and c.is_active(e) and not is_template(base) and e["level"] == (1 if base.get("level") is None else base.get("level")):
+            warnings.append({"code": "level_duplicate", "where": e["id"],
+                             "message": f"{c.josa(e['id'], '은는')} 기본 적 {c.josa(base['id'], '과와')} 같은 레벨 {e['level']}입니다. 같은 적을 두 번 셉니다. "
+                                        "다른 데이터가 기본 적을 가리키게 하고 이 행을 지우거나, 기본 적을 틀(template: true)로 둡니다."})
     weights, source = c.pick_weights(data.get("threat_weights"), weights, [e for e in enemies if c.is_active(e)],
                                      "threat_weights", "budget.enemies.costs", warnings)
     threat = {e["id"]: round(c.weighted(e, weights), 4) for e in enemies}

@@ -308,7 +308,8 @@ def _greybox_log(entries: list[dict]) -> dict | None:
     if data is None:
         return None
     raw = data.get("playtests")
-    sessions = [s for s in raw if isinstance(s, dict) and isinstance(s.get("greybox"), list) and playtests.valid_date(s.get("date"))] if isinstance(raw, list) else []
+    sessions = [s for s in raw if isinstance(s, dict) and isinstance(s.get("greybox"), list) and playtests.valid_date(s.get("date"))
+                and s.get("simulated") is not True] if isinstance(raw, list) else []   # 그레이박스 확인은 사람의 플레이로 한다
     out: dict = {}
     for s in sorted(sessions, key=_session_order):
         for x in s["greybox"]:
@@ -326,7 +327,7 @@ def _played_stages(entries: list[dict]) -> dict:
     raw = data.get("playtests") if isinstance(data, dict) else None
     out: dict = {}
     for s in raw if isinstance(raw, list) else []:
-        if not isinstance(s, dict):
+        if not isinstance(s, dict) or s.get("simulated") is True:   # 사람이 하지 않은 플레이는 세지 않는다
             continue
         holders = s.get("groups") if isinstance(s.get("groups"), list) else [s]
         stages = {x.get("stage") for h in holders if isinstance(h, dict) for x in h.get("stage_stats") or []
