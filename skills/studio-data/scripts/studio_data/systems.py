@@ -128,17 +128,23 @@ def _check_repeats(s: dict, warnings: list) -> None:
             _err(warnings, "duplicate_item", s["id"], f"{key}에 같은 항목이 두 번 있습니다: {', '.join(twice)}. 하나만 남깁니다.", owner=s["id"])
 
 
+def _named_items(s: dict, items: dict | None) -> list:
+    """시스템의 이름·의도·규칙 글에 나오는 브리프의 범위 밖 항목."""
+    if items is None:
+        return []
+    texts = [c.fold_text(x) for x in (s.get("name"), s.get("intent"), *(r["text"] for r in s.get("rules", []))) if isinstance(x, str)]
+    return [item for item in items["out_of_scope"] if item.strip() and any(c.phrase_pattern(item).search(x) for x in texts)]
+
+
 def _check_text(s: dict, items: dict, errors: list) -> None:
     """브리프가 뺀 것을 시스템의 글로 옮겨 넣지 않았는가. 범위 밖 시스템은 그 항목을 이름으로 쓴다."""
     if s["scope"] == "out":
         return
-    texts = [c.fold_text(x) for x in (s.get("name"), s.get("intent"), *(r["text"] for r in s.get("rules", []))) if isinstance(x, str)]
-    for item in items["out_of_scope"]:
-        if item.strip() and any(c.phrase_pattern(item).search(x) for x in texts):
-            _err(errors, "out_of_scope_claimed", s["id"], f"브리프가 범위 밖이라고 한 항목이 시스템의 글에 있습니다: {item}. 글에서 빼거나, 브리프를 바꿀지 사용자에게 묻습니다.")
+    for item in _named_items(s, items):
+        _err(errors, "out_of_scope_claimed", s["id"], f"브리프가 범위 밖이라고 한 항목이 시스템의 글에 있습니다: {item}. 글에서 빼거나, 브리프를 바꿀지 사용자에게 묻습니다.")
 
 
-def _check_scope(s: dict, warnings: list) -> None:
+def _check_scope(s: dict, items: dict | None, warnings: list) -> None:
     """시스템의 범위가 브리프와 맞는가."""
     scope, sid, base = s["scope"], s["id"], s.get("foundation", False)
     problems = []
@@ -147,7 +153,9 @@ def _check_scope(s: dict, warnings: list) -> None:
     if scope != "mvp" and s.get("mvp"):
         problems.append(f"범위가 {SCOPES[scope]}인데 브리프의 MVP 항목을 맡습니다: {', '.join(s['mvp'])}.")
     if scope == "out" and not s.get("out_of_scope"):
-        problems.append("범위가 out인데 브리프의 범위 밖 항목을 가리키지 않습니다.")
+        named = _named_items(s, items)
+        problems.append("범위가 out인데 브리프의 범위 밖 항목을 가리키지 않습니다."
+                        + (f" 글에 나오는 범위 밖 항목: {', '.join(named)}. 이 항목이면 out_of_scope에 적습니다." if named else ""))
     for text in problems:
         _err(warnings, "scope_mismatch", sid, text, owner=sid)
     if scope != "out" and not s.get("pillars") and not base:
@@ -176,19 +184,27 @@ def _check_dependencies(live: dict, cut: set, known: set, lost: set, errors: lis
 
 
 def _steps(live: dict) -> dict:
-    """만드는 순서 {시스템: 단계}. 의존하는 시스템보다 뒤다. 범위 밖과 순환에 걸린 시스템은 단계가 없다."""
-    built = {k: s for k, s in live.items() if s["scope"] != "out"}
+    """만드는 순서 {시스템: 단계}. MVP 시스템끼리 먼저 세고, 나중 시스템은 MVP의 마지막 단계 뒤에서 센다.
+    기대는 시스템에 단계가 있어야 단계가 있다. 범위 밖·삭제된·없는 시스템, MVP가 기대는 나중 시스템, 순환에 기대면 단계가 없다(그 까닭은 다른 검사가 알린다)."""
     steps: dict = {}
-    while True:
-        ready = [k for k, s in built.items() if k not in steps and all(d in steps or d not in built for d in s.get("depends_on", []))]
-        if not ready:
-            break
-        for k in ready:
-            steps[k] = 1 + max([steps[d] for d in built[k].get("depends_on", []) if d in steps], default=0)
-    last = max((n for k, n in steps.items() if built[k]["scope"] == "mvp"), default=0)   # 나중 시스템은 MVP를 다 만든 뒤다
-    for k in sorted((k for k in steps if built[k]["scope"] == "later"), key=steps.get):
-        steps[k] = 1 + max([last] + [steps[d] for d in built[k].get("depends_on", []) if d in steps])
+
+    def place(scope: str, after: int) -> None:
+        pool = [k for k, s in live.items() if s["scope"] == scope]
+        while True:
+            ready = [k for k in pool if k not in steps and all(d in steps for d in live[k].get("depends_on", []))]
+            if not ready:
+                return
+            for k in ready:
+                steps[k] = 1 + max([after] + [steps[d] for d in live[k].get("depends_on", [])])
+
+    place("mvp", 0)
+    place("later", max(steps.values(), default=0))
     return steps
+
+
+def _unplaced(live: dict, steps: dict) -> dict:
+    """단계가 없는 시스템(범위 밖 제외) → 단계가 없는 의존. 표와 출력이 까닭을 보인다."""
+    return {k: [d for d in s.get("depends_on", []) if d not in steps] for k, s in live.items() if s["scope"] != "out" and k not in steps}
 
 
 def _cycle(live: dict, steps: dict) -> list:
@@ -252,7 +268,7 @@ def validate(data: dict, concepts: list | None = None, concepts_unreadable: bool
         if items is not None:
             _check_links(s, items, errors)
             _check_text(s, items, errors)
-        _check_scope(s, warnings)
+        _check_scope(s, items, warnings)
         _check_repeats(s, warnings)
     lost = {s.get("id") for s in raw if isinstance(s, dict)} - set(live) - cut
     _check_dependencies(live, cut, known, lost, errors, warnings)
@@ -263,7 +279,8 @@ def validate(data: dict, concepts: list | None = None, concepts_unreadable: bool
     if items is not None and not lost:   # 빠진 시스템이 맡던 것을 빠졌다고 말하지 않는다
         _check_coverage(live, items, warnings)
     order = list(SCOPES)
-    rows = [{"id": s["id"], "name": s.get("name"), "scope": s["scope"], "foundation": s.get("foundation", False), "order": steps.get(s["id"]), "pillars": s.get("pillars", []), "mvp": s.get("mvp", []),
+    blocked = _unplaced(live, steps)
+    rows = [{"id": s["id"], "name": s.get("name"), "scope": s["scope"], "foundation": s.get("foundation", False), "order": steps.get(s["id"]), "waits_on": blocked.get(s["id"], []), "pillars": s.get("pillars", []), "mvp": s.get("mvp", []),
              "out_of_scope": s.get("out_of_scope", []), "depends_on": s.get("depends_on", []), "rules": len(s.get("rules", []))}
             for s in sorted(live.values(), key=lambda x: (steps.get(x["id"], 10 ** 6), order.index(x["scope"]), x["id"]))]
     return {
@@ -293,7 +310,7 @@ def print_extra(result: dict) -> None:
     if result["dropped"]:
         print(f"형식 오류로 계산과 표에서 빠진 시스템: {', '.join(result['dropped'])}. 오류를 고치면 다시 셉니다.")
     for x in result["rows"]:
-        step = f"{x['order']}단계" if x["order"] else "단계 없음"
+        step = f"{x['order']}단계" if x["order"] else "단계 없음" + (f"(단계가 없는 의존: {', '.join(x['waits_on'])})" if x.get("waits_on") else "")
         print(f"시스템 {_title(x)}: {SCOPES[x['scope']]} · {step} · 규칙 {x['rules']}개")
     if {"concepts", "concepts_unreadable"} & set(result["unchecked_kinds"]):
         print("시스템 설계 미확인: 컨셉을 함께 검사하지 않았거나 읽지 못해 브리프와의 연결을 보지 못함")

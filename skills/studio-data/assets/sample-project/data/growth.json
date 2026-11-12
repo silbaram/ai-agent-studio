@@ -5,7 +5,8 @@
     "offers": 3,
     "trials": 1000,
     "seed": 7,
-    "provenance": { "kind": "assumed", "note": "단계별 레벨은 평범하게 깬 판의 추정" }
+    "xp": { "curve": { "growth": "linear", "base": 10, "rate": 5 }, "note": "레벨 L에서 L+1로 가는 경험치. 수입 재화(currency)를 재화 흐름에 두면 단계별 레벨과 견준다" },
+    "provenance": { "kind": "assumed", "note": "단계별 레벨과 경험치 곡선은 평범하게 깬 판의 추정" }
   },
   "choices": [
     { "id": "sharpen", "name": "날 세우기", "stats": { "attack": 2 }, "max_picks": 6, "status": "approved", "provenance": { "kind": "assumed" } },

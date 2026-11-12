@@ -397,9 +397,11 @@ def _time_reaching(stages: list[dict], currency: str, amount: float, settings: d
 
 
 def validate(data: dict, enemies: dict | None = None, items: dict | None = None, drop_tables: dict | None = None,
-             upgrades: dict | None = None, crafting: dict | None = None, combat: dict | None = None, meta: dict | None = None) -> dict:
+             upgrades: dict | None = None, crafting: dict | None = None, combat: dict | None = None, meta: dict | None = None,
+             xp_currency: str | None = None) -> dict:
     """enemies·items·upgrades: 함께 읽은 데이터의 {id: 항목}, drop_tables: 아이템 데이터의 드랍 테이블, crafting: 강화·합성 파일 내용.
     combat: 전투 계산 파일 내용(단계의 combat_stage 연결을 확인), meta: {재화: 메타 성장 설정(meta_sim.normalize 결과) 또는 {"error": 이유}}.
+    xp_currency: 판 안 성장이 경험치로 쓰는 재화. 쓰는 재화가 아니므로 남는 양을 보지 않는다.
     쓰는 데이터가 None이면 그 부분은 미확인으로 센다."""
     errors: list = []
     warnings: list = []
@@ -564,7 +566,7 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
         _check_gear(item_buys, enhance_buys, [x for x in stages if c.is_active(x)], combat_stages, settings["purchase_timing"] == "stage_end", warnings)
         if complete:
             for k in cur:
-                if cur[k].get("carry") or per_run[k] <= 0 or k in blocked or "*" in blocked:
+                if cur[k].get("carry") or per_run[k] <= 0 or k in blocked or "*" in blocked or k == xp_currency:
                     continue  # 계산하지 못한 구매가 있는 재화는 남는 양을 내지 않는다(빼고 세면 남는 재화가 부풀려진다)
                 left = per_run[k] - spent[k]
                 share = left / per_run[k]

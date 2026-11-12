@@ -357,6 +357,48 @@ def check_brief(c: dict, where: str, errors: list, warnings: list | None = None)
     need(isinstance(oos, list) and len(oos) >= 1 and all(_text(o) for o in oos), "brief.out_of_scope가 1개 이상 필요합니다.")
 
 
+# 성공 기준이 말하는 가설 수. '한 가설'(어느 한 가설이라도)과 '가설 2'(이름표)는 수로 보지 않는다
+_COUNT_WORDS = {"두": 2, "둘": 2, "세": 3, "셋": 3, "네": 4, "넷": 4, "다섯": 5, "여섯": 6, "일곱": 7, "여덟": 8, "아홉": 9, "열": 10}
+_COUNTER = r"\s*(?:개|가지)"
+_BEFORE = "두|세|네|다섯|여섯|일곱|여덟|아홉|열"
+HYPOTHESIS_COUNT = re.compile(
+    rf"(?<![가-힣\w])(?:(?P<w1>{_BEFORE})(?:{_COUNTER})?|(?P<d1>\d+){_COUNTER})\s*(?:의\s*)?가설"     # 두 가설, 2개 가설, 두 개의 가설
+    rf"|가설\s*(?:(?P<d2>\d+){_COUNTER}|(?P<w2>{_BEFORE}){_COUNTER}|(?P<w3>둘|셋|넷|다섯|여섯|일곱|여덟|아홉|열)(?![가-힣]*째))")   # 가설 2개, 가설 두 개, 가설 둘
+SUCCESS_MISSES_HYPOTHESIS = ("브리프의 가설은 {n}개({ids})입니다. 가설을 더하거나 뺐으면 같은 편집에서 success_criteria와 prototype.scope를 맞춥니다"
+                             "(concept-exploration references/brief.md의 '가설 (`hypotheses`, 1개 이상)' 절, '가설을 더하면 같은 편집에서 맞춘다'). 맞게 쓴 문장이면 컨셉의 acknowledged에 까닭을 적습니다.")
+
+
+def _stated_counts(text: str) -> list[int]:
+    out = []
+    for m in HYPOTHESIS_COUNT.finditer(unicodedata.normalize("NFC", text)):
+        word = m.group("w1") or m.group("w2") or m.group("w3")
+        out.append(_COUNT_WORDS[word] if word else int(m.group("d1") or m.group("d2")))
+    return out
+
+
+def check_success_covers(c: dict, warnings: list) -> None:
+    """승인한 브리프의 성공 기준이 가설 수와 다른 수를 말하거나, 가설 id를 몇 개만 적고 나머지를 빼면 알린다(가설을 더할 때 맞추지 않은 문장)."""
+    b = c["brief"]
+    hyps = b.get("hypotheses") if isinstance(b.get("hypotheses"), list) else []
+    text = (b.get("prototype") or {}).get("success_criteria") if isinstance(b.get("prototype"), dict) else None
+    if not hyps or not isinstance(text, str):
+        return
+    ids = [h["id"] for h in hyps if isinstance(h, dict) and isinstance(h.get("id"), str) and h["id"]]
+    problems = []
+    counts = _stated_counts(text)
+    if counts and max(counts) != len(hyps):
+        problems.append(f"가설 {max(counts)}개를 말합니다")
+    folded = unicodedata.normalize("NFC", text).casefold()
+    named = [i for i in ids if re.search(rf"(?<![a-z0-9_]){re.escape(i.casefold())}(?![a-z0-9_])", folded)]
+    left = [i for i in ids if i not in named]
+    if len(ids) > 1 and named and left:
+        problems.append(f"가설 {josa(', '.join(named), '을를')} 적었는데 {josa(', '.join(left), '이가')} 없습니다")
+    if problems:
+        warnings.append({"code": "success_criteria_misses_hypothesis", "where": c["id"],
+                         "message": f"brief.prototype.success_criteria가 {', '.join(problems)}. "
+                                    + SUCCESS_MISSES_HYPOTHESIS.format(n=len(hyps), ids=", ".join(ids) or "id 없음")})
+
+
 def _strings(obj, path: str):
     if isinstance(obj, str):
         yield path, obj
@@ -619,6 +661,7 @@ def validate(data: dict, root: Path | None = None) -> dict:
         if c.get("status") == "approved":
             check_brief(c, c["id"], errors, warnings)
             if isinstance(c.get("brief"), dict):
+                check_success_covers(c, warnings)
                 unverified += check_brief_numbers(c, errors, warnings, root, gate_notes, ack_notes)
     structure = check_structure([c for c in active if "signature" in c], warnings, ctx["fixed"])
     status_counts = {s: 0 for s in STATUSES + ("unspecified",)}
