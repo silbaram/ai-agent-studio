@@ -569,6 +569,10 @@ def validate(data: dict, enemies: dict | None = None, items: dict | None = None,
                 left = per_run[k] - spent[k]
                 share = left / per_run[k]
                 leftover[k] = {"amount": round(left, 4), "share": round(share, 4)}
+                last = timeline[-1] if timeline else None
+                if settings["purchase_timing"] == "stage_end" and last:   # 단계 끝에 사는 게임: 마지막 단계의 수입은 판이 끝난 뒤라 그 판에 쓸 곳이 없다
+                    last_in = last.get("income", {}).get(k, 0)
+                    leftover[k].update(last_stage=last["id"], last_income=round(last_in, 4), before_last=round(left - last_in, 4))
                 if settings["leftover_max"] is not None and share > settings["leftover_max"] + EPS:
                     _err(warnings, "currency_piles_up", f"economy.currencies.{k}",
                          f"한 판 수입 {per_run[k]:g} {k} 중 {share:.0%}({left:g})가 구매 계획 뒤에도 남습니다(허용 {settings['leftover_max']:.0%}). "
@@ -696,7 +700,8 @@ def print_extra(result: dict) -> None:
     for p in result["purchases"]:
         print(f"구매 {p['id']}: {_fmt(p['price'])} {p['currency']} → {_when(p, result)}" + (" ⚠" if p["out_of_range"] or not p["affordable"] else ""))
     for k, left in result["leftover"].items():
-        print(f"판 끝에 남는 {k}: {_fmt(left['amount'])} (한 판 수입의 {left['share']:.0%})")
+        print(f"판 끝에 남는 {k}: {_fmt(left['amount'])} (한 판 수입의 {left['share']:.0%})"
+              + (f" · 마지막 단계 {left['last_stage']}의 수입 {_fmt(left['last_income'])} 없이 {_fmt(left['before_last'])}" if left.get("last_income") else ""))
     data_kinds = [UNCHECKED_LABEL[k] for k in result["unchecked_kinds"] if k in UNCHECKED_LABEL]
     if data_kinds:
         print("재화 흐름 미확인: " + ", ".join(data_kinds) + " 데이터를 함께 검사하지 않았거나 읽지 못함")

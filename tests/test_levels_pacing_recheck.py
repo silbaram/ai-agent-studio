@@ -359,7 +359,7 @@ class Docs(unittest.TestCase):
         self.assertIn("괄호의 레벨 범위는 넣지 않는다", fmt)
         self.assertIn("구매 시설은 보상이 아니다", fmt)
         self.assertIn("플레이어 행동에 달린 보상", fmt)
-        self.assertIn("임무를 넘는 보상 구간", skill)
+        self.assertIn("branches", skill)   # 임무를 넘는 보상 구간은 갈래 묶음이 끊는다(145번)
         self.assertIn("가장 빡빡한 단계", skill)
         self.assertIn("층 중간에 상점", skill)
         self.assertIn("장비가 일부 라운드에서만", skill)

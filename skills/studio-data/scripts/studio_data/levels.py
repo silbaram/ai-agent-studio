@@ -26,7 +26,9 @@ GREYBOX_FIELDS = {"id", "check", "encounter", "expect", "note"}
 GREYBOX_LABEL = {"passed": "통과", "failed": "실패", "open": "판정 없음", "none": "기록 없음"}
 BUDGET_FIELDS = {"curve", "roles", "tolerance", "kills_tolerance", "provenance", "note"}
 CURVE_FIELDS = {"growth", "base", "rate", "values", "note"}  # 곡선의 기준은 전투 단계의 순서로 정해져 있어 by를 쓰지 않는다
-TOP_FIELDS = {"threat_budget", "pacing", "levels", "note"}
+TOP_FIELDS = {"threat_budget", "pacing", "levels", "branches", "note"}
+BRANCH_TAKES = ("all", "one")   # 갈래를 모두 지나는가(순서만 고름), 하나만 고르는가
+COUNT_UNITS = ("단계", "stage", "stages", "방", "room", "rooms", "판", "run", "runs", "층", "floor", "floors", "전투", "battle", "battles")   # 시간이 아니라 개수인 길이 단위
 PACING_LIMITS = ("strong_at", "max_strong_run", "max_rest_load", "max_reward_load")
 PACING_FIELDS = {*PACING_LIMITS, "carry_levels", "provenance", "note"}
 SPAN_KINDS = {"rest": ("쉬는 곳 사이", "max_rest_load", "long_stretch", "쉬는 곳을 넣거나 조우를 줄입니다.", "쉬는 곳이"),
@@ -210,14 +212,65 @@ def _encounters(lv: dict, cfg, seen: set, errors: list) -> tuple[list, bool]:
 
 
 # ---------- 계산 ----------
-def _stage_budget(cfg, stage: str, order: list | None, lid: str, errors: list) -> float | None:
-    """그 단계의 곡선 값. 표 곡선은 단계 id로, 나머지는 전투 단계의 순서(1부터)로 읽는다. 순서를 모르면 None."""
+def read_branches(raw, order: list | None, errors: list) -> list:
+    """갈래 묶음 [{stages, take}]. 전투 단계 순서에서 이어 붙은 단계 둘 이상이고 묶음끼리 겹치지 않는다. 틀린 묶음은 오류를 남기고 뺀다."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        _err(errors, "schema", "branches", "branches는 [{stages: [전투 단계 id…], take: all|one}] 배열입니다.")
+        return []
+    out, used = [], set()
+    for n, g in enumerate(raw):
+        where = f"branches[{n}]"
+        ids = g.get("stages") if isinstance(g, dict) else None
+        if not (isinstance(ids, list) and len(ids) >= 2 and all(isinstance(x, str) for x in ids) and len(set(ids)) == len(ids)):
+            _err(errors, "schema", where, f"stages는 순서를 고르는 전투 단계 id 둘 이상입니다: {ids!r}")
+            continue
+        take = g.get("take", "all")
+        if take not in BRANCH_TAKES:
+            _err(errors, "schema", where, f"take는 all(모두 지나며 순서를 고름)이나 one(하나만 고름)입니다: {take!r}")
+            continue
+        if order is None:
+            continue
+        unknown = [x for x in ids if x not in order]
+        if unknown:
+            _err(errors, "unknown_stage", where, f"전투 계산에 없는 단계입니다(변형 단계 제외): {', '.join(unknown)}.{did_you_mean(unknown[0], order)}")
+            continue
+        at = sorted(order.index(x) for x in ids)
+        if at != list(range(at[0], at[0] + len(at))):
+            _err(errors, "schema", where, f"갈래의 단계는 전투 계산 순서에서 이어 붙어 있어야 합니다: {', '.join(ids)}. 사이에 다른 단계가 있으면 전투 계산의 단계 순서를 바꿉니다.")
+            continue
+        if used & set(ids):
+            _err(errors, "schema", where, f"다른 갈래와 겹치는 단계입니다: {', '.join(sorted(used & set(ids)))}")
+            continue
+        used |= set(ids)
+        out.append({"stages": [order[i] for i in at], "take": take})
+    return out
+
+
+def stage_positions(order: list | None, branches: list) -> dict:
+    """전투 단계의 판 안 순서(1부터). 한 갈래의 단계는 같은 순서를 나눈다. 곡선과 단계 표가 같이 쓴다."""
+    group = {sid: g["stages"] for g in branches for sid in g["stages"]}
+    out, pos, seen = {}, 0, set()
+    for sid in order or []:
+        if sid in group:
+            if group[sid][0] not in seen:
+                pos += 1
+            seen.add(group[sid][0])
+        else:
+            pos += 1
+        out[sid] = pos
+    return out
+
+
+def _stage_budget(cfg, stage: str, order: list | None, lid: str, errors: list, positions: dict | None = None) -> float | None:
+    """그 단계의 곡선 값. 표 곡선은 단계 id로, 나머지는 전투 단계의 순서(1부터, 갈래는 같은 순서)로 읽는다. 순서를 모르면 None."""
     if cfg is None:
         return None
     if cfg["curve"]["growth"] == "table":
         at = stage
     elif order is not None and stage in order:
-        at = order.index(stage) + 1
+        at = (positions or {}).get(stage, order.index(stage) + 1)
     else:
         return None
     value = bg.curve_value(cfg["curve"], at)
@@ -228,7 +281,7 @@ def _stage_budget(cfg, stage: str, order: list | None, lid: str, errors: list) -
     return value if value and value > 0 else None
 
 
-def _order_note(cfg, stage: str, stages: dict | None, order: list | None) -> str:
+def _order_note(cfg, stage: str, stages: dict | None, order: list | None, positions: dict | None = None) -> str:
     """삭제된 단계 때문에 곡선의 순서가 당겨졌으면 알리는 문장. 적은 그대로인데 예산만 바뀐 것을 적의 문제로 읽지 않게 한다."""
     if cfg is None or cfg["curve"]["growth"] == "table" or stages is None or stage not in (order or []):
         return ""
@@ -236,7 +289,7 @@ def _order_note(cfg, stage: str, stages: dict | None, order: list | None) -> str
     cut = [k for k in ids[:ids.index(stage)] if k not in order]
     if not cut:
         return ""
-    now = order.index(stage) + 1
+    now = (positions or {}).get(stage, order.index(stage) + 1)   # 곡선이 읽는 순서(갈래는 같은 순서)
     return f" 삭제된 단계 {', '.join(cut)} 때문에 단계 {stage}의 순서가 당겨져({now + len(cut)} → {now}) 예산이 달라졌습니다."
 
 
@@ -458,11 +511,13 @@ def _spread(g: dict) -> tuple:
 
 
 def _stage_rows(listed: list, by_stage: dict, order: list | None, stages: dict | None, whole, kill_times: dict | None, kill_hits: dict | None,
-                links: dict, unit: str, enemy_curve: dict | None, grown: dict | None = None, grown_exit: dict | None = None) -> list:
+                links: dict, unit: str, enemy_curve: dict | None, grown: dict | None = None, grown_exit: dict | None = None,
+                branches: list | None = None, variants: dict | None = None, positions: dict | None = None) -> list:
     """단계별 요약. listed: 전투 단계 순서대로, 순서를 모르면 나온 순서대로. 레벨이 없는 단계도 빈 행으로 낸다.
     처치 시간을 낼 수 없는 게임(공격 속도가 없는 턴제)은 타수를 낸다.
     비율은 여기서 한 번만 소수 둘째 자리로 줄인다. check와 뷰어가 따로 줄이면 0.625가 0.62와 0.63으로 갈린다."""
     rows = []
+    positions = positions if positions is not None else stage_positions(order, branches or [])
     for sid in listed:
         info = by_stage.get(sid)
         counted = info is not None and whole(sid)
@@ -475,20 +530,39 @@ def _stage_rows(listed: list, by_stage: dict, order: list | None, stages: dict |
             if spent is not None:
                 return _grown_ratio(kills, by_build, sid, "time_to_kill", length if _in_seconds(unit) else None)
             return _grown_ratio(kills, by_build, sid, "hits_to_kill", length) if hits is not None else None
-        rows.append({"id": sid, "position": order.index(sid) + 1 if sid in (order or []) else None,
+        own = {}   # 변형 단계(직업·무기 하나만 든 기준 장비)의 같은 계산
+        for vid in (variants or {}).get(sid, []):
+            cost, _ = _stage_cost(kills, (kill_times if spent is not None else kill_hits or {}).get(vid)) if spent is not None or hits is not None else (None, [])
+            if cost is not None:
+                own[vid] = round(cost, 1)
+        rows.append({"id": sid, "position": positions.get(sid),
+                     "branch": next((g["stages"] for g in branches or [] if sid in g["stages"]), None), "variants": own or None,
                      "curve": info["base"] if info else None, "threat": info["threat"] if counted else None,
                      "kills": None if kills is None else {k: round(v, 4) for k, v in kills.items()},
                      "kill_time": None if spent is None else round(spent, 1), "kill_hits": None if hits is None else round(hits, 1),
                      "kill_time_unknown": left_hits if hits is not None else left_out,
                      "duration": length, "time_unit": unit,
                      "kill_ratio": round(spent / length, 2) if spent is not None and length and _in_seconds(unit) else None,
-                     "hits_per_unit": round(hits / length, 2) if hits is not None and length else None,
+                     "hits_per_unit": round(hits / length, 2) if hits is not None and length and not (unit in COUNT_UNITS and length == 1) else None,
                      "grown_ratio": with_growth(grown), "grown_exit_ratio": with_growth(grown_exit),
                      "group_size": _group_size(info["base"] if info else None, (stages or {}).get(sid), enemy_curve)})
-    previous = None
+    previous, before_group, group = None, None, None   # previous: {id, threat, curve}. 갈래 안의 단계는 갈래 앞 단계와, 갈래 뒤 단계는 가장 센 갈래와 견준다
+
+    def strongest(members: list, fallback):
+        known = [r for r in rows if r["id"] in members and r["threat"] is not None]
+        top = max(known, key=lambda r: r["threat"]) if known else None
+        return {"id": top["id"], "threat": top["threat"], "curve": top["curve"]} if top else fallback
     for row in rows:   # 값이 없는 단계를 건너뛰고 앞뒤를 잇는다
-        row["vs_previous"] = round(row["threat"] / previous, 4) if row["threat"] is not None and previous else None
-        previous = row["threat"] if row["threat"] is not None else previous
+        branch = row["branch"]
+        if group is not None and branch is not group:   # 갈래를 나왔다(바로 다음 갈래로 들어가도 앞 갈래를 먼저 닫는다)
+            previous, group = strongest(group, before_group), None
+        if branch and group is None:
+            before_group, group = previous, branch
+        base = before_group if branch else previous
+        row["previous"] = base
+        row["vs_previous"] = round(row["threat"] / base["threat"], 4) if row["threat"] is not None and base and base["threat"] else None
+        if row["threat"] is not None and not branch:
+            previous = {"id": row["id"], "threat": row["threat"], "curve": row["curve"]}
     return rows
 
 
@@ -535,6 +609,10 @@ def _kill_check_note(listed: list, by_stage: dict, links: dict, economy, whole, 
         return []
     if economy is None:
         return ["처치 수 대조: 재화 흐름을 함께 읽지 않아 하지 못했습니다."]
+    eco_stages = economy.get("stages") if isinstance(economy.get("stages"), list) else []
+    settings = economy.get("economy") if isinstance(economy.get("economy"), dict) else {}
+    if not settings.get("kill_reward") and not any(isinstance(s, dict) and s.get("kills") for s in eco_stages):
+        return ["처치 수 대조: 재화 흐름에 처치 보상(kill_reward)과 처치 수가 없어 대조하지 않습니다(클리어 보상으로 버는 게임)."]
     stated = [k for k in listed if links.get(k, {}).get("kills")]
     done = [k for k in stated if k in by_stage and whole(k)]
     text = f"처치 수 대조: {len(done)}/{len(listed)} 단계"
@@ -572,6 +650,9 @@ def _gap_notes(rows: list, economy, unit: str, enemy_curve: dict | None) -> list
         out.append("처치 시간 ÷ 길이: 재화 흐름에 단계 길이(duration)가 없어 내지 않습니다.")
     elif lacking:
         out.append(f"처치 시간 ÷ 길이: 길이를 모르는 단계: {', '.join(lacking)}.")
+    ones = [s["id"] for s in hit if unit in COUNT_UNITS and s["duration"] == 1]
+    if ones:
+        out.append(f"타수 ÷ 길이: 길이가 1{unit}인 단계({', '.join(ones)})는 타수와 같아 내지 않습니다. 턴제면 재화 흐름의 길이를 턴 수(제한 턴 등)로 적습니다.")
     sized = [s for s in timed if s["duration"] is not None]
     if sized and all(s["kill_ratio"] is None for s in sized):
         out.append("처치 시간 ÷ 길이: 재화 흐름의 time_unit이 초가 아니라 내지 않습니다.")
@@ -808,7 +889,12 @@ def _reach(x: dict, shut, timed: list):
     return x["end"] if x is not shut and _fills(x, timed) else x["start"]
 
 
-def _span_walk(ordered: list, kind: str, carry: bool, lost: bool) -> tuple[list, list]:
+def _cut_here(lv: dict, prev, branched: set) -> bool:
+    """레벨을 넘는 구간과 연속을 여기서 끊는가. 갈래 단계로 들어가거나 나올 때 끊는다. 갈래는 지나는 순서가 판마다 달라 이어 셀 수 없다."""
+    return prev is not None and lv["stage"] != prev["stage"] and (lv["stage"] in branched or prev["stage"] in branched)
+
+
+def _span_walk(ordered: list, kind: str, carry: bool, lost: bool, branched: set = frozenset()) -> tuple[list, list]:
     """(표시로 끊은 구간, 끊지 못한 표시). kind: rest나 reward. 표시가 있는 조우는 자기 부담까지 넣고 끊는다. 적 없는 조우로 끊으면 길이는 그 시작까지다.
     횟수가 1보다 작은 표시는 없는 판이 있어 끊지 않는다. 위협이 없는 구간은 내지 않는다. 일부만 더한 값을 내지 않는다.
     lost: 형식 오류로 빠진 레벨이 있는가. 레벨을 넘어 이으면 어느 구간에 들었는지 몰라 부담을 내지 않는다."""
@@ -824,9 +910,11 @@ def _span_walk(ordered: list, kind: str, carry: bool, lost: bool) -> tuple[list,
                         "rate": round(load / length, 3) if load is not None and length else None})
         now = None
 
+    prev = None
     for lv in ordered:
-        if not carry:
+        if not carry or _cut_here(lv, prev, branched):
             close(None)
+        prev = lv
         whole = not lv["kills_partial"] and not (carry and lost)
         for beat in _beats(lv):
             marked = [x for x in beat if x[kind]]
@@ -852,7 +940,7 @@ def _passing(beat: list) -> bool:
     return len(beat) == 1 and x["weight"] == 0 and x["start"] is not None and not _long(x) and not x["rest"]
 
 
-def _strong_walk(ordered: list, carry: bool) -> list:
+def _strong_walk(ordered: list, carry: bool, branched: set = frozenset()) -> list:
     """강한 조우가 이어지는 곳. 길이는 횟수까지 센다. 강하지 않은 조우와 쉬는 곳에서 끊는다. 같은 때의 조우는 모두 강해야 강하다.
     구간과 같이, 횟수가 1보다 작은 조우는 없는 판이 있어 끊지 않는다."""
     out = []
@@ -864,9 +952,11 @@ def _strong_walk(ordered: list, carry: bool) -> list:
             out.append({**now, "length": round(now["length"], 4)})
         now = None
 
+    prev = None
     for lv in ordered:
-        if not carry:
+        if not carry or _cut_here(lv, prev, branched):
             close()
+        prev = lv
         for beat in _beats(lv):
             if not all(x["strong"] for x in beat):
                 if any(x["repeat"] >= 1 for x in beat) and not _passing(beat):
@@ -895,13 +985,13 @@ def _ack_way(code: str, s: dict) -> str:
     return f"의도한 구간이면 레벨 {s['level']}의 acknowledged에 {{{_shown(code)}: {{{_shown(_span_key(s))}: 이유}}}}로 적습니다."
 
 
-def _pace(ordered: list, settings: dict, lost: bool, warnings: list) -> tuple[dict, list]:
+def _pace(ordered: list, settings: dict, lost: bool, warnings: list, branched: set = frozenset()) -> tuple[dict, list]:
     """(구간과 연속, 읽을 때 알아야 할 문장). 상한을 넘으면 첫 조우에 경고를 건다. lost: 형식 오류로 빠진 레벨이 있는가."""
     spans, unsure, notes, kinds = [], [], [], []
     carry = settings["carry_levels"]
     for kind, (label, key, code, advice, subject) in SPAN_KINDS.items():
         across = carry or kind == "reward"   # 레벨이 끝나도 보상이 들어오지는 않는다. carry_levels는 체력의 일이다
-        found, maybe = _span_walk(ordered, kind, across, lost)
+        found, maybe = _span_walk(ordered, kind, across, lost, branched)
         unsure += maybe
         limit = settings[key]
         marked = any(x[kind] for _, x in _walk(ordered))
@@ -915,7 +1005,7 @@ def _pace(ordered: list, settings: dict, lost: bool, warnings: list) -> tuple[di
         spans += found
         if limit is not None and not marked:
             notes.append(f"{subject} 없습니다. {kind} 표시가 있는 조우가 없어 {'판 전체' if across else '레벨 전체'}를 한 구간으로 봅니다.")
-    runs = _strong_walk(ordered, carry and not lost)
+    runs = _strong_walk(ordered, carry and not lost, branched)
     limit = settings["max_strong_run"]
     for s in runs:
         s.update(limit=limit, over=limit is not None and s["length"] > limit + EPS)
@@ -924,7 +1014,7 @@ def _pace(ordered: list, settings: dict, lost: bool, warnings: list) -> tuple[di
             _err(warnings, "strong_run", f"{s['level']}.{s['from']}", f"강한 조우가 {_span_key(s)}에서 {_fmt(s['length'])}번 이어집니다(상한 {_fmt(limit)}). {advice} {_ack_way('strong_run', s)}",
                  owner=s["level"], part=_span_key(s), value=f"{_fmt(s['length'])}번")
     if limit is not None and not carry and not lost:
-        crossing = [s for s in _strong_walk(ordered, True) if s["to_level"] != s["level"] and s["length"] > limit + EPS]
+        crossing = [s for s in _strong_walk(ordered, True, branched) if s["to_level"] != s["level"] and s["length"] > limit + EPS]
         notes += [f"레벨을 넘으면 강한 조우가 {_span_name(s)}에서 {_fmt(s['length'])}번 이어집니다(상한 {_fmt(limit)}). 레벨 사이에 체력이 이어지는 게임이면 carry_levels를 적습니다." for s in crossing]
     if unsure:
         notes.append(f"횟수가 1보다 작아 구간을 끊지 않은 조우: {', '.join(dict.fromkeys(unsure))}. 없는 판이 있어서입니다. 구간의 값은 평균이고 어느 한 경로의 값이 아닙니다.")
@@ -1041,8 +1131,10 @@ def _notes(budget, cfg, rows: list, kill_check: list, gaps: list) -> list:
     out = []
     if cfg is not None and c.provenance_kind(budget) in ("assumed", "unspecified"):
         out.append("곡선의 출처가 가정입니다. \"예산 안\"은 곡선과 맞는다는 뜻이고 난이도의 근거가 아닙니다.")
-    measured = [s for s in rows if s["threat"] is not None]   # 값이 없는 단계를 건너뛰고 앞뒤를 잇는다
-    for before, after in zip(measured, measured[1:]):
+    for after in rows:   # 견주는 앞 단계는 단계 표의 '앞 단계 대비'와 같다(갈래 안은 갈래 앞, 갈래 뒤는 가장 센 갈래)
+        before = after.get("previous")
+        if after["threat"] is None or not before:
+            continue
         falling = before["curve"] is not None and after["curve"] is not None and after["curve"] < before["curve"]
         if after["threat"] < before["threat"] and not falling:
             out.append(f"단계 {after['id']}의 위협도 합이 앞 단계 {before['id']}보다 줄었습니다: {_fmt(before['threat'])} → {_fmt(after['threat'])}. 의도가 아니면 조우와 횟수를 봅니다.")
@@ -1086,6 +1178,12 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
     stages = {x["id"]: x for x in (combat or {}).get("stages") or [] if isinstance(x, dict) and isinstance(x.get("id"), str)} \
         if isinstance((combat or {}).get("stages"), list) else None
     order = cb.main_stage_ids(combat) if stages is not None else None   # 변형 단계(variant_of)는 단계 순서와 예산에 들지 않는다
+    branches = read_branches(data.get("branches"), order, errors)
+    positions = stage_positions(order, branches)
+    variants: dict = {}
+    for k, x in (stages or {}).items():
+        if c.is_active(x) and cb.is_variant(x):
+            variants.setdefault(x["variant_of"], []).append(k)
     missing = {k for k, gap in (("enemies", enemies is None or threat is None), ("combat", stages is None),
                                 ("threat_budget", data.get("threat_budget") is None)) if gap}
     rows, seen, computed, unscored, sourced, checks = [], set(), 0, [], [], set()
@@ -1120,8 +1218,8 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
             dropped.add(None)
             continue
         found, whole = _encounters(lv, cfg, seen, errors)
-        base = _stage_budget(cfg, sid, order, lv["id"], errors)
-        order_note = _order_note(cfg, sid, stages, order)
+        base = _stage_budget(cfg, sid, order, lv["id"], errors, positions)
+        order_note = _order_note(cfg, sid, stages, order, positions)
         info = by_stage.setdefault(sid, {"levels": [], "group": [], "kills": {}, "whole": True, "threat": 0.0, "base": base})
         info["levels"].append(lv)
         info["whole"] = info["whole"] and whole
@@ -1179,7 +1277,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
     shaky = {k for k in listed if dropped & {k, None} or not by_stage.get(k, {"whole": True})["whole"]}
     _place_in_time(ordered, links, shaky)
     pace_notes = _check_times(listed, ordered, by_stage, shaky, links, economy, unit, warnings) + _check_purchases(ordered, links, purchases, economy, unit, errors, warnings)
-    pacing, walk_notes = _pace(ordered, settings, bool(dropped), warnings)
+    pacing, walk_notes = _pace(ordered, settings, bool(dropped), warnings, {sid for g in branches for sid in g["stages"]})
     for beat in (beat for lv in ordered for beat in _beats(lv)):
         for x in beat:
             x["rate"] = _beat_rate(beat)
@@ -1206,12 +1304,20 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
     if _limits_assumed(data):
         summary["unverified"] = ["pacing(페이싱 기준)"] + summary["unverified"]
         walk_notes = ["페이싱 기준의 출처가 가정입니다. 경고가 없어도 리듬이 좋다는 뜻이 아닙니다.", *walk_notes]
-    stage_rows = _stage_rows(listed, by_stage, order, stages, counted, kill_times, kill_hits, links, unit, enemy_curve, grown_kills, grown_exit_kills)
+    stage_rows = _stage_rows(listed, by_stage, order, stages, counted, kill_times, kill_hits, links, unit, enemy_curve, grown_kills, grown_exit_kills,
+                             branches, variants, positions)
     for s in stage_rows:   # 옮길 처치 수를 받을 재화 흐름 단계가 있는가. 재화 흐름을 읽지 않았으면 모른다
         s["in_economy"] = None if economy is None else s["id"] in links
     _check_kill_ratio(stage_rows, by_stage, warnings)
     astray = {i for link, info in links.items() if link not in (stages or {}) for i in info["ids"]} if stages is not None else set()
     threats = [lv["threat"] for lv in rows]
+    whole_run = bool(threats) and None not in threats and not dropped and not empty
+    one_way = None   # 갈래 중 하나만 고르는 판: 판 전체 위협도는 고르는 갈래에 따라 범위다
+    singles = [g for g in branches if g["take"] == "one"]
+    if whole_run and singles:
+        by = {s["id"]: s["threat"] or 0 for s in stage_rows}
+        fixed = sum(v for k, v in by.items() if not any(k in g["stages"] for g in singles))
+        one_way = [round(fixed + sum(min(by[k] for k in g["stages"]) for g in singles), 4), round(fixed + sum(max(by[k] for k in g["stages"]) for g in singles), 4)]
     return {
         "kind": "levels",
         "count": len(entries),
@@ -1219,7 +1325,9 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
         "levels": rows,
         "stages": stage_rows,
         "kill_measure": "hits" if any(s["kill_hits"] is not None for s in stage_rows) and all(s["kill_time"] is None for s in stage_rows) else "time",
-        "run_threat": round(sum(threats), 4) if threats and None not in threats and not dropped and not empty else None,
+        "run_threat": None if one_way else round(sum(threats), 4) if whole_run else None,
+        "run_threat_range": one_way,
+        "branches": branches,
         "notes": _notes(budget, cfg, stage_rows, _kill_check_note(listed, by_stage, links, economy, counted, dropped, astray),
                         _gap_notes(stage_rows, economy, unit, enemy_curve) + _grown_notes(stage_rows, grown_unread)) + pace_notes + walk_notes + _greybox_note(rows, greybox_log, played_stages, written),
         "pacing": {"used": _pace_used(data, ordered), "time_unit": unit, "carry_levels": settings["carry_levels"], "strong_at": round(settings["strong_at"], 4),
@@ -1304,6 +1412,17 @@ def _cost(x: dict) -> str:
     return _fmt(x["kill_time"]) if x["kill_time"] is not None or x["kill_hits"] is None else _fmt(x["kill_hits"]) + "타"
 
 
+def _position(s: dict) -> str:
+    """단계 표의 순서. 갈래의 단계는 같은 순서와 갈래 이름을 함께 쓴다."""
+    return _fmt(s["position"]) + (f" (갈래 {'·'.join(s['branch'])})" if s.get("branch") else "")
+
+
+def _variants_text(s: dict) -> str:
+    """변형 단계(직업·무기 하나만 든 기준 장비)의 같은 계산. 단위는 그 단계의 처치(초, 아니면 타)다."""
+    unit = "초" if s["kill_time"] is not None else "타"
+    return " · ".join(f"{vid} {_fmt(v)}{unit}" for vid, v in (s.get("variants") or {}).items())
+
+
 def _stage_time(s: dict) -> str:
     """표의 단일 대상 처치 시간(없으면 타수). 표는 따로 옮겨 붙이므로 뺀 적을 칸에 함께 적는다."""
     if s["kill_time"] is None and s["kill_hits"] is None:
@@ -1324,9 +1443,14 @@ def print_extra(result: dict) -> None:
                   + (" ⚠" if x["flag"] in ("over", "under") else ""))
     for s in result["stages"]:
         parts = [f"위협도 합 {_fmt(s['threat'])}", _spent(s), f"평범한 조우의 적 수 {_fmt(s['group_size'])}" if s["group_size"] is not None else ""]
-        print(f"단계 {s['id']}" + (f" (순서 {s['position']})" if s["position"] else "") + ": " + " · ".join(p for p in parts if p))
+        if s.get("variants"):
+            parts.append("변형 단계 " + _variants_text(s))
+        print(f"단계 {s['id']}" + (f" (순서 {_position(s)})" if s["position"] else "") + ": " + " · ".join(p for p in parts if p))
     if result["run_threat"] is not None:
         print(f"판 전체 위협도 {_fmt(result['run_threat'])}")
+    elif result.get("run_threat_range"):
+        low, high = result["run_threat_range"]
+        print(f"판 전체 위협도 {_fmt(low)}~{_fmt(high)} (갈래 하나를 고름)")
     pacing = result["pacing"]
     for s in _shown_spans(pacing):
         length = "" if s["length"] is None else f" · 길이 {_fmt(s['length'])}{pacing['time_unit']}"
@@ -1416,11 +1540,14 @@ def table(data: dict, result: dict, ids: list[str] | None = None) -> str:
             rows.append("| " + " | ".join((lv["id"], x["id"], x["role"] or "–", _fmt(x["repeat"]), _mix(x), _fmt(x["threat"]), _vs(x), _cost(x),
                                             "–" if x["expected"] is None else f"{_fmt(x['expected'])} ({_fmt(x['low'])}~{_fmt(x['high'])})", _verdict(x))) + " |")
     shown = [k for k in GROWN_HEADS if any(s.get(k) for s in result["stages"])]   # 판 안 성장이 없는 게임의 표는 그대로 둔다
-    rows += ["", f"| 단계 | 순서 | 위협도 합 | 앞 단계 대비 | {total} | 길이 | {pace} |" + "".join(f" {GROWN_HEADS[k]} |" for k in shown) + " 평범한 조우의 적 수 |",
-             "|---|---|---|---|---|---|---|" + "---|" * len(shown) + "---|"]
+    variants = any(s.get("variants") for s in result["stages"])
+    rows += ["", f"| 단계 | 순서 | 위협도 합 | 앞 단계 대비 | {total} |" + (" 변형 단계 |" if variants else "") + f" 길이 | {pace} |"
+             + "".join(f" {GROWN_HEADS[k]} |" for k in shown) + " 평범한 조우의 적 수 |",
+             "|---|---|---|---|---|" + ("---|" if variants else "") + "---|---|" + "---|" * len(shown) + "---|"]
     for s in result["stages"]:
         length = "–" if s["duration"] is None else f"{_fmt(s['duration'])}{s['time_unit']}"
-        cells = (s["id"], _fmt(s["position"]), _fmt(s["threat"]), _vs(s), _stage_time(s), length, _ratio(s)) + tuple(_grown_text(s, k) for k in shown) + (_fmt(s["group_size"]),)
+        cells = ((s["id"], _position(s), _fmt(s["threat"]), _vs(s), _stage_time(s)) + ((_variants_text(s) or "–",) if variants else ())
+                 + (length, _ratio(s)) + tuple(_grown_text(s, k) for k in shown) + (_fmt(s["group_size"]),))
         rows.append("| " + " | ".join(cells) + " |")
     rows += _pace_table(result) + _greybox_table(result)
     counted = [s for s in result["stages"] if s["kills"]]
