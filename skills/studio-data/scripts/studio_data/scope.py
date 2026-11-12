@@ -33,6 +33,8 @@ FILE_EXTENSIONS = {"json", "md", "csv", "tsv", "txt", "log", "yaml", "yml", "tom
 LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
 NON_GOALS = re.compile(r"^\s*(?:#+\s*|\*\*)?\s*non[- ]?goals\b", re.IGNORECASE)   # design.md의 "## Non-Goals"나 "**Non-Goals:**"
 MEASURED = ("proposal.md", "tasks.md")  # 무엇을 만들지 적는 문서. design.md는 Non-Goals에 범위 밖을 적는 자리라 재지 않는다
+TASK = re.compile(r"^\s*[-*]\s+\[([ xX])\]", re.MULTILINE)   # tasks.md의 작업 줄: - [ ] / - [x]
+MTIME_SLACK = 1.0   # 초. 같은 순간에 쓴 파일의 시각 차이는 고친 것으로 보지 않는다
 
 
 # 컨셉 검사의 오류 중 범위와 관계없는 기록의 오류: 판정 기준 이력, 브리프 수치의 출처. check가 오류로 알리고, 게임 편집과 archive는 막지 않는다
@@ -108,6 +110,42 @@ def _changes(root: Path) -> list[Path]:
     return sorted(p for p in folder.iterdir() if p.is_dir() and p.name != "archive") if folder.is_dir() else []
 
 
+def change_names(root: Path) -> list[str]:
+    return [p.name for p in _changes(root)]
+
+
+def linked(change: Path) -> dict | None:
+    """변경이 이은 {시스템: 지문}. 메타데이터가 없으면 빈 값, 이 도구가 쓰는 형식이 아니면 None."""
+    meta = change / META
+    return _declared(meta.read_text(encoding="utf-8", errors="replace")) if meta.is_file() else {}
+
+
+def late_specs(change: Path) -> list[str]:
+    """작업이 모두 끝난([x]) 뒤 고친 명세. 파일 수정 시각으로만 안다. 작업이 없거나 남았으면 빈 목록이다."""
+    tasks = change / "tasks.md"
+    if not tasks.is_file():
+        return []
+    marks = TASK.findall(tasks.read_text(encoding="utf-8", errors="replace"))
+    if not marks or " " in marks:
+        return []
+    after = tasks.stat().st_mtime + MTIME_SLACK
+    return [p.relative_to(change).as_posix() for p in sorted((change / "specs").rglob("*.md")) if p.stat().st_mtime > after]
+
+
+def _closed_drift(root: Path, systems: dict, changes: list[Path]) -> list[str]:
+    """닫은 뒤 규칙이 바뀐 시스템. 그 시스템을 이은 마지막 보관 변경의 지문과 지금 규칙을 댄다. 보관 폴더 이름은 날짜로 시작해 이름 순이 시간 순이다.
+    진행 중인 변경이 그 시스템을 이었으면 그 변경이 맞추는 중이라 알리지 않는다."""
+    folder = root / CHANGES / "archive"
+    newest: dict = {}
+    for archived in sorted(p for p in folder.iterdir() if p.is_dir()) if folder.is_dir() else []:
+        newest.update({sid: (archived.name, mark) for sid, mark in (linked(archived) or {}).items()})
+    active = {sid for change in changes for sid in (linked(change) or {})}
+    return [f"닫은 뒤 바뀐 규칙: {sid}. {c.josa(name, '을를')} 닫은 뒤 규칙이 바뀌어 메인 스펙이 지금 규칙과 어긋날 수 있습니다. "
+            f"어느 규칙인지는 git diff {SYSTEMS_FILE.as_posix()}로 봅니다. 맞추려면 {sid}에 이은 새 변경을 만듭니다. 메인 스펙에 합치지 않고 닫은 시험판이면 넘깁니다."
+            for sid, (name, mark) in sorted(newest.items())
+            if sid in systems and _buildable(systems[sid]) and sid not in active and stamp(systems[sid]) != mark]
+
+
 def _measured_lines(text: str):
     """잴 줄 (번호, 글). REMOVED 절은 범위 밖 요구사항을 빼는 일이라 재지 않는다."""
     removed = False
@@ -164,10 +202,11 @@ def _rule_refs(line: str, systems: dict) -> list:
     return out
 
 
-def _check_rule_refs(change: Path, texts: list[tuple[Path, str]], systems: dict, declared: dict, errors: list) -> None:
+def _check_rule_refs(change: Path, texts: list[tuple[Path, str]], systems: dict, declared: dict, errors: list, notes: list) -> None:
     """명세가 가리키는 규칙(시스템.규칙)이 설계에 있는가, 그 시스템이 변경에 이어졌는가, design.md의 Non-Goals에 적은 규칙은 아닌가.
     잇지 않으면 그 규칙이 바뀌어도 design_changed가 나지 않는다. 설계에 있는 시스템 뒤의 표기만 본다."""
     excluded = _non_goal_rules(change, systems)
+    unknown: dict = {}   # 비슷한 규칙이 없는 id와 처음 나온 곳. 데이터 칸(weapons.fire_rate)일 수 있어 참고로만 알린다
     for path, text in texts:
         for number, line in _measured_lines(text):
             for sid, rid in _rule_refs(line, systems):
@@ -175,9 +214,11 @@ def _check_rule_refs(change: Path, texts: list[tuple[Path, str]], systems: dict,
                 where = f"{change.name}/{path.relative_to(change).as_posix()}:{number}"
                 if rid not in _rule_ids(s):
                     close = c.closest(rid, _rule_ids(s) - {None})
-                    if close:   # 비슷한 규칙이 없으면 데이터 칸(weapons.fire_rate)일 수 있어 막지 않는다
+                    if close:
                         _err(errors, "unknown_rule", where, f"시스템 설계에 없는 규칙입니다: {sid}.{rid}. '{close}'의 오타인가요? "
                                                             "규칙 id는 design/systems.json에 있는 것만 씁니다. 새 규칙이 필요하면 설계에 먼저 적습니다.")
+                    else:
+                        unknown.setdefault(f"{sid}.{rid}", where)
                     continue
                 if (sid, rid) in excluded:
                     _err(errors, "rule_in_non_goals", where, f"design.md의 Non-Goals에 적은 규칙을 가리킵니다: {sid}.{rid}. 이번에 하지 않을 일이면 그 줄을 뺍니다. "
@@ -192,9 +233,22 @@ def _check_rule_refs(change: Path, texts: list[tuple[Path, str]], systems: dict,
                     fix = (f"그 시스템은 이번에 만들지 않습니다(범위 {s['scope']}, 상태 {s.get('status', '없음')}). 그 줄을 빼고, 하지 않을 일이면 design.md의 "
                            "Non-Goals에 적습니다. 만들어야 하면 범위를 바꿀지 사용자에게 묻습니다.")
                 _err(errors, "rule_of_unlinked_system", where, f"변경이 잇지 않은 시스템의 규칙을 가리킵니다: {sid}.{rid}. {fix}")
+    if unknown:
+        found = ", ".join(f"{ref}({where})" for ref, where in unknown.items())
+        notes.append(f"설계에 없는 규칙 id: {found}. 데이터 칸이면 그대로 둡니다. 규칙이면 {SYSTEMS_FILE.as_posix()}의 id로 고치거나, 새 규칙이면 설계에 먼저 적습니다.")
 
 
-def _check_change(change: Path, design: dict, errors: list) -> None:
+def _check_cited_rules(change: Path, texts: list[tuple[Path, str]], systems: dict, declared: dict, notes: list) -> None:
+    """명세가 이은 시스템의 규칙을 하나라도 가리키는가. 가리키지 않으면 규칙이 바뀌어도 어느 요구사항을 고칠지 모른다."""
+    cited = {sid for _, text in texts for _, line in _measured_lines(text) for sid, rid in _rule_refs(line, systems) if rid in _rule_ids(systems[sid])}
+    for sid in sorted(declared):
+        rules = sorted(_rule_ids(systems[sid]) - {None}) if sid in systems and _buildable(systems[sid]) else []
+        if rules and sid not in cited:
+            notes.append(f"규칙을 가리키지 않는 명세: {change.name}의 명세가 {sid}의 규칙({', '.join(f'{sid}.{r}' for r in rules)})을 하나도 적지 않았습니다. "
+                         f"규칙이 바뀌면 어느 요구사항을 고칠지 알 수 없습니다. 요구사항에 규칙 id(예: {sid}.{rules[0]})를 적습니다.")
+
+
+def _check_change(change: Path, design: dict, errors: list, notes: list) -> None:
     meta = change / META
     text = meta.read_text(encoding="utf-8", errors="replace") if meta.is_file() else ""
     declared = _declared(text)
@@ -218,15 +272,22 @@ def _check_change(change: Path, design: dict, errors: list) -> None:
     measured = [change / n for n in MEASURED if (change / n).is_file()] + specs
     texts = [(path, path.read_text(encoding="utf-8", errors="replace")) for path in measured]   # 훅이 편집마다 부르므로 한 번만 읽는다
     _check_texts(change, texts, design["out_of_scope"], errors)
-    _check_rule_refs(change, texts, systems, declared, errors)   # 잇지 않은 변경은 change_without_system이 말하므로 이음은 보지 않는다
+    _check_rule_refs(change, texts, systems, declared, errors, notes)   # 잇지 않은 변경은 change_without_system이 말하므로 이음은 보지 않는다
+    if specs:
+        _check_cited_rules(change, [(p, t) for p, t in texts if p in specs], systems, declared, notes)
+    late = late_specs(change)
+    if late:
+        notes.append(f"작업이 끝난 뒤 고친 명세: {change.name}의 {', '.join(late)}. tasks.md의 작업이 모두 끝난([x]) 뒤에 고쳤습니다. 닫기 전에 /opsx:update로 "
+                     "그 명세의 작업을 더하고 /opsx:apply로 만듭니다. 그대로 닫으면 만들지 않은 요구사항이 메인 스펙에 병합됩니다.")
 
 
 def _empty(change: Path) -> bool:
     return not any(p.is_file() for p in change.rglob("*"))
 
 
-def check(root: Path) -> dict:
-    """진행 중인 변경을 잰다. 보관한 변경은 이미 끝난 기록이라 보지 않는다. 파일이 하나도 없는 폴더는 변경이 아니라 알리기만 한다."""
+def check(root: Path, only: str | None = None) -> dict:
+    """진행 중인 변경을 잰다. 보관한 변경은 닫은 뒤 규칙이 바뀌었는지만 알린다. 파일이 하나도 없는 폴더는 변경이 아니라 알리기만 한다.
+    only: 그 변경과 설계만 잰다. 한 변경을 닫는 훅이 다른 변경의 오류에 막히지 않게 한다."""
     design = _design(root)
     found = _changes(root)
     changes = [p for p in found if not _empty(p)]
@@ -234,7 +295,10 @@ def check(root: Path) -> dict:
     errors = list(design["errors"])
     if not errors:
         for change in changes:
-            _check_change(change, design, errors)
+            if only is None or change.name == only:
+                _check_change(change, design, errors, notes)
+        if only is None:
+            notes += _closed_drift(root, design["systems"], changes)
     return {"changes": [p.name for p in changes], "errors": errors, "notes": notes}
 
 
@@ -251,7 +315,7 @@ def link(root: Path, change: str, ids: list[str], refresh: bool = False) -> tupl
     """(종료 코드, 출력 줄). 변경이 다루는 시스템을 적는다. 뒤에 막힐 값은 적지 않는다.
     새 시스템은 지금 규칙의 지문을 찍고, 이미 이은 시스템은 지문을 그대로 둔다. 다시 이을 때 바뀐 규칙이 조용히 받아들여지지 않게 하려는 것이다.
     refresh: 적은 시스템의 지문을 모두 새로 찍는다. 명세를 바뀐 규칙에 맞춘 뒤 design_changed를 푸는 길이다."""
-    names = [p.name for p in _changes(root)]
+    names = change_names(root)
     meta = root / CHANGES / change / META
     if change not in names or not meta.is_file():
         return 2, [f"진행 중인 변경이 아닙니다: {change}.{did_you_mean(change, names)}"]
