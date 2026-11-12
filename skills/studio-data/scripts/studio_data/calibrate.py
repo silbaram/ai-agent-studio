@@ -505,6 +505,15 @@ def calibrate(path, sessions: list | None = None, tolerance: float = DEFAULT_TOL
     if not chosen:
         raise ConfigError("단계 기록(stage_stats)이 있는 세션이 없습니다. 아무것도 비교하지 않았으므로 통과가 아닙니다.")
     notes: list = []
+    bots = [s["id"] for s in chosen if s.get("simulated") is True]
+    if bots and not sessions:   # 가정값은 사람의 플레이와 견준다. 자동 플레이 세션은 --sessions로 골랐을 때만 쓴다
+        chosen = [s for s in chosen if s.get("simulated") is not True]
+        if not chosen:
+            raise ConfigError(f"단계 기록이 있는 세션이 모두 사람이 하지 않은 플레이(simulated)입니다: {', '.join(bots)}. "
+                              "사람의 기록과 견주어야 보정이 됩니다. 자동 플레이로 보려면 --sessions로 고릅니다.")
+        notes.append(f"사람이 하지 않은 플레이(simulated) 세션 {c.josa(', '.join(bots), '은는')} 뺐습니다. 자동 플레이 세션을 쓰려면 --sessions로 고릅니다.")
+    elif bots:
+        notes.append(f"고른 세션 중 {c.josa(', '.join(bots), '은는')} 사람이 하지 않은 플레이(simulated)입니다. 실제 플레이어의 기록이 아닙니다.")
     for key, label in (("build", "빌드"), ("concept", "컨셉")):
         values = list(dict.fromkeys(s.get(key) for s in chosen))
         if len(values) > 1:

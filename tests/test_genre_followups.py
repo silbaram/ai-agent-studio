@@ -250,6 +250,32 @@ class TemplateEnemies(Project):
         self.assertEqual([e["where"] for e in errors], ["wraith"], errors)
 
 
+class SameLevelRow(Project):
+    """351번: 틀이 아닌 기본 적과 같은 레벨의 level_of 행은 같은 적을 두 번 센다."""
+
+    def test_a_same_level_row_is_warned(self):
+        raw = [{"id": "rat", "rank": "normal", "zone": 1, "stats": {"hp": 10}, "growth": {"hp": 2}},
+               {"id": "rat_l1", "level_of": "rat", "level": 1}, {"id": "rat_l2", "level_of": "rat", "level": 2}]
+        found = [w for w in en.validate({"enemies": raw})["warnings"] if w["code"] == "level_duplicate"]
+        self.assertEqual([w["where"] for w in found], ["rat_l1"])
+        self.assertIn("template", found[0]["message"])
+
+    def test_a_cut_row_is_not_warned(self):
+        raw = [{"id": "rat", "rank": "normal", "zone": 1, "stats": {"hp": 10}, "growth": {"hp": 2}},
+               {"id": "rat_l1", "level_of": "rat", "level": 1, "status": "cut"}]
+        self.assertNotIn("level_duplicate", [w["code"] for w in en.validate({"enemies": raw})["warnings"]])
+
+    def test_a_template_base_is_not_warned(self):
+        raw = [{"id": "rat", "template": True, "rank": "normal", "stats": {"hp": 10}, "growth": {"hp": 2}},
+               {"id": "rat_l1", "level_of": "rat", "level": 1, "zone": 1}]
+        self.assertNotIn("level_duplicate", [w["code"] for w in en.validate({"enemies": raw})["warnings"]])
+
+    def test_the_base_level_is_used(self):
+        raw = [{"id": "rat", "rank": "normal", "zone": 1, "level": 2, "stats": {"hp": 10}, "growth": {"hp": 2}},
+               {"id": "rat_l2", "level_of": "rat", "level": 2}]
+        self.assertIn("level_duplicate", [w["code"] for w in en.validate({"enemies": raw})["warnings"]])
+
+
 class StageTargets(Project):
     """347번: 변형 단계처럼 처치가 원래 느린 기준 장비는 그 단계에 목표를 따로 적는다."""
 
@@ -281,6 +307,7 @@ class Docs(unittest.TestCase):
         self.assertIn("`level_of`", text)
         self.assertIn("`growth`", text)
         self.assertIn("`template`", text)
+        self.assertIn("`level_duplicate`", text)
 
     def test_stage_targets_are_documented(self):
         text = (ROOT / "skills/combat-balance/references/combat-format.md").read_text(encoding="utf-8")
