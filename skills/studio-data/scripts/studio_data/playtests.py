@@ -546,6 +546,36 @@ def _events_text(have: dict, need: dict) -> str:
                      + (f"(세지 않은 세션 {e['missing']}개)" if e["missing"] else "") for name, e in have.items())
 
 
+def _never_seen(sessions: dict, concepts: dict, verdicts: dict) -> list:
+    """가설 sample.events의 사건이 마지막으로 나온 뒤 센 세션에서 한 번도 나오지 않았으면 참고 줄로 알린다(event_never_seen).
+    바꾼 규칙이 사건을 없앴으면 판을 더 해도 채워지지 않는다. 경고가 아니라 게이트와 오류·경고 수를 바꾸지 않는다.
+    세는 세션: 그 컨셉의 사람 플레이 세션 중 그 사건을 센 것(events에 이름이 있음), 가설에 builds가 있으면 그 빌드만. 확정할 판정(버팀·틀림)이 있는 가설은 보지 않는다."""
+    out = []
+    ordered = sorted(sessions.values(), key=lambda s: (s["date"], s["id"]))
+    for cid, info in sorted(concepts.items()):
+        for hid, need in info.get("samples", {}).items():
+            where = f"{cid}.{hid}"
+            if verdicts.get(where, {}).get("result") in DECIDED:
+                continue
+            allowed = info.get("builds", {}).get(hid)
+            mine = [s for s in ordered if s.get("concept") == cid and s.get("simulated") is not True
+                    and not (allowed and s["build"] not in allowed and s.get("game_build") not in allowed)]
+            for name, count in (need.get("events") or {}).items():
+                counted = [s for s in mine if name in (s.get("events") or {})]
+                seen = [n for n, s in enumerate(counted) if s["events"][name] > 0]
+                tail = counted[seen[-1] + 1:] if seen else counted
+                if not tail:
+                    continue
+                ids = [s["id"] for s in tail]
+                last = counted[seen[-1]]["id"] if seen else None
+                runs = sum(_counted(s)[0] for s in tail)
+                out.append({"code": "event_never_seen", "where": where, "event": name, "sessions": ids, "runs": runs, "need": count, "last_seen": last,
+                            "message": f"사건 {josa(name, '이가')} 세션 {', '.join(ids)}({runs}판)에서 한 번도 나오지 않았습니다(필요 {count}건)"
+                                       + (f". {last}까지는 나왔습니다" if last else "") + ". 바꾼 규칙이 이 사건을 없앴으면 판을 더 해도 채워지지 않습니다. "
+                                       "사건을 바꿀지 그쪽을 모름으로 둘지 사용자와 정합니다(playtest-verdict references/changes.md '다시 시험할 때' 4번)."})
+    return out
+
+
 def _against(have: dict, need: dict | None, key: str, unit: str) -> str:
     return f"{have[key]}/{need[key]}{unit}" if need and key in need else f"{have[key]}{unit}"
 
@@ -745,6 +775,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         "reverted": reverted,
         "next_needs": next_needs,
         "restamp": restamp,
+        "event_notes": _never_seen(sessions, concepts, verdicts) if concepts is not None else [],
         "unchecked": unchecked + len(missing_refs),
         "unchecked_reason": reason,
         "unchecked_refs": sorted(missing_refs),
@@ -767,6 +798,8 @@ def print_extra(result: dict) -> None:
     for where, x in result.get("restamp", {}).items():
         print(f"참고: 판정 {where}의 기준 지문이 예전 꼴입니다(criteria {x['from']}, 태그까지 넣어 계산함). 기준은 그대로이니 criteria를 바꿔 둡니다(새 지문: {x['to']}). "
               "그러면 태그 없던 수치에 태그를 달거나 태그를 바꿔도 지문이 그대로입니다.")
+    for x in result.get("event_notes", []):
+        print(f"참고 [{x['code']}] {x['where']}: {x['message']}")
     if result["unchecked_reason"]:
         print(f"컨셉·가설 참조 미확인({UNCHECKED_REASON.get(result['unchecked_reason'], '')}): {result['unchecked'] - len(result['unchecked_refs'])}건")
     if result["unchecked_refs"]:

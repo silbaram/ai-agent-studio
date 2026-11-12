@@ -213,7 +213,7 @@ const LABEL = {
           fixed_axis_mismatch: "고정 축과 다름", unknown_policy: "모르는 전략", untagged_number: "태그 없는 수치", criteria_tag_mismatch: "칸마다 다른 잣대 태그", criteria_history_mismatch: "기준 이력이 맞지 않음", criteria_history_invalid: "기준 이력 형식", criteria_points_to_data: "기준이 데이터 파일을 가리킴",
           item_unchecked: "아이템 미확인", requirement_unchecked: "선행 조건 미확인",
           unknown_concept: "없는 컨셉", unknown_hypothesis: "없는 가설", verdict_without_evidence: "근거 세션 없음",
-          unknown_session: "없는 세션", session_concept_mismatch: "다른 컨셉 세션", observation_missing: "관찰값 없음", verdict_sample_short: "최소 표본에 못 미친 판정", verdict_simulated_session: "사람이 하지 않은 근거 세션", source_missing: "없는 기록 파일", computed_without_output: "결과 파일 없는 계산값", session_beyond_records: "기록보다 많은 판·사람", verdict_criteria_missing: "기준 지문 없는 판정", verdict_criteria_changed: "기준이 바뀐 판정", verdict_events_short: "사건 수가 모자란 버팀", value_not_in_source: "결과 파일에 없는 값", approved_concept_refuted: "틀림으로 확정된 가설", unknown_event: "가설에 없는 사건", player_name_variants: "대소문자만 다른 이름", verdict_overrides_proposal: "제안을 바꾼 판정", verdict_session_wrong_build: "가설이 세지 않는 빌드", verdict_sample_reduced_after_results: "결과를 본 뒤 줄인 표본", verdict_session_before_reduction: "줄이기 전 세션으로 채움",
+          unknown_session: "없는 세션", session_concept_mismatch: "다른 컨셉 세션", observation_missing: "관찰값 없음", verdict_sample_short: "최소 표본에 못 미친 판정", verdict_simulated_session: "사람이 하지 않은 근거 세션", source_missing: "없는 기록 파일", computed_without_output: "결과 파일 없는 계산값", session_beyond_records: "기록보다 많은 판·사람", verdict_criteria_missing: "기준 지문 없는 판정", verdict_criteria_changed: "기준이 바뀐 판정", verdict_events_short: "사건 수가 모자란 버팀", value_not_in_source: "결과 파일에 없는 값", approved_concept_refuted: "틀림으로 확정된 가설", unknown_event: "가설에 없는 사건", event_never_seen: "한 번도 나오지 않은 사건", player_name_variants: "대소문자만 다른 이름", verdict_overrides_proposal: "제안을 바꾼 판정", verdict_session_wrong_build: "가설이 세지 않는 빌드", verdict_sample_reduced_after_results: "결과를 본 뒤 줄인 표본", verdict_session_before_reduction: "줄이기 전 세션으로 채움",
           duplicate_verdict: "판정 중복", session_without_observations: "관찰 없는 세션",
           missing_stat: "스탯 없음", negative_defense: "음수 방어", unknown_enemy: "없는 적", unknown_upgrade: "없는 강화",
           cut_referenced: "삭제 항목 참조", zero_damage: "피해 0", target_out_of_range: "목표 이탈", stage_without_enemies: "적 없는 단계",
@@ -1244,6 +1244,8 @@ function renderPlaytests(ds, idx) {
         + ds.report.unverified.map(k => (ds.report.unverified_reasons || {})[k] ? k + "(" + ds.report.unverified_reasons[k] + ")" : k).join(", ") }) : null;
   const refutedNote = ds.report && ds.report.refuted && ds.report.refuted.length
     ? el("div", { class: "group-note", text: "틀림으로 확정된 가설(선택한 컨셉): " + ds.report.refuted.join(", ") }) : null;
+  const eventNotes = ds.report && Array.isArray(ds.report.event_notes)   // 참고 줄(event_never_seen). check와 같은 글
+    ? ds.report.event_notes.map((x) => el("div", { class: "group-note", text: "참고: " + x.where + ": " + x.message })) : [];
   // 상태 필터는 판정에만 적용한다. 세션에는 상태가 없다.
   const srows = sessions.filter((e) => matches(ds, { ...e, status: ui(ds).status || undefined }, idx.byEntry[e.id]))
     .sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.id).localeCompare(String(b.id)))
@@ -1281,7 +1283,7 @@ function renderPlaytests(ds, idx) {
     el("section", { class: "panel", id: "group-all" },
       el("div", { class: "ph" }, el("h2", {}, "가설 판정", el("span", { class: "muted", text: `${vrows.length} / ${verdicts.length}` }),
         el("span", { class: "group-meta", text: "기록만 근거로 합니다. 재미를 점수로 매기지 않습니다. 확정은 사용자가 합니다." }))),
-      gate, refutedNote, ...other,
+      gate, refutedNote, ...eventNotes, ...other,
       table(["가설", "판정", "상태", "근거 세션", "표본", "이유"], vrows, "판정이 아직 없습니다.")),
     el("section", { class: "panel" },
       el("div", { class: "ph" }, el("h2", {}, "세션", el("span", { class: "muted", text: `${srows.length} / ${sessions.length}` }))),
