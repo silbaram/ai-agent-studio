@@ -2,7 +2,7 @@
 
 setup은 게임 프로젝트의 .claude/agents/studio-judge.md를 쓰고 .claude/settings.json의 hooks에 세 훅을 합쳐 넣는다.
   - PostToolUse: design/·data/ 아래 파일을 고치면 check(데이터) 또는 provenance(md)를 돌려 결과를 에이전트에게 보인다.
-  - PreToolUse: 판정 에이전트(studio-judge)가 파일을 쓰거나 check·provenance 밖의 명령을 실행하면 막는다.
+  - PreToolUse: 판정 에이전트(studio-judge)가 파일을 쓰거나 check·provenance·hypothesis 밖의 명령을 실행하면 막는다.
   - PreToolUse: 범위를 벗어난 OpenSpec 변경이 있으면 만드는 파일의 편집과 보관을 막고, 범위를 넓히는 설계 편집은 사용자에게 묻는다.
 훅 입력 형식은 Claude Code 문서(hooks)를 따른다. 사용자 훅과 다른 설정은 그대로 둔다.
 """
@@ -28,7 +28,7 @@ MARKER = "<!-- studio-data setup이 만든 파일. 고치려면 스킬 저장소
 TEMPLATE = Path(__file__).resolve().parents[2] / "assets/claude/studio-judge.md"
 SCRIPT = Path(__file__).resolve().parents[1] / "studio.py"
 WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
-JUDGE_COMMANDS = ("check", "provenance")
+JUDGE_COMMANDS = ("check", "provenance", "hypothesis")
 PYTHON = re.compile(r"^(python(3(\.\d+)?)?|py)(\.exe)?$", re.IGNORECASE)
 SHELL_META = re.compile(r"[;&|<>`$\n\r]")
 WATCHED = ("design", "data")
@@ -111,7 +111,7 @@ def setup(project: Path, python: str) -> tuple[int, list[str]]:
 
 # ---------- hook: judge-guard ----------
 def _allowed_command(command: str) -> bool:
-    """판정 에이전트가 실행할 수 있는 명령: python studio.py check|provenance (파일을 쓰는 --out 제외, 셸 연결 없음)."""
+    """판정 에이전트가 실행할 수 있는 명령: python studio.py check|provenance|hypothesis (파일을 쓰는 --out 제외, 셸 연결 없음)."""
     if SHELL_META.search(command):
         return False
     try:
@@ -138,7 +138,7 @@ def judge_guard(payload_text: str) -> tuple[int, str]:
     if tool == "Bash":
         command = (payload.get("tool_input") or {}).get("command", "")
         if not (isinstance(command, str) and _allowed_command(command)):
-            return 2, ("판정 에이전트는 studio.py check / provenance만 실행합니다(--out 제외, 셸 연결 없음). "
+            return 2, ("판정 에이전트는 studio.py check / provenance / hypothesis만 실행합니다(--out 제외, 셸 연결 없음). "
                        "파일은 Read·Grep·Glob으로 읽습니다.")
     return 0, ""
 

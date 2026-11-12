@@ -242,6 +242,8 @@ def _history_problem(e) -> str | None:
         return f"before는 고친 칸({', '.join(HISTORY_KEYS)})의 고치기 전 값입니다. 없던 칸은 null로 적습니다"
     if not _text(e.get("why")):
         return "why에 고친 까닭과 누가 확인했는지 적습니다"
+    if "after_results" in e and not isinstance(e["after_results"], bool):
+        return "after_results는 결과(요약 값, 판정 제안)를 본 뒤에 고쳤는지(true/false)입니다"
     return None
 
 
@@ -709,7 +711,8 @@ def hypothesis_index(data: dict) -> dict:
         legacy = {h["id"]: [s for s in dict.fromkeys(criteria_stamp(h, f) for f in STAMP_FORMS[1:]) if s != criteria[h["id"]]]
                   for h in named}   # 예전 꼴로 기록한 판정의 지문
         builds = {h["id"]: list(h["builds"]) for h in named if isinstance(h.get("builds"), list) and h["builds"] and all(_text(x) for x in h["builds"])}
-        history = {h["id"]: [{"stamp": e["stamp"], "date": e["date"], "fields": list(e["before"])} for e in h["criteria_history"]]
+        history = {h["id"]: [{"stamp": e["stamp"], "date": e["date"], "fields": list(e["before"]), "after_results": e.get("after_results") is True}
+                             for e in h["criteria_history"]]
                    for h in named if _history_summary(h)}   # 형식이 맞는 이력만. 틀린 이력은 컨셉 검사가 오류로 알린다
         out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids, "samples": samples, "criteria": criteria,
                         "legacy_criteria": {k: v for k, v in legacy.items() if v}, "builds": builds, "history": history}

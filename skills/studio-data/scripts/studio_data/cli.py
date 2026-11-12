@@ -376,6 +376,35 @@ def cmd_runlog(args) -> int:
     return 0
 
 
+# ---------- hypothesis ----------
+def cmd_hypothesis(args) -> int:
+    """가설 하나의 판정 자료(기준, 이력, 판정, 근거 세션의 그 가설 관찰값)만 모아 출력한다. 파일에 쓰지 않는다."""
+    if not Path(args.project).exists():
+        print(f"경로를 찾을 수 없습니다: {args.project}", file=sys.stderr)
+        return 2
+    entries, _ = datasets.scan_all([Path(args.project)])
+    datasets.validate_all(entries)
+    found = {kind: next((d for d in entries if d["ok"] and d["kind"] == kind), None) for kind in ("concepts", "playtests")}
+    if found["concepts"] is None:
+        broken = [d for d in entries if not d["ok"] and (d.get("kind") == "concepts" or Path(d["path"]).name.lower() == "concepts.json")]
+        print(f"컨셉 데이터를 읽지 못했습니다: {broken[0]['path']}: {broken[0].get('error')}" if broken
+              else "컨셉 데이터(design/concepts.json)를 찾지 못했습니다.", file=sys.stderr)
+        return 2
+    rec = found["playtests"]
+    got = playtests.context(args.target, found["concepts"]["data"], rec["data"] if rec else {}, rec["report"] if rec else {},
+                            concepts.criteria_stamp, everything=args.all)
+    if got is None:
+        index = concepts.hypothesis_index(found["concepts"]["data"]) or {}
+        ids = [f"{cid}.{h}" for cid, info in index.items() for h in info["hypotheses"] if h]
+        print(f"없는 가설입니다: {args.target}. <컨셉 id>.<가설 id>로 적습니다. 있는 가설: {', '.join(ids) or '없음'}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(got, ensure_ascii=False, indent=2))
+    else:
+        playtests.print_context(got)
+    return 0
+
+
 # ---------- provenance ----------
 def cmd_provenance(args) -> int:
     try:
@@ -574,6 +603,13 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--group-by", metavar="열", help="강화가 아닌 시험 조건(예: _setting)의 열. 그 값으로도 나누고 묶음에 variant를 답니다.")
     r.add_argument("--timed", metavar="단계", help="시간이 다 되면 끝나는 단계(쉼표로 여럿). 그 단계 기록에 timed를 답니다. calibrate는 그 단계의 길이를 비교하지 않습니다.")
     r.set_defaults(func=cmd_runlog)
+
+    y = sub.add_parser("hypothesis", help="가설 하나의 판정 자료(기준, 기준 이력, 판정, 근거 세션의 그 가설 관찰값·메모)만 모아 출력합니다 (파일에 쓰지 않음).")
+    y.add_argument("target", help="<컨셉 id>.<가설 id> (예: ripening_gems.density_timing)")
+    y.add_argument("project", nargs="?", default=".", help="게임 프로젝트 폴더 (기본: 현재 폴더)")
+    y.add_argument("--all", action="store_true", help="그 전 판정만 근거로 든 세션의 관찰값·메모도 보입니다.")
+    y.add_argument("--json", action="store_true", help="JSON으로 출력합니다.")
+    y.set_defaults(func=cmd_hypothesis)
 
     p = sub.add_parser("provenance", help="기획 문서(md)의 수치 출처 태그를 검사합니다.")
     p.add_argument("paths", nargs="+", help="검사할 .md 파일 또는 폴더")

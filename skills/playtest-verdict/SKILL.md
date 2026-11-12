@@ -24,6 +24,7 @@ description: "Records prototype playtest sessions as data, has a read-only judge
 | `python3 .claude/skills/studio-data/scripts/studio.py check .` | 판정이 근거 세션을 가리키는가, 그 세션이 있고 그 가설을 관찰했는가, 가설·컨셉 id가 맞는가, 세션의 판 수·사람 수 | 관찰값이 정말 틀렸다는 신호에 해당하는가 |
 | `… check . --fail-on-assumed` | 선택한 컨셉의 가설 중 확정된 버팀·틀림이 아닌 것이 남았는가 | 가설이 좋은 가설인가 |
 | `… provenance design/ --check-paths` | md의 `[측정: data/playtests.json#세션 id]` 세션이 실제 기록에 있는가. 컨셉 브리프의 같은 태그는 `check`가 본다 | 측정값을 옮겨 적을 때 틀리지 않았는가 |
+| `… hypothesis <컨셉>.<가설>` | 가설 하나의 기준·기준 이력·판정·근거 세션의 그 가설 관찰값과 메모, 그 가설의 `check` 줄만 모아 출력. 기록 전체를 읽지 않고 판정·기록할 때 먼저 본다. 파일에 쓰지 않는다 | 관찰값이 맞는가 |
 | `… runlog playtests/세션/runs.csv` | 판별 로그를 세션의 단계 기록으로 모아 출력(강화 상태별 묶음). 파일에 쓰지 않는다 | 로그가 맞는가 |
 | `… calibrate data/meta_combat.json` | 가정값과 기록의 차이, 단계 통과율의 예측과 실측, 기록에 맞는 생존 곡선 값 제안 | 재미, 실제 난이도. 파일을 고치지 않는다 |
 
@@ -51,6 +52,8 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 - 가설의 `sample.events`에 적은 사건을 이 세션에서 센 건수(`events`)
 - 그 밖의 관찰과 선호(`notes`). 가설 `test`의 시험 절차를 어긴 일(정한 설정 순서를 지키지 않음, 중간 결과를 본 뒤 플레이함)은 `deviation`으로 적는다
 
+기록하기 전에 가설마다 `hypothesis <컨셉>.<가설>`로 지난 판정이 남긴 "다음 시험 전에 풀 것"을 읽는다. 플레이 전에 사용자가 정하라고 한 것이 있으면 정했는지 묻고 답을 세션 `notes`에 적는다. 묻지 못했거나 정하지 않고 플레이했으면 `deviation`으로 적는다.
+
 관찰값의 수는 결과 파일이나 로그의 수를 반올림하지 않고 그대로 옮긴다. 사용자에게 묻지 않고 채운 값이 있으면 그 사실을 보고한다. 기록 파일을 지우지 않는다. 여러 세션을 합쳐 다시 계산해야 나오는 값은 [형식](references/playtest-record.md#여러-세션을-합친-값)을 따른다.
 
 ### 3. 판정한다
@@ -58,7 +61,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 - **Claude Code**: 판정 에이전트 `studio-judge`에게 맡긴다. 예: "studio-judge로 ripening_gems의 가설을 판정해 줘". 판정 에이전트는 파일을 고치지 못하고(훅이 막는다), 가설별 제안과 `verdicts`에 넣을 JSON을 돌려준다.
 - **Codex 등 판정 에이전트가 없는 환경**: 같은 절차를 직접 따른다. 판정 기준은 [references/playtest-record.md](references/playtest-record.md#판정)이다. 만드는 쪽과 판정하는 쪽이 분리되지 않았다는 사실을 보고에 적는다.
 
-받은 제안을 `verdicts`에 `"status": "proposed"`로 넣고 사용자에게 보여 준다. 사용자가 확인하면 `approved`로 바꾼다. 사용자는 버팀·틀림 제안을 모름으로 낮춰 확정할 수 있다(에이전트의 결과는 `proposed_result`에 남긴다). 모름을 버팀·틀림으로 올리거나 버팀과 틀림을 바꾸려면 사용자의 까닭을 판정 에이전트에게 주고 다시 판정한다. 다시 판정할 때는 지난 판정을 지우지 않는다. 지난 판정을 먼저 `cut`으로 바꾸고 같은 편집에서 새 판정을 넣는다.
+받은 제안을 `verdicts`에 `"status": "proposed"`로 넣고 사용자에게 보여 준다. 사용자가 확인하면 `approved`로 바꾼다. 사용자는 버팀·틀림 제안을 모름으로 낮춰 확정할 수 있다(에이전트의 결과는 `proposed_result`에 남긴다). 모름을 버팀·틀림으로 올리거나 버팀과 틀림을 바꾸려면 사용자의 까닭을 판정 에이전트에게 주고 다시 판정한다. 다시 판정할 때는 지난 판정을 지우지 않는다. 지난 판정을 먼저 `cut`으로 바꾸고 같은 편집에서 새 판정을 넣는다. 이때 cut_reason에 그때 상태(확정·제안)를 적는다. 사용자가 새 제안을 받아들이지 않으면 새 제안을 지우고, 지난 판정의 `status`를 `cut_reason`에 적힌 상태로 되돌리고 `cut_reason`을 지운다.
 
 판정 에이전트가 돌려준 기준 지문(`criteria`)을 그대로 기록한다. 판정 뒤에 가설 기준이 바뀌면 `verdict_criteria_changed`, 지문이 없으면 `verdict_criteria_missing`이고, 둘 다 확정해도 게이트를 넘지 못한다. 기준을 고친 것이면 [판정한 가설의 문장을 고칠 때](references/changes.md#판정한-가설의-문장을-고칠-때)를 따른다. 출처 태그만 바꾼 것은 바뀐 것이 아니다. `check`가 "예전 꼴" 참고 줄을 내면 그 줄의 지문으로 `criteria`를 바꿔 둔다. 지문이 없는 판정에는 판정한 뒤 가설을 고치지 않은 것이 확실할 때만 지금 지문을 적는다.
 
