@@ -41,6 +41,9 @@ GIT_TEXT_ONLY = {"commit", "log", "show"}                 # git 바로 뒤에 �
 PIPE_TEXT_ONLY = {"head", "tail", "wc", "sort", "uniq", "cat", "grep", "egrep", "fgrep"}   # 받은 글을 실행하지 않는 파이프 뒤 명령
 UNSURE = re.compile(r"\$\(|`|[<>]\(|\\[\s;&|'\"]")   # 명령 치환, 프로세스 치환(따옴표 안에서도 실행된다), 셸마다 다르게 읽는 이스케이프
 HELP = {"--help", "-h"}
+ARCHIVE_FLAGS = {"-y", "--yes", "--skip-specs", "--no-validate"}   # 변경 이름을 읽어도 되는 openspec archive 옵션. 다른 옵션이 있으면 이름을 읽지 않는다
+MOVERS = {"mv", "move", "move-item"}
+SYSTEM_ID = re.compile(r"^[a-z0-9_]+$")
 GUARDED = "|".join(WRITE_TOOLS + ("Bash",))
 SELF = (".claude/settings.json", ".claude/settings.local.json", ".claude/skills/studio-data", ".claude/skills/scope-guard")  # 고치면 범위 훅이 꺼진다
 STATE_DIR = Path(tempfile.gettempdir()) / "studio-data-hook"   # 세션마다 이미 보인 경고. 게임 프로젝트에는 쓰지 않는다
@@ -182,9 +185,10 @@ def _builds_game(rel: PurePosixPath) -> bool:
     return rel.parts[0] not in PLANNING and rel.parts[0] != "openspec" and not rel.parts[0].startswith(".") and rel.suffix.lower() != ".md"
 
 
-def _gate(project: Path) -> tuple[int, str, str]:
+def _gate(project: Path, change: str | None = None) -> tuple[int, str, str]:
+    """change가 있으면 설계와 그 변경의 오류만 본다. 다른 변경이 틀려도 이 변경은 닫을 수 있다."""
     try:
-        errors = scope.check(project)["errors"]
+        errors = scope.check(project, only=change)["errors"]
     except Exception as exc:  # 훅이 죽어도 Claude Code는 막지 않는다. 재지 못한 것을 통과시키지 않는다
         return 2, "", f"범위를 재지 못해 막았습니다: {exc!r}. {scope.CMD} scope로 원인을 봅니다.\n"
     if not errors:
@@ -373,6 +377,73 @@ def _archives(command: str) -> bool:
     return False
 
 
+def _archive_name(words: list[str]) -> str | None:
+    """보관하는 명령 하나에서 닫는 변경의 이름. openspec archive <변경>이나 mv …/openspec/changes/<변경> <곳>의 꼴일 때만 읽는다."""
+    for i, word in enumerate(words):
+        program = next((w for w in reversed(words[:i]) if not w.startswith("-")), "")
+        if word.casefold() == "archive" and i and "openspec" in program.casefold():
+            rest = words[i + 1:]
+            names = [w for w in rest if not w.startswith("-")]
+            return names[0] if len(names) == 1 and set(rest) - set(names) <= ARCHIVE_FLAGS else None
+    args = words[2:] if words[:2] == ["git", "mv"] else words[1:] if words and words[0].casefold() in MOVERS else None
+    if args is None or len(args) != 2 or any(w.startswith("-") for w in args):   # 옵션(-t 같은)은 무엇을 옮기는지 바꾼다
+        return None
+    parts = args[0].replace("\\", "/").rstrip("/").split("/")
+    return parts[-1] if len(parts) >= 3 and [x.casefold() for x in parts[-3:-1]] == ["openspec", "changes"] else None
+
+
+def _archive_target(project: Path, command: str) -> str | None:
+    """보관하는 명령이 닫는 진행 중인 변경. 보관하는 조각이 하나이고 이름을 확실히 읽을 때만 돌려주고, 모르면 None(프로젝트 전체를 본다)."""
+    command = re.sub(r"\\\r?\n", " ", command)
+    segments = None if UNSURE.search(command) else _segments(command)
+    hits = [text for _, text in segments or [] if ARCHIVE.search(text)]
+    words = _words(hits[0]) if len(hits) == 1 else None
+    name = _archive_name(words) if words else None
+    return name if name in scope.change_names(project) else None
+
+
+def _gate_archive(project: Path, command: str) -> tuple[int, str, str]:
+    """보관을 막거나 묻는다. 작업이 끝난 뒤 고친 명세가 있으면 그대로 메인 스펙에 병합되므로 사용자에게 묻는다."""
+    name = _archive_target(project, command)
+    result = _gate(project, name)
+    if result[0] or not name or "--skip-specs" in (_words(command) or []):
+        return result
+    late = scope.late_specs(project / scope.CHANGES / name)
+    if not late:
+        return result
+    return _ask(f"작업이 모두 끝난 뒤 고친 명세가 있는 변경을 닫습니다: {name}({', '.join(late)}). 그대로 닫으면 만들지 않은 요구사항이 메인 스펙에 병합됩니다. "
+                "먼저 /opsx:update로 작업을 더할지 사용자가 정합니다.")
+
+
+def _link_args(words: list[str]) -> list[str] | None:
+    """studio.py scope --link 뒤의 [변경, 시스템 id…]. 그 꼴이 아니면 None."""
+    if "--link" not in words:
+        return None
+    i = words.index("--link")
+    if "scope" not in words[:i] or not any(PurePosixPath(w.replace("\\", "/")).name == "studio.py" for w in words[:i]):
+        return None
+    rest = []
+    for word in words[i + 1:]:
+        if word.startswith("-"):
+            break
+        rest.append(word)
+    return rest
+
+
+def _ask_if_relinked(project: Path, command: str) -> tuple[int, str, str]:
+    """이미 이은 변경에 시스템을 더하는 --link는 사용자에게 묻는다. 처음 이을 때는 proposal을 따르므로 묻지 않는다. 명령을 확실히 읽지 못하면 묻지 않는다."""
+    segments = None if UNSURE.search(command) else _segments(command)
+    for _, text in segments or []:
+        args = _link_args(_words(text) or [])
+        if not args or len(args) < 2 or not all(SYSTEM_ID.match(x) for x in args[1:]) or args[0] not in scope.change_names(project):
+            continue
+        before = scope.linked(project / scope.CHANGES / args[0])
+        added = sorted(set(args[1:]) - set(before)) if before else []
+        if added:
+            return _ask(f"이미 이은 변경 {args[0]}에 시스템을 더합니다: {', '.join(added)}. 브리프 prototype.scope로 보아 이번 프로토타입 범위인지 사용자가 정합니다.")
+    return 0, "", ""
+
+
 def scope_guard(payload_text: str, project: Path | None = None) -> tuple[int, str, str]:
     """(종료 코드, 표준 출력, 표준 오류). OpenSpec과 시스템 설계가 다 있는 프로젝트에서만 관여한다."""
     payload = _payload(payload_text)
@@ -384,7 +455,9 @@ def scope_guard(payload_text: str, project: Path | None = None) -> tuple[int, st
     tool, tool_input = payload.get("tool_name"), payload["tool_input"]
     if tool == "Bash":
         command = tool_input.get("command")
-        return _gate(project) if isinstance(command, str) and _archives(command) else (0, "", "")
+        if not isinstance(command, str):
+            return 0, "", ""
+        return _gate_archive(project, command) if _archives(command) else _ask_if_relinked(project, command)
     target = _target(payload, project) if tool in WRITE_TOOLS else None
     if target is None:
         return 0, "", ""
