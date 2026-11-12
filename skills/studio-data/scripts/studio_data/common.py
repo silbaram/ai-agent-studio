@@ -506,6 +506,64 @@ def _unused_acks(kind: str, acks: dict, used: set, seen: list) -> list:
     return out
 
 
+ACK_VALUE = re.compile(r"확인 값\s*([^\d\s()\-][^\d()]*?)?\s*(-?\d+(?:\.\d+)?)")   # 확인 이유의 '(확인 값 N)'이나 '(확인 값 지표 N)'
+
+
+def measured(value, worse: str, bound, label: str | None = None) -> dict:
+    """경고에 붙이는 비교할 값. worse: 나빠지는 쪽("up"·"down"), bound: 넘으면 경고인 경계, label: 한 대상에 값이 여럿일 때 가르는 이름."""
+    out = {"measure": round(value, 4), "worse": worse, "bound": round(bound, 4)}
+    return {**out, "measure_label": label} if label else out
+
+
+def range_measured(value, rng, label: str | None = None) -> dict:
+    """기대 범위 [최소, 최대]를 벗어난 값. 위로 벗어났으면 커질수록, 아래로 벗어났으면 작아질수록 나쁘다."""
+    lo, hi = rng
+    return measured(value, "up", hi, label) if hi is not None and value > hi else measured(value, "down", lo, label)
+
+
+def _pin_text(w: dict) -> str:
+    return f"(확인 값 {w['measure_label'] + ' ' if w.get('measure_label') else ''}{num_text(w['measure'])})"
+
+
+def _pinned(reason: str, w: dict) -> str | None:
+    """이유에 적은 이 경고의 확인 값(글 그대로). 이름을 적은 값은 그 이름의 지표에만, 이름 없는 값은 어느 지표에나 쓴다."""
+    found = [(label.strip() if label else None, num) for label, num in ACK_VALUE.findall(reason)]
+    return next((n for lab, n in found if lab and lab == w.get("measure_label")), next((n for lab, n in found if lab is None), None))
+
+
+def _worsened(reason: str, w: dict) -> str | None:
+    """확인할 때 적은 값보다 나빠졌으면 경고에 붙일 문장. 적은 자릿수로 반올림해 견준다(메시지의 값을 옮겨 적어도 맞게)."""
+    text = _pinned(reason, w) if w.get("measure") is not None else None
+    if text is None:
+        return None
+    acked, now = float(text), round(w["measure"], len(text.partition(".")[2]))
+    up = w["worse"] == "up"
+    again = " 다시 보고 그대로 둘 것이면 확인 이유의 확인 값을 지금 값으로 고칩니다."
+    if (acked < w["bound"]) if up else (acked > w["bound"]):   # 경계와 같은 값은 경고 쪽이다(반올림한 백분율이 경계와 같아질 수 있다)
+        return f" 확인할 때 값 {josa(text, '은는')} 지금처럼 {'위' if up else '아래'}로 벗어난 값이 아니었습니다(지금 {num_text(w['measure'])}).{again}"
+    if (now > acked) if up else (now < acked):
+        return f" 확인할 때 값 {text}보다 나빠졌습니다(지금 {num_text(w['measure'])}).{again}"
+    return None
+
+
+def settle_warning(w: dict, reason: str, acknowledged: list, warnings: list) -> None:
+    """확인 이유가 있는 경고를 확인한 경고로 옮긴다. 이유에 적은 확인 값보다 나빠졌으면 경고로 남긴다."""
+    worse = _worsened(reason, w)
+    if worse:
+        warnings.append({**w, "message": w["message"] + worse})
+    else:
+        acknowledged.append({**w, "reason": reason})
+
+
+def _unpinned(acknowledged: list) -> list:
+    """값이 있는 경고를 값 없이 확인한 것. 값이 나빠져도 다시 알리지 못한다."""
+    loose = [a for a in acknowledged if a.get("measure") is not None and _pinned(a["reason"], a) is None]
+    if not loose:
+        return []
+    shown = ", ".join(f"{a['code']} {a['where']}{'(' + a['part'] + ')' if a.get('part') and not a['where'].endswith('.' + a['part']) else ''} {_pin_text(a)}" for a in loose)
+    return [f"값 없이 확인한 경고: {shown}. 확인 이유 끝에 이 '(확인 값 …)'을 붙이면 값이 나빠질 때 다시 경고합니다."]
+
+
 def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
     """항목의 acknowledged({경고 코드: 확인한 이유})에 적힌 경고를 report["acknowledged"]로 옮긴다.
     확인한 경고는 경고 수와 --strict에서 빠지지만 지워지지 않고 이유와 함께 남는다. 오류는 옮기지 않는다.
@@ -516,8 +574,6 @@ def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
     report.setdefault("ack_notes", [])
     lists = [data.get(k) for k in LIST_KEYS.get(kind, (kind,))]
     entries = [e for lst in lists if isinstance(lst, list) for e in lst]
-    if not entries:
-        return
     acks: dict = {}
     for e in entries:
         if not isinstance(e, dict) or not isinstance(e.get("id"), str) or "acknowledged" not in e:
@@ -534,13 +590,14 @@ def apply_acknowledged(kind: str, data: dict, report: dict) -> None:
         owner = acks.get(eid)
         reason = ack_reason(owner, w["code"], w.get("part")) if owner else None
         if reason:
-            report["acknowledged"].append({**w, "reason": reason})
+            settle_warning(w, reason, report["acknowledged"], kept)
             used.add((eid, w["code"], w.get("part")))
         else:
             kept.append(w)
     report["warnings"] = kept
     if kind in ACK_CHECKED and not report.get("unchecked") and not report["errors"]:
         report["ack_notes"] = _unused_acks(kind, acks, used, seen)
+    report["ack_notes"] += _unpinned(report["acknowledged"])
 
 
 def provenance_text(counts: dict) -> str:

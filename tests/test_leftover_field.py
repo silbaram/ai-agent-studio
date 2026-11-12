@@ -212,8 +212,10 @@ class Docs(unittest.TestCase):
         self.assertIn("전·후", text)
         self.assertIn("프로토타입", text)
 
-    def test_linking_more_systems_is_not_asked_review_4(self):
-        self.assertRegex(self.read("skills/scope-guard/SKILL.md"), r"--link`?[^\n]*묻지 않는다")
+    def test_only_the_first_link_is_not_asked_review_4_243(self):
+        text = self.read("skills/scope-guard/SKILL.md")
+        self.assertRegex(text, r"처음 잇는 `--link`는 묻지 않는다")   # 다시 이으며 더하는 것은 훅이 묻는다(243번)
+        self.assertNotRegex(text, r"훅은 시스템을 더하는 `--link`를 묻지 않는다")
 
     def test_strict_warnings_are_the_lines_to_read_253(self):
         self.assertIn("WARNING", self.read("skills/scope-guard/references/openspec-setup.md"))

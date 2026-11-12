@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import random
 
+from . import budget as bg
 from . import combat as cb
 from . import common as c
 from .common import add_issue as _err, did_you_mean
@@ -23,6 +24,13 @@ UNCHECKED_REASON = {
     "items": "아이템을 주는 선택지가 있는데 아이템 데이터를 함께 검사하지 않았거나 읽지 못함",
     "nothing": "계산한 빌드가 없음(선택지·빌드가 모두 삭제되었거나 비교할 단계가 없음)",
 }
+XP_FIELDS = {"curve", "currency", "tolerance", "note"}
+MAX_XP_LEVEL = 1000   # 경험치로 오를 수 있는 레벨을 셀 때의 상한(곡선이 끝나지 않을 때)
+XP_UNREAD = {
+    "currency": "growth.xp.currency(경험치 수입이 되는 재화 흐름의 재화)가 없어 단계별 레벨과 견주지 않음",
+    "economy": "재화 흐름(economy.json)을 함께 검사하지 않았거나 읽지 못해 경험치 수입을 모름",
+}
+XP_SKIPPED = {"unlinked": "이어진 재화 흐름 단계 없음", "unknown": "앞 단계 수입 미확인"}
 METRICS = ("hits_to_kill", "time_to_kill", "hits_to_die", "time_to_die")
 LOWER_IS_BETTER = {"hits_to_kill": True, "time_to_kill": True, "hits_to_die": False, "time_to_die": False}
 
@@ -51,6 +59,116 @@ def read_settings(data: dict, errors: list) -> dict | None:
     if not ok:
         return None
     return {"level_at": level_at, "offers": cfg["offers"], "trials": cfg.get("trials", DEFAULT_TRIALS), "seed": seed}
+
+
+def read_xp(data: dict, errors: list) -> dict | None:
+    """경험치 곡선(growth.xp, 선택). curve는 레벨 L에서 L+1로 가는 데 드는 경험치다. 없거나 틀리면 None(틀리면 오류를 남긴다).
+    to_reach: {레벨: 레벨 1부터 그 레벨까지 드는 누적 경험치}. level_at과 빌드의 level_at의 가장 높은 레벨까지 낸다."""
+    cfg = data.get("growth") if isinstance(data.get("growth"), dict) else {}
+    raw = cfg.get("xp")
+    if raw is None:
+        return None
+    where = "growth.xp"
+    if not isinstance(raw, dict):
+        _err(errors, "schema", where, "xp는 {curve, currency, tolerance} 객체입니다(레벨 L에서 L+1로 가는 데 드는 경험치 곡선).")
+        return None
+    ok = True
+    text = c.unknown_keys_text(raw, XP_FIELDS)
+    if text:
+        _err(errors, "schema", where, text)
+        ok = False
+    curve = bg.read_curve(raw.get("curve"), f"{where}.curve", errors, by=False)
+    if curve is not None and curve["growth"] == "table":
+        keys = sorted(int(k) for k in curve["values"] if isinstance(k, str) and k.isdigit())
+        if keys != list(range(1, len(curve["values"]) + 1)):
+            _err(errors, "schema", f"{where}.curve", "table 곡선의 values는 레벨 1부터 빠짐없이 {\"1\": 레벨 1→2 경험치, \"2\": …}입니다.")
+            curve = None
+    currency = raw.get("currency")
+    if currency is not None and not (isinstance(currency, str) and currency):
+        _err(errors, "schema", where, f"currency는 경험치 수입이 되는 재화 흐름의 재화 id입니다: {currency!r}")
+        ok = False
+    tolerance = raw.get("tolerance", 0)
+    if not c.is_int(tolerance, 0):
+        _err(errors, "schema", where, f"tolerance는 0 이상의 정수(허용하는 레벨 차이)입니다: {tolerance!r}")
+        ok = False
+    if curve is None or not ok:
+        return None
+    levels = [v for v in (cfg.get("level_at") or {}).values() if c.is_int(v, 1)] if isinstance(cfg.get("level_at"), dict) else []
+    for b in data.get("builds") if isinstance(data.get("builds"), list) else []:
+        own = b.get("level_at") if isinstance(b, dict) else None
+        levels += [v for v in own.values() if c.is_int(v, 1)] if isinstance(own, dict) else []
+    top = max(levels, default=1)
+    to_reach, total = {}, 0.0
+    for level in range(1, top):
+        need = bg.curve_value(curve, level)
+        if need is None:
+            _err(errors, "schema", f"{where}.curve", f"경험치 곡선이 레벨 {level}에서 끝나 level_at의 레벨 {top}에 닿지 않습니다. 레벨 {top - 1}까지 적습니다.")
+            return None
+        if need <= 0:
+            _err(errors, "schema", f"{where}.curve", f"레벨 {level}에서 {level + 1}로 가는 경험치가 {need:g}입니다. level_at의 레벨 {top}까지 0보다 커야 합니다.")
+            return None
+        total += need
+        to_reach[str(level + 1)] = round(total, 4)
+    return {"curve": curve, "currency": currency, "tolerance": tolerance, "to_reach": to_reach}
+
+
+def level_from_xp(curve: dict, xp: float) -> int:
+    """레벨 1에서 경험치 xp를 얻었을 때의 레벨. 곡선이 끝나거나 0 이하가 되면 거기서 멈춘다."""
+    level, total = 1, 0.0
+    while level < MAX_XP_LEVEL:
+        need = bg.curve_value(curve, level)
+        if need is None or need <= 0 or total + need > xp + 1e-9:
+            break
+        total += need
+        level += 1
+    return level
+
+
+def xp_currency(data: dict | None) -> str | None:
+    """판 안 성장이 경험치로 쓰는 재화 흐름의 재화. 재화 흐름은 이 재화의 남는 양을 보지 않는다(쓰는 재화가 아니다)."""
+    cfg = (data or {}).get("growth")
+    xp = cfg.get("xp") if isinstance(cfg, dict) else None
+    cur = xp.get("currency") if isinstance(xp, dict) else None
+    return cur if isinstance(cur, str) and cur else None
+
+
+def _xp_stages(xp: dict, level_at: dict, order: list, economy: dict | None, report: dict | None, errors: list, warnings: list) -> None:
+    """재화 흐름의 경험치 수입으로 단계마다 들어설 때의 레벨을 내고 level_at과 견준다. xp에 stages, skipped, unread를 채운다.
+    단계의 경험치는 그 전투 단계에 이어진 첫 재화 흐름 단계 앞까지의 누적 수입이다."""
+    xp.update(stages=[], skipped={}, unread=None)
+    cur = xp["currency"]
+    if cur is None:
+        xp["unread"] = "currency"
+        return
+    if economy is None or report is None:
+        xp["unread"] = "economy"
+        return
+    cfg = economy.get("economy") if isinstance(economy.get("economy"), dict) else {}
+    currencies = cfg.get("currencies") if isinstance(cfg.get("currencies"), dict) else {}
+    if cur not in currencies:
+        _err(errors, "schema", "growth.xp", f"재화 흐름에 없는 재화입니다: {cur}.{did_you_mean(cur, currencies)} economy.currencies에 경험치 재화를 적고 단계의 income이나 kill_reward로 수입을 둡니다.")
+        return
+    if isinstance(currencies[cur], dict) and currencies[cur].get("carry"):
+        _err(errors, "schema", "growth.xp", f"{c.josa(cur, '은는')} 판 사이에 남는 재화(carry)입니다. 경험치는 판 안 재화로 둡니다.")
+        return
+    links = {s["id"]: c.combat_link(s) for s in economy.get("stages") or [] if isinstance(s, dict) and isinstance(s.get("id"), str)} \
+        if isinstance(economy.get("stages"), list) else {}
+    timeline = report.get("stages") or []
+    for sid in order:
+        st = next((x for x in timeline if links.get(x["id"]) == sid), None)
+        if st is None:
+            xp["skipped"][sid] = "unlinked"
+            continue
+        if st.get("cumulative") is None:
+            xp["skipped"][sid] = "unknown"
+            continue
+        got = round(st["cumulative"].get(cur, 0) - st.get("income", {}).get(cur, 0), 4)
+        level = level_from_xp(xp["curve"], got)
+        xp["stages"].append({"stage": sid, "xp": got, "level": level, "level_at": level_at[sid]})
+        if abs(level - level_at[sid]) > xp["tolerance"]:
+            _err(warnings, "xp_level_mismatch", "growth.xp",
+                 f"{sid}에 들어설 때 경험치 {got:g}(재화 흐름의 {cur} 수입 누적)로는 레벨 {level}인데 level_at은 {level_at[sid]}입니다(허용 차이 {xp['tolerance']}). "
+                 "곡선, 수입, level_at 중 맞는 쪽을 사용자와 정하고 나머지를 맞춥니다. 프로토타입은 이 곡선을 레벨 기준으로 씁니다.")
 
 
 def check_choices(raw, errors: list) -> list[dict]:
@@ -234,12 +352,17 @@ def choice_stats(choices: list[dict], items: dict | None, errors: list, warnings
 
 
 def validate(data: dict, combat: dict | None = None, items: dict | None = None, upgrades: dict | None = None,
-             enemies: dict | None = None, crafting: dict | None = None) -> dict:
+             enemies: dict | None = None, crafting: dict | None = None, economy: dict | None = None, economy_report: dict | None = None) -> dict:
     """combat: 전투 계산 파일 내용, items·upgrades·enemies: 함께 읽은 데이터의 {id: 항목}, crafting: 강화·합성 파일 내용
-    (전투 계산의 기준 장비가 강화한 아이템을 쓸 때). 전투 계산이 없으면 미확인."""
+    (전투 계산의 기준 장비가 강화한 아이템을 쓸 때). 전투 계산이 없으면 미확인.
+    economy·economy_report: 재화 흐름 파일 내용과 그 검사 결과. 경험치 곡선(growth.xp)의 수입을 가져온다. 없으면 곡선만 보인다."""
     errors: list = []
     warnings: list = []
     settings = read_settings(data, errors)
+    xp = read_xp(data, errors)
+    if xp is not None and settings is not None:
+        main = cb.main_stage_ids(combat) if combat is not None else list(settings["level_at"])
+        _xp_stages(xp, settings["level_at"], [k for k in main if settings["level_at"].get(k) is not None], economy, economy_report, errors, warnings)
     choices = check_choices(data.get("choices"), errors)
     builds = check_builds(data.get("builds"), {ch["id"] for ch in choices}, errors)
     active_choices = [ch for ch in choices if c.is_active(ch)]
@@ -342,6 +465,7 @@ def validate(data: dict, combat: dict | None = None, items: dict | None = None, 
         "count": len(choices) + len(builds),
         **summary,
         "settings": settings,
+        "xp": xp,
         "builds": report_builds,
         "base_rows": [r for r in base_rows if r["stage"] in order],
         "unused_choices": [ch["id"] for ch in active_choices if report_builds and ch["id"] not in used],
@@ -481,6 +605,17 @@ def print_extra(result: dict) -> None:
     for x in result.get("combat_only_dominated", []):
         picks = ", ".join(f"{ch} 평균 {_fmt(n)}회" for ch, n in x["off_combat_picks"].items())
         print(f"전투 계산상 밀림: {x['build']} < {x['winner']} (전투 밖 선택지 {picks}의 가치는 계산하지 않음)")
+    xp = result.get("xp")
+    if xp:
+        curve = xp["curve"]
+        form = "표" if curve["growth"] == "table" else f"{curve['growth']} base {_fmt(curve['base'])} rate {_fmt(curve['rate'])}"
+        print(f"경험치 곡선({form}) 누적: " + (" · ".join(f"레벨 {k} {_fmt(v)}" for k, v in xp["to_reach"].items()) or "레벨 1만 씀"))
+        for x in xp.get("stages", []):
+            print(f"경험치 {xp['currency']}: {x['stage']}에 들어설 때 {_fmt(x['xp'])} → 레벨 {x['level']} (level_at {x['level_at']})")
+        if xp.get("skipped"):
+            print("경험치로 견주지 못한 단계: " + ", ".join(f"{k}({XP_SKIPPED[v]})" for k, v in xp["skipped"].items()))
+        if xp.get("unread"):
+            print("경험치 곡선만 봄: " + XP_UNREAD[xp["unread"]])
     for k in result["unchecked_kinds"]:
         print("판 안 성장 미확인: " + UNCHECKED_REASON[k])
 

@@ -243,10 +243,11 @@ def validate(data: dict, items: dict | None = None, enemies: dict | None = None,
                     row["flag"] = "over" if ratio > 1 else "under"
                     issue = {"code": code, "where": e["id"], "owner": f"{side}:{e['id']}",
                              "message": f"{SIDE_LABEL[side]} {e['id']}의 예산 {c.josa(f'{actual:g}', '이가')} {by} {at:g} 기대 예산 {expected:g}의 "
-                                        f"{ratio:.0%}입니다(허용 ±{tol:.0%})."}
+                                        f"{ratio:.0%}입니다(허용 ±{tol:.0%}).", "value": f"{ratio:.0%}",
+                             **c.measured(round(ratio * 100), "up" if ratio > 1 else "down", round((1 + tol if ratio > 1 else 1 - tol) * 100))}   # 메시지와 같은 백분율
                     reason = c.ack_reason(e, code)  # 형식이 틀린 확인은 그 항목의 파일에서 오류로 보고된다
                     if reason:
-                        acknowledged.append({**issue, "reason": reason})
+                        c.settle_warning(issue, reason, acknowledged, warnings)
                     else:
                         warnings.append(issue)
             if no_field:

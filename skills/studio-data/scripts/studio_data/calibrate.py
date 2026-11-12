@@ -381,7 +381,8 @@ def _fit_warnings(cfg: dict, points: list, result: dict) -> list:
         if ratio >= LARGE_CHANGE or ratio <= 1 / LARGE_CHANGE:
             out.append(f"등급 {rank}의 even_margin 제안이 지금 값의 {ratio:.2g}배입니다(지금 {now:g} → 제안 {new:g}). "
                        "모델이 담지 못하는 것(적이 쌓임, 이동, 앞 단계에서 잃은 체력)을 이 값이 대신 메우는 것일 수 있습니다. "
-                       "옮기기 전에 처치 시간이 단계 길이를 넘는지(kill_time_over_length)와 처치 속도(kill_rate)를 먼저 봅니다.")
+                       "옮기기 전에 레벨 구성 단계 표(check . --table levels)의 처치 시간 ÷ 길이가 1배를 넘는지(kill_time_over_length)와 "
+                       "기록의 처치 속도(kill_rate)를 먼저 봅니다.")
     return out
 
 

@@ -88,7 +88,7 @@
 | `combat_stage` | 아니오 | 이어지는 전투 단계 id. 없으면 레벨 id와 같은 단계 |
 | `greybox` | 아니오 | 그래픽 없이 확인할 항목 배열. 아래 `greybox` 절 |
 | `encounters` | 예 | 조우 배열. 판에서 지나는 순서대로 |
-| `status`, `provenance`, `acknowledged` | 아니오 | 다른 데이터와 같다. 경고는 레벨에서 `{코드: {대상: 이유}}`로 확인한다. 대상은 경고가 말하는 조우나 적의 id, 단계 id, 구매 id, 구간(`첫 조우~끝 조우`)이다. 단계 전체의 경고(`kills_differ`, `enemy_unplaced`, `enemy_not_in_stage`, `kill_time_over_length`)는 그 단계의 어느 레벨에서든 확인할 수 있다. 어느 레벨에도 걸리지 않는 경고(`kills_not_linked`, `curve_unused_point`)는 아무 레벨에서 확인한다. 확인은 값이 나빠져도 풀리지 않는다. 확인할 때의 값(구간의 부담, 실패한 값)을 이유에 적고 확인한 경고 줄의 값과 견준다. 확인한 `greybox_failed`의 항목에 새 세션을 기록하면 확인을 지우고 다시 본다 |
+| `status`, `provenance`, `acknowledged` | 아니오 | 다른 데이터와 같다. 경고는 레벨에서 `{코드: {대상: 이유}}`로 확인한다. 대상은 경고가 말하는 조우나 적의 id, 단계 id, 구매 id, 구간(`첫 조우~끝 조우`)이다. 단계 전체의 경고(`kills_differ`, `enemy_unplaced`, `enemy_not_in_stage`, `kill_time_over_length`)는 그 단계의 어느 레벨에서든 확인할 수 있다. 어느 레벨에도 걸리지 않는 경고(`kills_not_linked`, `curve_unused_point`)는 아무 레벨에서 확인한다. 값이 있는 경고(구간의 부담, 실패한 값)는 이유에 확인 값을 적어 둔다([studio-data의 확인한 경고](../../studio-data/SKILL.md#실행)). 확인한 `greybox_failed`의 항목에 새 세션을 기록하면 확인을 지우고 다시 본다 |
 
 한 전투 단계의 레벨은 한 판에 모두 지나는 것으로 센다. 대체 맵, 스테이지 선택형, 라운드로 나뉜 게임은 [게임 형태별로 적는 법](game-shapes.md)을 따른다.
 

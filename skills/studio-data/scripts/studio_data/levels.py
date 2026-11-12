@@ -334,7 +334,8 @@ def _row(x: dict, lid: str, base, threat, cfg, order_note: str, warnings: list) 
     row["flag"] = "over" if ratio > 1 + tol + 1e-9 else ("under" if ratio < 1 - tol - 1e-9 else "ok")
     if row["flag"] != "ok":
         _err(warnings, f"{row['flag']}_budget", f"{lid}.{x['id']}",
-             f"조우 {x['id']}의 위협도 {c.josa(f'{threat:g}', '이가')} 예산 {expected:g}의 {ratio:.0%}입니다(허용 ±{tol:.0%}).{order_note}", owner=lid, part=x["id"])
+             f"조우 {x['id']}의 위협도 {c.josa(f'{threat:g}', '이가')} 예산 {expected:g}의 {ratio:.0%}입니다(허용 ±{tol:.0%}).{order_note}", owner=lid, part=x["id"],
+             value=f"{ratio:.0%}", **c.measured(round(ratio * 100), "up" if ratio > 1 else "down", round((1 + tol if ratio > 1 else 1 - tol) * 100)))
     return row
 
 
@@ -598,7 +599,8 @@ def _check_kill_ratio(rows: list, by_stage: dict, warnings: list) -> None:
         _err(warnings, "kill_time_over_length", owner,
              f"단계 {row['id']}: 단일 대상 처치 시간 {_fmt(row['kill_time'])}초{bound} / 길이 {_fmt(row['duration'])}초 = {row['kill_ratio']:g}배{bound}입니다. "
              + _grown_sentence(row) + "그 단계의 기준 장비로 한 마리씩 잡으면 단계 안에 다 잡지 못합니다. 범위 공격·관통·판 안 성장이 메우면 그 이유를 이 단계 레벨의 "
-             "acknowledged에 적고, 아니면 조우 수나 기준 장비를 고칩니다.", owner=owner, part=row["id"])
+             "acknowledged에 적고, 아니면 조우 수나 기준 장비를 고칩니다.", owner=owner, part=row["id"], value=f"{row['kill_ratio']:g}배",
+             **c.measured(row["kill_ratio"], "up", 1))
 
 
 def _kill_check_note(listed: list, by_stage: dict, links: dict, economy, whole, dropped: set, astray: set) -> list:
@@ -780,7 +782,8 @@ def _check_times(listed: list, ordered: list, by_stage: dict, shaky: set, links:
         if holes:
             owner = _stage_owner(info["levels"], "time_gap", sid)
             _err(warnings, "time_gap", owner, f"단계 {sid}에 어떤 조우도 차지하지 않는 시간이 있습니다: {', '.join(_time_text(a, b, unit) for a, b in holes)}. "
-                 "적이 없는 구간이면 enemies를 {}로 적어 메우고, 앞 조우가 이어지는 시간이면 그 조우에 duration을 적습니다.", owner=owner, part=sid)
+                 "적이 없는 구간이면 enemies를 {}로 적어 메우고, 앞 조우가 이어지는 시간이면 그 조우에 duration을 적습니다.", owner=owner, part=sid,
+                 value=f"빈 시간 {_fmt(sum(b - a for a, b in holes))}", **c.measured(sum(b - a for a, b in holes), "up", 0))
         (done if last is not None else late).append(sid)
     text = f"시각 대조: {len(done)}/{len(listed)} 단계" if economy is not None else "시각 대조: 재화 흐름을 함께 읽지 않아 단계 길이와 맞춰 보지 못했습니다"
     for label, ids in (("시각을 모르는 조우", blind), ("재화 흐름에 길이가 없는 단계", late if economy is not None else []), ("시각을 적지 않은 단계", plain), ("오류로 못 본 단계", broken)):
@@ -1001,7 +1004,7 @@ def _pace(ordered: list, settings: dict, lost: bool, warnings: list, branched: s
             s.update(limit=limit, over=limit is not None and s["load"] is not None and s["load"] > limit + EPS)
             if s["over"]:
                 _err(warnings, code, f"{s['level']}.{s['from']}", f"{label} 구간 {_span_name(s)}의 부담이 평범한 조우 {_fmt(s['load'])}개 분량입니다(상한 {_fmt(limit)}). {advice} {_ack_way(code, s)}",
-                     owner=s["level"], part=_span_key(s), value=f"부담 {_fmt(s['load'])}")
+                     owner=s["level"], part=_span_key(s), value=f"부담 {_fmt(s['load'])}", **c.measured(s["load"], "up", limit))
         spans += found
         if limit is not None and not marked:
             notes.append(f"{subject} 없습니다. {kind} 표시가 있는 조우가 없어 {'판 전체' if across else '레벨 전체'}를 한 구간으로 봅니다.")
@@ -1012,7 +1015,7 @@ def _pace(ordered: list, settings: dict, lost: bool, warnings: list, branched: s
         if s["over"]:
             advice = "한 조우의 횟수입니다. 횟수를 줄이거나 조우를 나눠 사이에 약한 조우를 넣습니다." if s["from"] == s["to"] else "사이에 약한 조우나 쉬는 곳을 넣습니다."
             _err(warnings, "strong_run", f"{s['level']}.{s['from']}", f"강한 조우가 {_span_key(s)}에서 {_fmt(s['length'])}번 이어집니다(상한 {_fmt(limit)}). {advice} {_ack_way('strong_run', s)}",
-                 owner=s["level"], part=_span_key(s), value=f"{_fmt(s['length'])}번")
+                 owner=s["level"], part=_span_key(s), value=f"{_fmt(s['length'])}번", **c.measured(s["length"], "up", limit))
     if limit is not None and not carry and not lost:
         crossing = [s for s in _strong_walk(ordered, True, branched) if s["to_level"] != s["level"] and s["length"] > limit + EPS]
         notes += [f"레벨을 넘으면 강한 조우가 {_span_name(s)}에서 {_fmt(s['length'])}번 이어집니다(상한 {_fmt(limit)}). 레벨 사이에 체력이 이어지는 게임이면 carry_levels를 적습니다." for s in crossing]
@@ -1081,7 +1084,8 @@ def _greybox_rows(lv: dict, log: dict | None, seen: set, homes: dict, errors: li
             told = f"값 {_fmt(got['value'])}" if "value" in got else "실패로 기록"
             aim = f", 기대 {c.range_text(item['expect'])}" if item.get("expect") is not None else ""
             _err(warnings, "greybox_failed", at, f"그레이박스 확인 {item['id']}: {item['check']} → {told}{aim} (세션 {got['session']}). 레벨이나 기대 범위를 고칩니다.",
-                 owner=lv["id"], part=item["id"], value=told)
+                 owner=lv["id"], part=item["id"], value=told,
+                 **(c.range_measured(got["value"], item["expect"]) if item.get("expect") is not None and "value" in got else {}))
     return rows
 
 

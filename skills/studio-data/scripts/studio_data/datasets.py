@@ -386,7 +386,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
     강화·합성은 아이템 데이터와 드랍 테이블(과 판 안 성장의 아이템 선택지)로 참조·획득 경로를, 스탯 예산이 있으면 가치를 확인한다.
     재화 흐름은 적 보상·드랍 테이블·아이템 가격·영구 강화 비용·강화·합성 비용을 함께 읽은 데이터에서 가져오고,
     전투 단계 연결(combat_stage)과 메타 성장 설정(meta_config)을 맞춰 본다.
-    판 안 성장은 전투 계산 파일과 그 참조 데이터로 빌드마다 전투 계산을 다시 한다.
+    판 안 성장은 전투 계산 파일과 그 참조 데이터로 빌드마다 전투 계산을 다시 하고, 경험치 곡선이 있으면 재화 흐름의 경험치 수입으로 단계별 레벨을 견준다.
     레벨 구성은 적의 위협도와 전투 단계로 조우를 재고, 재화 흐름의 처치 수와 맞춰 본다. 전투 계산의 처치 시간과 스탯 예산의 적 곡선을 참고 값으로 낸다.
     검사기가 예상하지 못한 예외를 내면 그 파일만 오류로 표시하고 나머지는 계속 검사한다."""
     loaded_items = [d for d in entries if d["ok"] and d["kind"] == "items"]
@@ -424,7 +424,8 @@ def validate_all(entries: list[dict]) -> list[dict]:
             hypotheses.setdefault(cid, info)
     economy_data = next((d["data"] for d in entries if d["ok"] and d["kind"] == "economy"), None)
     stage_refs = {**_stage_refs(combat_data, growth_data, economy_data, by_id), "greybox": _greybox_ids(entries)}
-    for d in sorted(entries, key=lambda x: x.get("kind") == "levels"):  # 레벨 구성은 적 검사의 위협도를 쓰므로 마지막에 검사한다
+    # 레벨 구성은 적 검사의 위협도와 판 안 성장의 결과를 쓰므로 마지막에, 판 안 성장은 재화 흐름의 경험치 수입을 쓰므로 그 앞에 검사한다
+    for d in sorted(entries, key=lambda x: (x.get("kind") == "levels", x.get("kind") == "growth")):
         if not d["ok"]:
             continue
         try:
@@ -440,11 +441,13 @@ def validate_all(entries: list[dict]) -> list[dict]:
                 d["report"] = crafting.validate(d["data"], items=by_id["items"], drop_tables=drop_tables, budget=budget_settings,
                                                 extra_sources=_choice_items(growth_data))
             elif d["kind"] == "growth":
-                d["report"] = growth.validate(d["data"], combat=combat_data, crafting=crafting_data, **by_id)
+                economy_report = next((x.get("report") for x in entries if x["ok"] and x["kind"] == "economy"), None)
+                d["report"] = growth.validate(d["data"], combat=combat_data, crafting=crafting_data, economy=economy_data if economy_report else None,
+                                              economy_report=economy_report, **by_id)
             elif d["kind"] == "economy":
                 d["report"] = economy.validate(d["data"], enemies=by_id["enemies"], items=by_id["items"], drop_tables=drop_tables,
                                                upgrades=by_id["upgrades"], crafting=crafting_data, combat=combat_data,
-                                               meta=_meta_configs(d))
+                                               meta=_meta_configs(d), xp_currency=growth.xp_currency(growth_data))
             elif d["kind"] == "levels":
                 enemy_side = (budget_settings or {}).get("sides", {}).get("enemies") or {}
                 grown, grown_exit, grown_unread = _grown_kills(entries)
