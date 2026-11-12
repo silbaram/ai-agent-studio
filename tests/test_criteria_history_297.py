@@ -151,7 +151,7 @@ class VerdictSide(unittest.TestCase):
     def test_the_index_carries_the_history(self):
         e = entry({"test": OLD_TEST})
         idx = cc.hypothesis_index(with_history(e))
-        self.assertEqual(idx["parry_tempo"]["history"]["learn_timing"], [{"stamp": e["stamp"], "date": "2026-11-09", "fields": ["test"]}])
+        self.assertEqual(idx["parry_tempo"]["history"]["learn_timing"], [{"stamp": e["stamp"], "date": "2026-11-09", "fields": ["test"], "after_results": False}])
 
 
 def printed_concepts(report) -> str:

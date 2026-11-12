@@ -1252,6 +1252,7 @@ function renderPlaytests(ds, idx) {
         el("td", {}, sample ? computed[where].sample_text : dash(ds.report ? "–" : "서버 모드")),   // check의 판정 줄과 같은 글
         el("td", { class: "text" }, v.reason ? withoutYardstickTags(v.reason) : dash(),
           v.next_needs ? el("div", { class: "muted", text: "다음 시험 전에 풀 것: " + withoutYardstickTags(v.next_needs) }) : null,
+          v.keep_unknown ? el("div", { class: "muted", text: "모름으로 둠: " + v.keep_unknown }) : null,
           v.cut_reason ? el("div", { class: "muted", text: "지운 까닭: " + v.cut_reason }) : null));
     });
   const gate = ds.report && ds.report.unverified && ds.report.unverified.length

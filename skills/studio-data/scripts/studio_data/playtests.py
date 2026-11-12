@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import datetime
+import json
 import posixpath
 import re
 from pathlib import Path
@@ -350,6 +351,10 @@ def check_verdict(v, n: int, errors: list) -> str | None:
     if "next_needs" in v and not _text(v["next_needs"]):
         _err(errors, "schema", where, "next_needs는 다음 시험 전에 풀 것을 적는 글입니다(비우지 않습니다).")
         ok = False
+    if "keep_unknown" in v and not (_text(v["keep_unknown"]) and v.get("result") == "unknown"):
+        _err(errors, "schema", where, "keep_unknown은 모름 판정에 사용자가 모름으로 두기로 한 결정을 적는 글입니다"
+             "(예: \"사용자 결정(2026-11-12): 사망 쪽은 모름으로 둔다\").")
+        ok = False
     if "proposed_result" in v and v["proposed_result"] not in RESULTS:
         _err(errors, "schema", where, f"proposed_result(판정 에이전트가 낸 결과)는 {', '.join(RESULTS)} 중 하나입니다: {v['proposed_result']!r}")
         ok = False
@@ -555,7 +560,7 @@ def _never_seen(sessions: dict, concepts: dict, verdicts: dict) -> list:
     for cid, info in sorted(concepts.items()):
         for hid, need in info.get("samples", {}).items():
             where = f"{cid}.{hid}"
-            if verdicts.get(where, {}).get("result") in DECIDED:
+            if verdicts.get(where, {}).get("result") in DECIDED or verdicts.get(where, {}).get("keep_unknown"):   # 모름으로 두기로 정했으면 다시 묻지 않는다
                 continue
             allowed = info.get("builds", {}).get(hid)
             mine = [s for s in ordered if s.get("concept") == cid and s.get("simulated") is not True
@@ -594,6 +599,23 @@ def _sample_line(have: dict, need: dict | None, deviations: int, builds: list) -
     if deviations:
         parts.append(f"절차 이탈 {deviations}건")
     return " · ".join(parts)
+
+
+def _builds(sessions: list) -> list:
+    """판정 줄의 빌드: 빌드 지문(game_build)이 있으면 그것, 없으면 커밋(build). 지문이 없는 세션은 같은 커밋에 지문이 하나뿐이면 그 빌드로 본다.
+    같은 커밋에 지문이 둘 이상이면 어느 빌드인지 모르니 커밋으로 따로 센다."""
+    tags: dict = {}
+    for s in sessions:
+        if s.get("game_build"):
+            tags.setdefault(s["build"], set()).add(s["game_build"])
+    return list(dict.fromkeys(s.get("game_build") or s["build"] for s in sessions if s.get("game_build") or len(tags.get(s["build"], ())) != 1))
+
+
+def _after_results(info: dict | None, hyp: str, sessions: list) -> str:
+    """결과를 본 뒤에 고친 기준(criteria_history의 after_results)의 날짜. 고친 날이나 그 전에 기록한 세션을 센 판정 줄에만 붙인다.
+    고친 뒤의 세션만 센 판정은 결과를 보고 옮긴 기준으로 센 판이 없다."""
+    dates = [e["date"] for e in (info or {}).get("history", {}).get(hyp, []) if e.get("after_results") and any(s["date"] <= e["date"] for s in sessions)]
+    return f" · 결과 뒤 기준 고침 {', '.join(dates)}" if dates else ""
 
 
 def _sample(sessions: list) -> dict:
@@ -729,8 +751,10 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                          if x.get("kind") == "deviation" and v["hypothesis"] in (x.get("hypotheses") or [v["hypothesis"]]))
         verdicts[where] = {"result": v["result"], "status": status, "reason": v["reason"], "sample": have, "need": need,
                            "deviations": deviations, "criteria": criteria, "proposed_result": v.get("proposed_result"), "next_needs": v.get("next_needs"),
-                           "sample_text": _sample_line(have, need, deviations, list(dict.fromkeys(s.get("game_build") or s["build"] for s in seen)))
-                           + (f" · 자동 플레이 세션 {len(seen) - len(human)}개 뺌" if len(seen) > len(human) else "")}
+                           "keep_unknown": v.get("keep_unknown"),
+                           "sample_text": _sample_line(have, need, deviations, _builds(seen))
+                           + (f" · 자동 플레이 세션 {len(seen) - len(human)}개 뺌" if len(seen) > len(human) else "")
+                           + (_after_results(concepts.get(v["concept"]), v["hypothesis"], seen) if concepts is not None and criteria == "ok" else "")}
 
     unverified: list = []
     unverified_reasons: dict = {}   # 확정 판정인데 게이트에 걸린 까닭. 데이터는 키 그대로 두고 화면(check 게이트 줄, 뷰어)이 붙인다
@@ -757,6 +781,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
     reverted = sorted({w.split(".")[0] for w in verdicts if w.split(".")[0] in concepts}) \
         if concepts and not any(info["approved"] for info in concepts.values()) else []
     next_needs = {w: {"text": x["next_needs"], "cut": False} for w, x in verdicts.items() if x["next_needs"] and x["result"] == "unknown"}
+    next_needs.update({w: {"text": x["keep_unknown"], "cut": False, "kept": True} for w, x in verdicts.items() if x["keep_unknown"]})
     next_needs.update({w: {"text": text, "cut": True} for w, text in left.items()
                        if w not in next_needs and not (w in verdicts and verdicts[w]["result"] in DECIDED)})
     counts = {r: sum(1 for x in verdicts.values() if x["result"] == r) for r in RESULTS}
@@ -789,12 +814,9 @@ def print_extra(result: dict) -> None:
         print(f"참고: 선택(approved)한 컨셉이 없습니다. 판정까지 한 컨셉(되돌린 컨셉): {', '.join(result['reverted'])}. "
               "다음 컨셉을 고르기 전까지 다른 데이터의 게이트 항목(가정 수치)은 지난 시험의 기록이고 할 일이 아닙니다. 다음 컨셉의 시스템 설계에서 다시 봅니다.")
     for where, v in result["verdicts"].items():
-        state = "확정" if v["status"] == "approved" else "제안"
-        if v.get("proposed_result") not in (None, v["result"]):
-            state += f", 판정 에이전트는 {RESULT_LABEL[v['proposed_result']]}"   # 사용자가 제안을 모름으로 낮춰 확정했다
-        print(f"{where}: {RESULT_LABEL[v['result']]} ({state}) · 관찰한 근거 {v['sample_text']}")
-    for where, x in result.get("next_needs", {}).items():   # 옮겨 적은 잣대 태그는 브리프와 어긋날 수 있어 빼고 보인다
-        print(f"다음 시험 전에 풀 것({where}): {YARDSTICK_TAG.sub('', x['text'])}" + (" (지난 판정)" if x["cut"] else ""))
+        print(verdict_line(where, v))
+    for where, x in result.get("next_needs", {}).items():
+        print(next_needs_line(where, x))
     for where, x in result.get("restamp", {}).items():
         print(f"참고: 판정 {where}의 기준 지문이 예전 꼴입니다(criteria {x['from']}, 태그까지 넣어 계산함). 기준은 그대로이니 criteria를 바꿔 둡니다(새 지문: {x['to']}). "
               "그러면 태그 없던 수치에 태그를 달거나 태그를 바꿔도 지문이 그대로입니다.")
@@ -806,9 +828,108 @@ def print_extra(result: dict) -> None:
         print("기록의 참조 미확인(그 데이터를 함께 검사하지 않음): " + ", ".join(REF_LABEL[k] for k in result["unchecked_refs"]))
 
 
+def verdict_line(where: str, v: dict) -> str:
+    """check의 판정 줄. hypothesis 명령도 같은 글을 쓴다."""
+    state = "확정" if v["status"] == "approved" else "제안"
+    if v.get("proposed_result") not in (None, v["result"]):
+        state += f", 판정 에이전트는 {RESULT_LABEL[v['proposed_result']]}"   # 사용자가 제안을 모름으로 낮춰 확정했다
+    return f"{where}: {RESULT_LABEL[v['result']]} ({state}) · 관찰한 근거 {v['sample_text']}"
+
+
+def next_needs_line(where: str, x: dict) -> str:
+    """옮겨 적은 잣대 태그는 브리프와 어긋날 수 있어 빼고 보인다."""
+    if x.get("kept"):
+        return f"모름으로 둠({where}): {YARDSTICK_TAG.sub('', x['text'])}"
+    return f"다음 시험 전에 풀 것({where}): {YARDSTICK_TAG.sub('', x['text'])}" + (" (지난 판정)" if x["cut"] else "")
+
+
 def print_counts(result: dict) -> None:
     rc = result["result_counts"]
     tail = f"오류 {len(result['errors'])} · 경고 {len(result['warnings'])}"
     if result.get("acknowledged"):
         tail += f" · 확인한 경고 {len(result['acknowledged'])}"
     print(f"플레이 기록 {result['count']}개 · 판정 버팀 {rc['holds']} · 틀림 {rc['refuted']} · 모름 {rc['unknown']} · {tail}")
+
+
+# ---------- hypothesis: 가설 하나의 판정 자료 ----------
+SESSION_HEAD = ("id", "date", "build", "game_build", "players", "runs", "events", "logs", "simulated", "note")
+CUT_KEEP = ("result", "status", "criteria", "sessions", "cut_reason", "next_needs", "keep_unknown", "proposed_result")
+
+
+def _mine(x, cid: str, hid: str) -> bool:
+    return isinstance(x, dict) and x.get("concept") == cid and x.get("hypothesis") == hid
+
+
+def context(where: str, concepts_data: dict, data: dict, report: dict, stamp, everything: bool = False) -> dict | None:
+    """판정 에이전트가 기록 전체를 여러 번 읽지 않도록 가설 하나에 필요한 것만 모은다(362번). 없는 가설이면 None.
+    가설 문장과 기준 이력, 그 가설의 판정(지난 판정은 이유 글을 빼고), 그 가설의 관찰값·메모가 있거나 판정이 근거로 든 세션.
+    세션의 관찰값·메모는 지금 판정(cut이 아닌 것)과 파일의 마지막 판정이 근거로 든 세션, 아직 어느 판정에도 들지 않은 세션만 보인다.
+    그 밖의 지난 판정만 근거로 든 세션은 머리줄만 둔다(earlier). everything이면 모두 보인다. stamp: 가설의 기준 지문을 내는 함수."""
+    cid, _, hid = where.partition(".")
+    concept = next((c for c in concepts_data.get("concepts") or [] if isinstance(c, dict) and c.get("id") == cid), None)
+    brief = (concept or {}).get("brief")
+    hyp = next((h for h in (brief.get("hypotheses") or [] if isinstance(brief, dict) else []) if isinstance(h, dict) and h.get("id") == hid), None)
+    if hyp is None:
+        return None
+    verdicts = [v if v.get("status") != "cut" else {k: v[k] for k in CUT_KEEP if k in v} for v in data.get("verdicts") or [] if _mine(v, cid, hid)]
+    cited = {sid for v in verdicts for sid in v.get("sessions") or [] if isinstance(sid, str)}
+    recent = [v for v in verdicts if v.get("status") != "cut"] + verdicts[-1:]   # 기록 순서가 시간 순서가 아닐 수 있다(지난 판정을 나중에 남김)
+    last = {sid for v in recent for sid in v.get("sessions") or [] if isinstance(sid, str)}
+    sessions = []
+    for s in data.get("playtests") or []:
+        if not (isinstance(s, dict) and s.get("concept") == cid):
+            continue
+        obs = [o for o in s.get("observations") or [] if isinstance(o, dict) and o.get("hypothesis") == hid]
+        notes = [x for x in s.get("notes") or [] if isinstance(x, dict)   # 가설을 적지 않은 절차 이탈은 모든 가설에 든다
+                 and (hid in (x.get("hypotheses") or []) or (x.get("kind") == "deviation" and not x.get("hypotheses")))]
+        if not (obs or notes or s.get("id") in cited):
+            continue
+        head = {k: s[k] for k in SESSION_HEAD if k in s}
+        if everything or s.get("id") in last or s.get("id") not in cited:
+            sessions.append({**head, "observations": obs, "notes": notes})
+        else:
+            sessions.append({**head, "earlier": True})
+    sessions.sort(key=lambda s: (str(s.get("date")), str(s.get("id"))))
+    return {"where": where, "approved": concept.get("status") == "approved",
+            "hypothesis": {k: hyp[k] for k in ("claim", "failure_signal", "test", "sample", "builds", "criteria_history") if k in hyp},
+            "criteria": stamp(hyp),
+            "check": {"verdict": (report.get("verdicts") or {}).get(where), "next_needs": (report.get("next_needs") or {}).get(where),
+                      "event_notes": [x for x in report.get("event_notes") or [] if x["where"] == where]},
+            "verdicts": verdicts, "sessions": sessions}
+
+
+def _flat(v) -> str:
+    return v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
+
+
+def print_context(got: dict) -> None:
+    where, h = got["where"], got["hypothesis"]
+    print(f"# 가설 {where}" + ("" if got["approved"] else " (선택하지 않은 컨셉)") + ". 읽기 전용. 원본은 design/concepts.json, data/playtests.json")
+    for key, label in (("claim", "주장"), ("failure_signal", "틀렸다는 신호"), ("test", "시험"), ("sample", "표본"), ("builds", "세는 빌드")):
+        if key in h:
+            print(f"{label}({key}): {_flat(h[key])}")
+    print(f"판정 기준 지문(지금): {got['criteria'] or '없음'}")
+    for e in h.get("criteria_history") or []:   # 형식이 틀린 이력은 check가 오류로 알린다. 여기서는 있는 그대로 보인다
+        if not isinstance(e, dict):
+            continue
+        print(f"기준 이력 {e.get('date')} · 고치기 전 지문 {e.get('stamp')}" + (" · 결과를 본 뒤 고침" if e.get("after_results") is True else "")
+              + f" · 까닭: {e.get('why')}")
+        for k, old in (e.get("before") or {}).items() if isinstance(e.get("before"), dict) else ():
+            print(f"  고치기 전 {k}: {_flat(old)}")
+    checked = got["check"]
+    if checked["verdict"]:
+        print("check 판정 줄: " + verdict_line(where, checked["verdict"]))
+    if checked["next_needs"]:
+        print("check: " + next_needs_line(where, checked["next_needs"]))
+    for x in checked["event_notes"]:
+        print(f"check 참고 [{x['code']}]: {x['message']}")
+    print(f"\n## 판정 {len(got['verdicts'])}개 (지난 판정은 이유 글을 뺌)")
+    for v in got["verdicts"]:
+        print(json.dumps(v, ensure_ascii=False))
+    print(f"\n## 세션 {len(got['sessions'])}개 (이 가설의 관찰값·메모만. 마지막 판정의 근거와 아직 판정에 들지 않은 세션)")
+    for s in got["sessions"]:
+        print(" · ".join(f"{k} {_flat(s[k])}" for k in SESSION_HEAD if k in s) + (" · 그 전 판정의 근거(관찰값은 --all)" if s.get("earlier") else ""))
+        for o in s.get("observations", []):
+            print("  관찰: " + json.dumps(o, ensure_ascii=False))
+        for x in s.get("notes", []):
+            print("  메모: " + json.dumps(x, ensure_ascii=False))

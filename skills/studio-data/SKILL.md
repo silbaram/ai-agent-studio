@@ -28,6 +28,7 @@ description: "Shared tooling for the game-design skills: one entry script (studi
 | `python3 .claude/skills/studio-data/scripts/studio.py simulate data/meta.json` | 메타 성장을 시뮬레이션한다(추상 모델, 또는 `"model": "combat"`이면 전투 계산 데이터로) |
 | `python3 .claude/skills/studio-data/scripts/studio.py calibrate data/meta_combat.json` | 플레이 기록의 단계 기록으로 가정값을 비교하고 생존 곡선 값을 제안한다. 파일을 고치지 않는다([calibration](../playtest-verdict/references/calibration.md)) |
 | `python3 .claude/skills/studio-data/scripts/studio.py runlog runs.csv` | 판별 로그(CSV)를 세션의 단계 기록으로 모아 출력한다. 시험 조건별로 나누려면 `--group-by <열>`. 파일에 쓰지 않는다 |
+| `python3 .claude/skills/studio-data/scripts/studio.py hypothesis <컨셉>.<가설>` | 가설 하나의 판정 자료(기준, 기준 이력, 판정, 근거 세션의 그 가설 관찰값·메모)만 모아 출력한다. 쓰임은 [playtest-verdict](../playtest-verdict/SKILL.md). 파일에 쓰지 않는다 |
 | `python3 .claude/skills/studio-data/scripts/studio.py provenance design/` | 기획 문서(md)의 수치 출처 태그를 검사한다 |
 | `python3 .claude/skills/studio-data/scripts/studio.py draft . --archetype <원형> --at <기준 값>` | 스탯 예산의 곡선과 원형으로 아이템·적 초안을 JSON으로 출력한다 (파일에 쓰지 않음) |
 | `python3 .claude/skills/studio-data/scripts/studio.py scope` | OpenSpec 변경을 브리프와 시스템 설계에 대어 범위 이탈을 찾는다. 절차는 [scope-guard](../scope-guard/SKILL.md) |
@@ -86,7 +87,7 @@ python3 .claude/skills/studio-data/scripts/studio.py setup claude .
 
 - **PostToolUse(Write·Edit)**: `design/`·`data/` 아래 파일을 고치면 데이터는 `check`, md는 `provenance`를 돌린다. 오류는 에이전트에게 바로 보이고(종료 코드 2), 경고는 참고 정보로 붙는다. 편집을 되돌리지는 않는다. 한 세션(훅 입력의 `session_id`)의 두 번째 편집부터는 새 경고, 수치가 바뀐 경고, 풀린 경고만 적고 이미 보인 경고는 파일별 개수로 줄인다. 하위 에이전트는 따로 센다. 오류는 늘 모두 적는다. 지난 목록은 임시 폴더의 `studio-data-hook`(나만 읽는 권한)에 세션마다 남고 7일 지나면 지운다. 세션 id가 없거나 그 폴더에 쓰지 못하면 경고를 모두 적는다.
 - **SessionStart(압축·지움·이어 열기)**: 앞서 보인 경고가 맥락에서 빠졌을 수 있어 그 세션의 지난 목록을 지운다. 다음 편집에 경고를 모두 적는다.
-- **PreToolUse**: 판정 에이전트(`studio-judge`)가 파일을 쓰거나(Write·Edit·MultiEdit·NotebookEdit) `studio.py check`·`provenance` 밖의 명령을 실행하면 막는다. `--out`(파일 쓰기)과 셸 연결(`;`, `&&`, `|`, `>`, `$` 등)도 막는다. 다른 에이전트에는 관여하지 않는다.
+- **PreToolUse**: 판정 에이전트(`studio-judge`)가 파일을 쓰거나(Write·Edit·MultiEdit·NotebookEdit) `studio.py check`·`provenance`·`hypothesis` 밖의 명령을 실행하면 막는다. `--out`(파일 쓰기)과 셸 연결(`;`, `&&`, `|`, `>`, `$` 등)도 막는다. 다른 에이전트에는 관여하지 않는다.
 - **PreToolUse(범위)**: OpenSpec과 시스템 설계가 다 있는 프로젝트에서 `scope`에 오류가 있으면 게임을 만드는 파일의 편집, 메인 스펙 편집, `openspec archive`를 막는다. 범위를 넓히는 설계 편집은 사용자에게 묻는다. 자세한 내용은 [scope-guard](../scope-guard/SKILL.md).
 
 다시 실행하면 이 도구가 넣은 훅만 바꾼다. `settings.json`이 JSON이 아니거나, `studio-judge.md`가 이미 있는데 setup이 만든 파일이 아니면 아무것도 바꾸지 않고 종료 코드 2로 끝난다. 훅이 쓸 파이썬은 `--python`으로 바꾼다(기본: Windows `py`, 그 밖 `python3`).
