@@ -46,7 +46,7 @@
 | `notes[].hypotheses` | 아니오 | 그 메모가 가리키는 가설 id 배열. `deviation`에 적으면 그 가설의 판정에만 절차 이탈로 센다. 없으면 모든 판정에 센다. 없는 가설 id는 `unknown_hypothesis`다 |
 | `events` | 아니오 | 가설 `sample.events`의 사건을 이 세션에서 센 건수 `{사건 이름: 0 이상의 정수}`. 이름은 `sample.events`와 같게 쓴다. 적지 않은 세션은 그 사건을 0건으로 센다 |
 | `observations` | 아니오 | `[{hypothesis, value, metric, n, source, note}]`. `hypothesis`(가설 id)와 `value`(문자열 또는 수)가 필수. 없고 단계 기록도 없으면 경고. 스크립트로 계산한 값은 그 출력을 세션 폴더에 결과 파일로 남기고 `source`를 그 파일로, `note`를 `[계산: 스크립트]`로 적는다. `value`의 수는 결과 파일의 수를 그대로 옮긴다 |
-| `notes` | 아니오 | `[{kind: observation / preference / deviation, text}]`. `deviation`은 가설 `test`의 시험 절차를 어긴 일이다(정한 설정 순서를 지키지 않음, 중간 결과를 본 뒤 플레이함) |
+| `notes` | 아니오 | `[{kind: observation / preference / deviation, text}]`. `deviation`은 시험 절차를 어긴 일이다. 가설 `test`의 절차를 지키지 않음(정한 설정 순서, 중간 결과를 본 뒤 플레이함)과, 플레이 전에 정할 것(남은 `[가정]` 잣대, 지난 판정이 정하라고 한 것)을 정하지 않고 플레이함 |
 | `logs` | 아니오 | 원본 기록 파일 경로 배열(프로젝트 폴더 기준). 계산 결과 파일은 넣지 않는다 |
 | `stage_stats`, `upgrades`, `growth_build`, `groups` | 아니오 | 단계별 판 수와 평균 레벨·길이·처치·수입, 그때 가진 영구 강화, 판 안 성장 빌드, 강화 상태별 묶음. 묶음에는 강화 밖의 시험 조건 `variant`(`{로그 열: 값}`, `runlog --group-by`가 쓴다)와 그 묶음의 판 수 `runs`, 그 묶음을 한 사람 `players`(둘 다 runlog가 쓴다)를 달 수 있다. 가정값을 보정할 때 쓴다([calibration](calibration.md)) |
 | `greybox` | 아니오 | 레벨의 그레이박스 확인 기록 `[{check, value, passed, n, source, note}]`. `check`는 `levels.json`의 항목 id다. 재었으면 `value`(수), 재지 못하면 `passed`(true나 false)를 적는다. 둘 중 하나는 필요하다. `n`은 해 본 판 수로 1 이상이다. 해 보지 않았으면 기록을 적지 않는다. 날짜순 마지막 기록이 판정이 된다. 같은 날짜면 세션 id의 순번순이다. 항목 id의 오타는 기록을 버리므로 오류다. 비슷한 이름이 없는 id는 지운 항목의 기록으로 보고 경고한다 |
