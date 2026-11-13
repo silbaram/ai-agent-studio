@@ -34,7 +34,8 @@ class PrototypeNumbersInData(unittest.TestCase):
     def test_single_source_rule_names_prototype_code(self):
         rule = section(read("progression-economy/SKILL.md"), "단일 원본 규칙")
         self.assertIn("시험판", rule)
-        self.assertIn("코드가 그 파일을 읽", rule)
+        self.assertIn("작업 순서 1", rule)
+        self.assertNotIn("코드가 그 파일을 읽", rule)   # 할 일은 작업 순서 1에만 둔다
 
 
 class RuleBasedContent(unittest.TestCase):

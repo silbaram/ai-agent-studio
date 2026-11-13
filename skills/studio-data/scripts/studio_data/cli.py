@@ -125,6 +125,7 @@ def cmd_check(args) -> int:
         return 2
     entries, skipped = datasets.scan_all([Path(p) for p in args.paths])
     datasets.validate_all(entries)
+    notes = datasets.missing_data_notes(entries, [Path(p) for p in args.paths])
     if not entries:
         print("컨셉·시스템 설계·아이템·영구 강화·적·전투 계산·판 안 성장·스탯 예산·강화·합성·재화 흐름·레벨 구성·플레이 기록 데이터 파일을 찾지 못했습니다.", file=sys.stderr)
         return 2
@@ -152,6 +153,7 @@ def cmd_check(args) -> int:
         "acknowledged": acknowledged,
         "unverified_configs": assumed_configs,
         "skipped": skipped,
+        "notes": notes,
         "datasets": [{k: d.get(k) for k in ("path", "kind", "ok", "error", "report") if k in d} for d in entries],
     }
     if args.out:
@@ -192,6 +194,8 @@ def cmd_check(args) -> int:
             print(f"gate: 시뮬레이터 설정의 출처가 가정·결정이거나 비어 있거나 읽을 수 없음(모델 값이라 결정으로는 넘지 않습니다. 보정했으면 계산·측정 provenance를 적습니다): {path}")
         for path in skipped:
             print("참고: " + datasets.skipped_note(path))
+        for text in notes:
+            print("참고: " + text)
         absent = sorted((table_kinds or set()) - {d["kind"] for d in entries if d["ok"]})
         if args.table and absent:
             print("표를 낼 데이터가 없습니다: " + ", ".join(c.KIND_LABELS[k] for k in absent))
