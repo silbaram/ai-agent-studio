@@ -9,6 +9,8 @@ description: "Connects player, item, upgrade, and enemy data through one stat mo
 
 계산은 **기대값**이다. 회피, 이동, 광역 공격, 상태 이상, 조작 실력은 넣지 않는다. 결과로 실제 난이도나 재미를 판정하지 않고, 목표에서 벗어난 곳과 단계 사이의 불연속을 찾는 데 쓴다.
 
+피해와 방어가 고정 스탯이 아니라 덱 구성·뽑은 카드처럼 규칙에서 나오면 이 모델에 맞지 않는다. 비교 방법은 [progression-economy](../progression-economy/SKILL.md#판정-규칙)의 '판정 규칙'.
+
 ## 도구
 
 검사와 계산은 공용 스킬 [studio-data](../studio-data/SKILL.md)의 `studio.py`로 한다. 이 스킬과 함께 설치한다. 명령은 게임 프로젝트 폴더에서 Claude Code 설치 기준으로 적었다. Codex는 `.agents/skills/…`, Windows PowerShell은 `python3` 대신 `py`([실행 경로](../studio-data/SKILL.md#실행)).

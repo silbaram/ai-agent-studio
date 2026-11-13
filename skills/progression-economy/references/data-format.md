@@ -162,6 +162,19 @@
 
 아이템 파일 없이 적 파일만 검사하거나 아이템 파일을 읽지 못하면 드랍 테이블 참조는 `drop_table_not_checked`에 "미확인"으로 남고, 이유(아이템 데이터 없음 / 아이템 파일 읽기 실패)가 함께 표시된다. 미확인이 있으면 `check`의 최종 판정은 PASS가 아니라 INCOMPLETE다.
 
+## 효과가 규칙인 콘텐츠
+
+카드처럼 효과가 규칙이라 스탯으로 비교할 수 없는 콘텐츠는 아이템(`items`) 형식에 넣어 목록·상태·출처·뷰어를 쓴다. 비교는 시뮬레이터로 한다([판정 규칙](../SKILL.md#판정-규칙)).
+
+| 칸 | 넣는 값 |
+|---|---|
+| `slot` | 계열과 사용 비용(에너지 등)을 함께 쓴다(예: `charge-1`). 열위 판정은 `price`만 보고 `cost` 같은 게임 고유 칸은 무시하므로, 비용이 다른 카드를 같은 slot에 두면 `dominated`가 잘못 난다 |
+| `tier` | 필수 칸이라 티어가 없으면 모두 `1`. 그러면 `tier_inversion`은 나지 않는다 |
+| `unique_effect` | 키워드·연계처럼 효과가 규칙인 카드는 `true`(열위 판정에서 빠진다) |
+| `stats` | 숫자로 적을 수 있는 효과(피해, 방어)만 |
+
+판단에 쓰지 않는 가중치(`stat_weights`, `threat_weights`)는 만들지 않는다(없으면 1). 적도 같다. 그래도 가중치 1로 더한 위협도에서 `zone_inversion`·`rank_inversion`이, 같은 slot 카드에서 `dominated`가 날 수 있다. 시뮬레이터 결과로 실제로 약한지 보고, 아니면 사용자와 확인한 뒤 `acknowledged`에 "규칙 콘텐츠, 시뮬레이터로 비교"처럼 까닭을 적는다([확인한 경고](../SKILL.md#작업-순서)).
+
 ## CSV
 
 스탯은 `stat.` 접두사 열, 적의 레벨당 상승치는 `growth.` 접두사 열(`template` 열은 `true`/`false`), 출처는 `provenance_kind`·`provenance_source`·`provenance_note` 열로 쓴다. 강화의 `requires`는 `;`로 구분한다. UTF-8(BOM 허용). 드랍 테이블, 가중치, 표시 이름은 CSV로 담을 수 없으므로 필요하면 JSON을 쓴다.

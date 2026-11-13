@@ -1,6 +1,6 @@
 ---
 name: run-growth
-description: "Models in-run growth: level-up choices with stat gains and pick limits, choices offered at random each level, and build policies (priority or spread) that decide what a player takes. Runs a seeded simulation to get each build's expected stats at each combat stage, adds them to the combat calculation, and compares builds by hits to kill and to survive, warning when one build is at least as good everywhere. Use when designing level-up perks, cards, or upgrade choices, checking that builds are distinct, or seeing how in-run growth changes difficulty, in any genre and engine."
+description: "Models in-run growth: level-up choices with stat gains and pick limits, choices offered at random each level, and build policies (priority or spread) that decide what a player takes. Runs a seeded simulation to get each build's expected stats at each combat stage, adds them to the combat calculation, and compares builds by hits to kill and to survive, warning when one build is at least as good everywhere. Use when designing level-up perks, stat-granting cards, or upgrade choices, checking that builds are distinct, or seeing how in-run growth changes difficulty, in any genre and engine."
 ---
 
 # 판 안 성장: 레벨업 선택과 빌드
@@ -10,6 +10,7 @@ description: "Models in-run growth: level-up choices with stat gains and pick li
 - 레벨업마다 선택지 중 몇 개(`offers`)가 무작위로 제시되고, 빌드 정책대로 하나를 고른다고 본다.
 - 시드를 고정한 반복 시뮬레이션의 평균이다. 같은 설정이면 결과가 같다. 전투는 시행마다 계산해 평균한다.
 - 재미나 실제 난이도를 판정하지 않는다. 기대값 계산이며 플레이어의 실력·이동·회피는 없다.
+- 고른 것이 스탯이 아니라 규칙으로 효과를 내면(덱에 카드를 더하는 보상) 이 모델에 맞지 않는다. 비교 방법은 [progression-economy](../progression-economy/SKILL.md#판정-규칙)의 '판정 규칙'.
 
 ## 도구
 
