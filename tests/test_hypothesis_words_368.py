@@ -1,4 +1,5 @@
-"""368: 가설과 플레이 중 질문의 말이 시험판 화면의 규칙을 가리키게 한다. 표준 라이브러리 unittest만 사용한다."""
+"""368·369: 가설과 플레이 중 질문의 말이 시험판 화면의 규칙을 가리키게 하고(368), 플레이 전에 플레이어 쪽에서 확인한다(369).
+표준 라이브러리 unittest만 사용한다."""
 import re
 import unittest
 
@@ -64,8 +65,32 @@ class PrePlayScreenCheck(unittest.TestCase):
 
     def test_step_one_compares_screen_question_with_test(self):
         para = self.para()
-        for word in ("플레이 전에", "시험판", "`test`에 적힌 문장", "그 이름으로 보이는지", "고친다", BRIEF_LINK):
+        for word in ("플레이 전에", "시험판", "`test`에 적힌 문장", "고친다", BRIEF_LINK):
             self.assertIn(word, para, word)
+
+    def test_check_is_on_the_players_word_itself(self):
+        """369: 에이전트가 말과 규칙을 대신 이어 붙여 통과시키지 않는다."""
+        para = self.para()
+        for word in ("플레이어가 판단해야 하는 말", "그 말 자체", "뜻을 적어", "이어 붙여야", "통과가 아니다"):
+            self.assertIn(word, para, word)
+
+    def test_claim_and_question_words_split(self):
+        """주장은 플레이어가 답하지 않으므로, 그 선택을 하려면 알아봐야 할 말을 본다."""
+        para = self.para()
+        self.assertIn("그 선택을 하려면", para)
+        self.assertIn("답하려면", para)
+
+    def test_prototype_fix_rebuilds_and_commits(self):
+        para = self.para()
+        for word in ("다시 빌드", "기준선", "커밋"):
+            self.assertIn(word, para, word)
+
+    def test_wording_fix_is_proposed_not_applied_without_user(self):
+        self.assertIn("물을 수 없으면", self.para())
+
+    def test_checks_are_a_list(self):
+        bullets = [l for l in self.para().splitlines() if l.startswith("- **")]
+        self.assertEqual(len(bullets), 3, bullets)
 
     def test_fallback_when_screen_cannot_be_opened(self):
         para = self.para()
