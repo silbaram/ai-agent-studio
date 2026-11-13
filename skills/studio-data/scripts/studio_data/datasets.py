@@ -155,6 +155,24 @@ def skipped_note(path: str) -> str:
     return f"{path}: {label} 형식이 아니라 건너뛰었습니다(최상위에 {keys} 키가 없거나, 주석이 있는 JSON입니다). 게임 자체 파일이 아니면 고칩니다."
 
 
+def missing_data_notes(entries: list[dict], targets: list[Path]) -> list[str]:
+    """프로젝트 폴더를 검사했고 시스템 설계는 있는데 게임 수치 데이터 파일이 하나도 없으면 알리는 문장.
+    수치가 시험판 코드에만 있으면 검사기와 출처 게이트가 보지 못한다. 다음이면 알리지 않는다:
+    파일이나 design/·data/ 하위 폴더만 검사함(data/를 다 보지 않았다), 읽지 못한 항목이 있음,
+    data/에 이 도구가 데이터로 읽지 않은 JSON·CSV가 있음(문법 오류나 게임 고유 형식. 수치가 코드에만 있는 것은 아니다)."""
+    roots = [t for t in targets if t.is_dir() and t.resolve().name not in c.SUBFOLDERS]
+    kinds = {d.get("kind") for d in entries}
+    if not roots or "systems" not in kinds or kinds & set(c.NUMBER_KINDS) or not all(d["ok"] for d in entries):
+        return []
+    read = {Path(d["path"]).resolve() for d in entries}
+    for root in roots:
+        folder = root / "data"
+        if folder.is_dir() and any(f.suffix.lower() in (".json", ".csv") and f.resolve() not in read for f in folder.iterdir() if f.is_file()):
+            return []
+    return ["게임 수치 데이터 파일이 없습니다(아이템·적·전투 계산 등). 시스템 설계는 있으니, 수치가 게임 코드에만 있으면 밸런스 점검 전에 "
+            "data/*.json으로 옮기고 코드가 그 파일을 읽게 합니다(progression-economy SKILL.md '작업 순서' 1). 수치 데이터가 없는 게임이면 이 줄은 무시합니다."]
+
+
 def _config_sourced(config: dict | None) -> bool:
     """설정의 출처가 계산이나 측정인가. 형식은 simulate와 같은 규칙(check_common)으로 본다.
     시뮬레이터 설정은 기록으로 맞출 모델 값(생존 곡선, 숙련)이라 결정(decided)으로는 통과하지 않는다."""

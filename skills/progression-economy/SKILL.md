@@ -23,10 +23,10 @@ description: "Keeps items, permanent upgrades, and enemies in single-source JSON
 
 ## 단일 원본 규칙
 
-- 아이템, 영구 강화, 적의 수치·효과·의도·상태·출처는 **종류별 원본 파일 한 곳**에만 쓴다. 권장 배치는 `data/items.json`, `data/upgrades.json`, `data/enemies.json`. 형식은 [references/data-format.md](references/data-format.md). 새 게임의 시험판도 수치를 코드에 적지 않고 처음부터 이 파일에 두며, 코드가 그 파일을 읽는다(읽지 못하면 아래 작업 순서 1).
+- 아이템, 영구 강화, 적의 수치·효과·의도·상태·출처는 **종류별 원본 파일 한 곳**에만 쓴다. 권장 배치는 `data/items.json`, `data/upgrades.json`, `data/enemies.json`. 형식은 [references/data-format.md](references/data-format.md). 새 게임의 시험판도 처음부터 이 파일에 둔다(이미 코드에 있으면 아래 작업 순서 1).
 - 카드·스킬처럼 효과가 규칙인 콘텐츠도 원본은 데이터 파일 한 곳이다. 아이템 칸에 맞추는 법은 [효과가 규칙인 콘텐츠](references/data-format.md#효과가-규칙인-콘텐츠).
 - 시뮬레이터 설정(`data/meta.json`)은 강화 목록을 직접 담지 않고 `"upgrades_file": "upgrades.json"`으로 원본을 가리킨다.
-- 기획 문서(md)는 항목을 `id`로만 언급한다. 공격력·가격·체력 같은 수치를 md에 옮겨 적지 않는다. 옮겨 적으면 원본을 고칠 때 어긋난다.
+- 기획 문서와 보고서(md)는 항목을 `id`로만 언급한다. 공격력·가격·체력·비용 같은 수치를 md에 옮겨 적지 않는다. 옮겨 적으면 원본을 고칠 때 어긋나고, 거기에 결과 파일을 출처로 `[계산: …]`을 붙이면 가정값이 계산값처럼 보인다. 항목 수치는 뷰어로 안내하고, 표에는 계산 결과만 둔다.
 - 보기 좋은 정리가 필요하면 문서를 생성하지 않고 뷰어(`python3 .claude/skills/studio-data/scripts/studio.py view .`)로 원본을 본다. 뷰어 사용법은 [studio-data](../studio-data/SKILL.md#뷰어).
 
 ## 항목 추가·변경 요청
@@ -42,7 +42,7 @@ description: "Keeps items, permanent upgrades, and enemies in single-source JSON
 
 ## 작업 순서
 
-1. **데이터를 단일 원본으로 둔다.** 게임이 읽는 JSON/CSV 파일을 도구도 그대로 읽는다. 게임이 그 파일을 직접 읽지 못하면(`file://`로 여는 HTML 등) JSON을 원본으로 두고 게임 파일에는 옮긴 값만 둔다. 게임 테스트가 두 값을 비교해 어긋나면 실패하게 한다. 게임 파일에서 JSON을 만들어 내지 않는다. 밸런스 스킬이 고친 값이 다음에 만들 때 덮인다.
+1. **데이터를 단일 원본으로 둔다.** 수치가 게임 코드에만 있으면(시험판 등) 다른 점검 전에 값을 바꾸지 않고 `data/*.json`으로 옮겨 코드가 그 파일을 읽게 한다. 옮긴 뒤 빌드 지문과 시뮬레이션 결과가 있으면 옮기기 전과 같은지 확인한다. 게임이 읽는 JSON/CSV 파일을 도구도 그대로 읽는다. 게임이 그 파일을 직접 읽지 못하면(`file://`로 여는 HTML 등) JSON을 원본으로 두고 게임 파일에는 옮긴 값만 둔다. 게임 테스트가 두 값을 비교해 어긋나면 실패하게 한다. 게임 파일에서 JSON을 만들어 내지 않는다. 밸런스 스킬이 고친 값이 다음에 만들 때 덮인다.
 2. **검사한다.**
    ```bash
    python3 .claude/skills/studio-data/scripts/studio.py check data/ --out reports/data-check.json
