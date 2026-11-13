@@ -23,7 +23,8 @@ description: "Keeps items, permanent upgrades, and enemies in single-source JSON
 
 ## 단일 원본 규칙
 
-- 아이템, 영구 강화, 적의 수치·효과·의도·상태·출처는 **종류별 원본 파일 한 곳**에만 쓴다. 권장 배치는 `data/items.json`, `data/upgrades.json`, `data/enemies.json`. 형식은 [references/data-format.md](references/data-format.md).
+- 아이템, 영구 강화, 적의 수치·효과·의도·상태·출처는 **종류별 원본 파일 한 곳**에만 쓴다. 권장 배치는 `data/items.json`, `data/upgrades.json`, `data/enemies.json`. 형식은 [references/data-format.md](references/data-format.md). 새 게임의 시험판도 수치를 코드에 적지 않고 처음부터 이 파일에 두며, 코드가 그 파일을 읽는다(읽지 못하면 아래 작업 순서 1).
+- 카드·스킬처럼 효과가 규칙인 콘텐츠도 원본은 데이터 파일 한 곳이다. 아이템 칸에 맞추는 법은 [효과가 규칙인 콘텐츠](references/data-format.md#효과가-규칙인-콘텐츠).
 - 시뮬레이터 설정(`data/meta.json`)은 강화 목록을 직접 담지 않고 `"upgrades_file": "upgrades.json"`으로 원본을 가리킨다.
 - 기획 문서(md)는 항목을 `id`로만 언급한다. 공격력·가격·체력 같은 수치를 md에 옮겨 적지 않는다. 옮겨 적으면 원본을 고칠 때 어긋난다.
 - 보기 좋은 정리가 필요하면 문서를 생성하지 않고 뷰어(`python3 .claude/skills/studio-data/scripts/studio.py view .`)로 원본을 본다. 뷰어 사용법은 [studio-data](../studio-data/SKILL.md#뷰어).
@@ -67,6 +68,7 @@ description: "Keeps items, permanent upgrades, and enemies in single-source JSON
 ## 판정 규칙
 
 - 검사기와 시뮬레이터 결과만으로 "난이도 적절", "재미있음"을 판정하지 않는다. 구조적 문제(역전, 끊긴 사슬, 너무 이른 완료, 긴 정체, 도달 불가)를 찾는 데 쓴다.
+- 피해·방어가 고정 스탯이 아니라 덱 구성, 뽑은 카드, 키워드 같은 규칙에서 나오면 검사기의 점수·위협도와 [combat-balance](../combat-balance/SKILL.md)의 처치 시간으로 판단하지 않는다. 게임 규칙 코드를 그대로 돌리는 시뮬레이터로 비교하고, 한 번에 값 하나만 바꾼다. 빌드 지문(`game_build`)은 시뮬레이터가 결과 파일 안에 남기고, 문서에는 `[계산: reports/…]`로 그 파일만 가리킨다. 태그 안에 지문을 덧붙이면 출처 경로 검사가 파일을 찾지 못한다.
 - 도달률이 100%가 아닌 마일스톤은 중앙값만 보고하지 않는다. `reached_fraction`과 "미도달"을 함께 적는다.
 - 구매 정책(`listed_order` / `cheapest_first`)에 따라 결론이 달라지면, 그것 자체를 발견으로 보고한다. 한쪽만 골라 보고하지 않는다. 두 정책은 `--compare-policies`로 한 번에 돌린다.
 - 숫자를 손으로 조정해 원하는 결과가 나오게 맞추지 않는다. 조정했다면 무엇을 왜 바꿨는지와 바꾸기 전·후 결과를 함께 남긴다.

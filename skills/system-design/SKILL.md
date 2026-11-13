@@ -90,6 +90,6 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table systems
 
 ## 다음 단계
 
-OpenSpec으로 구현을 관리하면 [scope-guard](../scope-guard/SKILL.md)로 변경을 시스템에 잇는다. 순서대로 구현하고, 레벨은 [level-design](../level-design/SKILL.md)으로, 수치는 밸런스 스킬로 적는다. 그래픽 없는 프로토타입을 플레이하고 [playtest-verdict](../playtest-verdict/SKILL.md)로 기록한다.
+OpenSpec으로 구현을 관리하면 [scope-guard](../scope-guard/SKILL.md)로 변경을 시스템에 잇는다. 순서대로 구현하고, 레벨은 [level-design](../level-design/SKILL.md)으로, 수치는 코드에 적지 않고 처음부터 데이터 파일에 두며([단일 원본 규칙](../progression-economy/SKILL.md#단일-원본-규칙)), 값은 밸런스 스킬로 정한다. 그래픽 없는 프로토타입을 플레이하고 [playtest-verdict](../playtest-verdict/SKILL.md)로 기록한다.
 
 예시: `studio-data/assets/sample-project/design/systems.json` (실제 게임 시스템이 아니다).
