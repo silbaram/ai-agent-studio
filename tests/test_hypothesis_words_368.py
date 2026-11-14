@@ -1,4 +1,5 @@
-"""368·369: 가설과 플레이 중 질문의 말이 시험판 화면의 규칙을 가리키게 하고(368), 플레이 전에 플레이어 쪽에서 확인한다(369).
+"""368·369·370: 가설과 플레이 중 질문의 말이 시험판 화면의 규칙을 가리키게 하고(368), 플레이 전에 플레이어 쪽에서(369)
+인용 표로 확인한다(370).
 표준 라이브러리 unittest만 사용한다."""
 import re
 import unittest
@@ -71,8 +72,44 @@ class PrePlayScreenCheck(unittest.TestCase):
     def test_check_is_on_the_players_word_itself(self):
         """369: 에이전트가 말과 규칙을 대신 이어 붙여 통과시키지 않는다."""
         para = self.para()
-        for word in ("플레이어가 판단해야 하는 말", "그 말 자체", "뜻을 적어", "이어 붙여야", "통과가 아니다"):
+        for word in ("플레이어가 판단해야 하는 말", "판단하지 않고", "바꿔 적지 않는다"):
             self.assertIn(word, para, word)
+
+    def test_words_are_shown_as_a_quote_table(self):
+        """370: 판단 대신 말마다 화면 문구 인용을 남기고, 없으면 어긋남이다."""
+        para = self.para()
+        for word in ("| 가설 | 말 | 화면 문구 인용 |", "문장에 있는 그대로", "보조 문구는 인용으로 치지 않는다", "없음", "어긋남"):
+            self.assertIn(word, para, word)
+
+    def test_quote_must_contain_the_word(self):
+        """말이 들어가지 않은 문구(가리킬 법한 규칙의 설명)를 인용으로 쓰지 못한다."""
+        para = self.para()
+        self.assertIn("그 말(활용형 포함)이 들어간 화면 문구", para)
+        self.assertNotIn("그 뜻을 적은 화면 문구", para)
+
+    def test_user_decides_missing_quotes(self):
+        """'없음' 줄은 사용자가 플레이어에게 분명한 말인지 정한다(에이전트가 일상어라며 빼지 않는다)."""
+        para = self.para()
+        self.assertIn("사용자가 정하기 전에는", para)
+        self.assertIn("빼지 않는다", para)
+
+    def test_word_check_is_split_into_sub_items(self):
+        lines = self.para().splitlines()
+        start = next(i for i, l in enumerate(lines) if l.startswith("- **플레이어가 판단해야 하는 말"))
+        subs = [l for l in lines[start + 1:] if l.startswith("  - ")]
+        self.assertGreaterEqual(len(subs), 3, subs)
+
+    def test_report_section_links_to_the_table(self):
+        text = GUIDE.read_text(encoding="utf-8")
+        report = text[text.index("\n## 보고\n"):text.index("\n## 한계\n")]
+        self.assertIn("#1-플레이-전-가설에-id와-최소-표본을-단다", report)
+        self.assertIn("인용 표", report)
+        self.assertNotIn("활용형", report)   # 규칙은 1단계 한 곳
+
+    def test_core_words_cannot_be_skipped(self):
+        para = self.para()
+        self.assertIn("핵심 서술어", para)
+        self.assertIn("선택의 기준", para)
 
     def test_claim_and_question_words_split(self):
         """주장은 플레이어가 답하지 않으므로, 그 선택을 하려면 알아봐야 할 말을 본다."""
