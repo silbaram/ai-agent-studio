@@ -43,6 +43,7 @@
 | `players` | 예 | 플레이한 사람 이름 배열. 같은 사람은 같은 이름으로 쓴다(사람 수를 센다). 근거 세션의 빌드가 섞이면 판정 줄에 `빌드 2개(…)`가 붙는다. 빌드는 `game_build`, 없으면 `build`로 센다. `game_build`가 없는 세션은 같은 커밋의 다른 세션에 적힌 `game_build`가 하나뿐이면 그 빌드로 센다. 합쳐 세도 되는지 판정 `reason`에 적는다 |
 | `simulated` | 아니오 | `true`면 사람이 아니라 자동 플레이 봇이나 스크립트가 한 플레이다. 표본(판·사람 수)에 세지 않고 버팀·틀림의 근거가 되지 못한다. 모름 판정의 참고로는 가리킬 수 있다. 그레이박스 확인과 레벨 구성이 보는 단계 기록에도 들지 않고, `[측정: …#세션]`의 출처가 되지 못한다(자동 플레이로 낸 값은 `[계산: …]`). 판 기록 형식이 같아도 사람의 플레이와 섞지 않는다 |
 | `runs` | 예 | 이 세션의 판 수 합계 |
+| `started_at` | 아니오 | 이 세션 첫 판의 시작 시각. 시간대를 붙인 ISO 시각이고, 판 로그에 있으면 그 값을 그대로 옮긴다(예: `2026-11-14T08:30:00.000Z`). 결과를 본 뒤 표본을 줄인 가설은 이 값과 `sample.reduced_from.at`(줄인 시각)이 둘 다 있으면 날짜 대신 시각으로 줄인 뒤의 세션인지 가린다. 형식이 틀리면 그 세션은 판정에 들지 않는다 |
 | `notes[].hypotheses` | 아니오 | 그 메모가 가리키는 가설 id 배열. `deviation`에 적으면 그 가설의 판정에만 절차 이탈로 센다. 없으면 모든 판정에 센다. 없는 가설 id는 `unknown_hypothesis`다 |
 | `excluded_runs` | 아니오 | 가설 `test`가 표본에서 빼라고 한 판(사람마다 첫 판, 절차를 어긴 판 등) `{가설 id: {runs: 뺀 판 수, reason: 까닭, players: 센 판이 하나도 남지 않은 사람}}`. 예: `{"deck_clicks": {"runs": 3, "reason": "사람마다 첫 판", "players": ["friend_b"]}}`. `runs`는 1 이상이고 세션 `runs`를 넘지 않는다. `players`는 선택이고 세션 `players` 안의 이름이다. 그 가설의 표본에서 판 수와 그 사람을 빼고 판정 줄에 `(test가 뺀 판 N)`으로 보인다. 빼고 남은 표본이 최소 표본보다 적으면 `verdict_sample_short`다. 세션 `events`도 뺀 판을 빼고 센다. 판정 에이전트가 보는 `hypothesis` 출력에 그 가설의 항목이 나온다 |
 | `events` | 아니오 | 가설 `sample.events`의 사건을 이 세션에서 센 건수 `{사건 이름: 0 이상의 정수}`. 이름은 `sample.events`와 같게 쓴다. 적지 않은 세션은 그 사건을 0건으로 센다 |
@@ -108,7 +109,7 @@
 | `observation_missing` | 오류 | 버팀·틀림인데 근거 세션에 그 가설의 관찰값이 없음 |
 | `duplicate_verdict` | 오류 | 한 가설에 `cut`이 아닌 판정이 둘 이상 |
 | `verdict_session_wrong_build` | 오류 | 버팀·틀림인데, 가설의 `builds`가 있고 근거 세션의 `build`와 `game_build`가 어느 것도 거기에 없음 |
-| `verdict_sample_reduced_after_results` | 오류 | 버팀·틀림인데, 가설의 `sample.reduced_from.before_results`가 `false`(결과 파일을 연 뒤에 표본을 줄임)이고 근거 세션 중 줄인 날이나 그 전의 세션이 있음. 원래 표본을 채웠으면 나지 않는다. 줄인 날 뒤의 세션만으로 줄인 표본을 채우거나 모름으로 둔다 |
+| `verdict_sample_reduced_after_results` | 오류 | 버팀·틀림인데, 가설의 `sample.reduced_from.before_results`가 `false`(결과 파일을 연 뒤에 표본을 줄임)이고 근거 세션 중 줄인 뒤에 시작하지 않은 세션이 있음. 세션 `started_at`과 `reduced_from.at`이 둘 다 있으면 시각으로, 아니면 날짜로 보며 줄인 날의 세션은 줄인 뒤로 치지 않는다. 원래 표본을 채웠으면 나지 않는다. 줄인 날 뒤의 세션만으로 줄인 표본을 채우거나 모름으로 둔다 |
 | `verdict_session_before_reduction` | 오류 | 버팀·틀림인데, 근거 세션 중 가설의 `sample.reduced_from.date`보다 앞선 날짜의 세션이 있고 근거 표본이 줄이기 전 표본(`reduced_from`의 `runs`·`players`)에 못 미침. 그 세션의 결과는 줄이기 전에 나와 있었다. 줄인 뒤의 세션으로 채우거나 줄이기 전 표본을 채우고, 못 하면 모름으로 둔다. 같은 날의 세션은 보지 않는다(그날 줄이기 전에 마친 세션은 [changes](changes.md#표본을-줄이자는-말이-나올-때) 5번) |
 | `verdict_overrides_proposal` | 오류 | `proposed_result`와 다른 `result`가 모름이 아님(모름을 버팀·틀림으로 올렸거나 버팀과 틀림을 바꿈). 사용자의 까닭을 판정 에이전트에게 주고 다시 판정한다. `cut`인 판정은 보지 않는다 |
 | `verdict_sample_short` | 오류 | 버팀·틀림인데, 그 가설을 관찰한 근거 세션을 합친 사람 수나 판 수가 가설의 `sample`보다 적음. 제안(`proposed`)이어도 오류다. `sample`이 없는 가설은 보지 않는다. runlog가 쓴 묶음(모든 묶음에 `runs`나 `players`가 있음)이 있는 세션은 묶음의 판 수 합과 사람을 넘겨 세지 않는다. 손으로 쓴 단계 기록은 로그가 아니라 세지 않는다 |

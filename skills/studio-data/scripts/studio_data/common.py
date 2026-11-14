@@ -111,6 +111,23 @@ def valid_date(v) -> bool:
         return False
     return True
 
+
+INSTANT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:\d{2})$")
+
+
+def instant(v) -> datetime.datetime | None:
+    """시간대가 붙은 ISO 시각(2026-11-14T17:00+09:00, 판 로그의 …T08:30:00.000Z)이면 그 시각, 아니면 None.
+    시간대가 없으면 UTC로 남긴 판 로그와 견줄 수 없으므로 받지 않는다."""
+    if not (isinstance(v, str) and INSTANT.match(v)):
+        return None
+    text = v[:-1] + "+00:00" if v.endswith("Z") else v
+    head, _, frac = text[:-6].partition(".")
+    try:   # 3.10 이하의 fromisoformat은 소수 초를 3·6자리만 받는다
+        return datetime.datetime.fromisoformat(head + (f".{frac.ljust(6, '0')}" if frac else "") + text[-6:])
+    except ValueError:
+        return None
+
+
 def _shown(v):
     """사람에게 보이는 수. 부동소수 오차를 지운다. 범위 비교도 이 수로 해서 보이는 수와 판정이 어긋나지 않게 한다."""
     return round(v, 6) if isinstance(v, float) else v

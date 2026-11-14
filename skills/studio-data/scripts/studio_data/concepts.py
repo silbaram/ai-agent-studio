@@ -14,7 +14,7 @@ import unicodedata
 from pathlib import Path
 
 from . import provenance
-from .common import DATASET_KINDS, ID_PATTERN, STATUSES, check_identity, is_active, is_int, josa, load_dataset, valid_date
+from .common import DATASET_KINDS, ID_PATTERN, STATUSES, check_identity, instant, is_active, is_int, josa, load_dataset, valid_date
 from .common import did_you_mean as _did_you_mean
 from .common import table_cell as _cell
 
@@ -151,7 +151,7 @@ def check_concept(c: dict, where: str, errors: list, warnings: list, ctx: dict |
 
 SAMPLE_KEYS = ("players", "runs", "events", "reduced_from")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-REDUCED_KEYS = ("players", "runs", "after_run", "before_results", "date")
+REDUCED_KEYS = ("players", "runs", "after_run", "before_results", "date", "at")
 CRITERIA_KEYS = ("claim", "failure_signal", "test", "sample")  # 판정 기준. 이 칸이 바뀌면 지난 판정은 지금 기준의 판정이 아니다
 
 
@@ -186,6 +186,11 @@ def _reduced_problem(v: dict) -> str | None:
                 "before_results: 결과 파일을 열기 전에 줄였나(true/false), date: YYYY-MM-DD}입니다")
     if not any(k in v and r[k] > v[k] for k in ("players", "runs") if k in r):
         return "sample.reduced_from의 값이 지금 표본보다 커야 합니다(줄이기 전 값을 적습니다)"
+    if "at" in r:   # 그날 줄인 뒤에 시작한 세션(started_at)을 가리는 시각
+        when = instant(r["at"])
+        if when is None or when.date().isoformat() != r["date"]:
+            return ("sample.reduced_from.at은 줄인 시각이고 시간대를 붙인 ISO 시각입니다(예: 2026-11-14T17:00+09:00). "
+                    "그 시간대로 본 날짜가 date와 같아야 합니다")
     return None
 
 
