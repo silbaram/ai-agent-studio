@@ -12,7 +12,7 @@ import posixpath
 import re
 from pathlib import Path
 
-from .common import ID_PATTERN, STATUSES, YARDSTICK_TAG, ack_reason, check_identity, did_you_mean, is_int, is_number, unknown_keys_text, josa
+from .common import ID_PATTERN, STATUSES, YARDSTICK_TAG, ack_reason, check_identity, did_you_mean, instant, is_int, is_number, unknown_keys_text, josa
 from .common import valid_date as common_valid_date
 from .common import add_issue as _err
 
@@ -32,7 +32,7 @@ SOURCE_READ_LIMIT = 5_000_000
 STAGE_FIELDS = {"stage", "entered", "cleared", "level", "level_end", "duration", "timed", "kills", "kill_rate", "played_length", "income", "source", "note"}
 GROUP_FIELDS = {"upgrades", "growth_build", "variant", "runs", "players", "stage_stats"}
 GREYBOX_FIELDS = {"check", "value", "passed", "n", "source", "note"}
-SESSION_FIELDS = {"id", "date", "concept", "build", "game_build", "players", "runs", "events", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note", "simulated", "excluded_runs"}
+SESSION_FIELDS = {"id", "date", "concept", "build", "game_build", "players", "runs", "events", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note", "simulated", "excluded_runs", "started_at"}
 TOP_FIELDS = {"playtests", "verdicts", "note"}
 REF_LABEL = {"stages": "전투 단계", "upgrades": "영구 강화", "enemies": "적", "builds": "판 안 성장 빌드", "currencies": "재화", "greybox": "그레이박스 확인"}
 UNCHECKED_REASON = {
@@ -296,6 +296,10 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
             for k, x in ex.items())):
         _err(errors, "schema", where, "excluded_runs는 {가설 id: {runs: 그 가설의 test가 빼라고 한 판 수(1 이상, 세션 runs 이하), reason: 까닭, "
              "players: 센 판이 하나도 남지 않은 사람(선택, 세션 players 안의 이름)}} 객체입니다.")
+        ok = False
+    if "started_at" in s and instant(s["started_at"]) is None:
+        _err(errors, "schema", where, "started_at은 이 세션 첫 판의 시작 시각이고 시간대를 붙인 ISO 시각입니다. "
+             f"판 로그의 값을 그대로 옮깁니다(예: 2026-11-14T08:30:00.000Z): {s['started_at']!r}")
         ok = False
     obs = s.get("observations", [])
     if not isinstance(obs, list):
@@ -636,6 +640,15 @@ def _excluded(s: dict, hyp: str | None) -> tuple[int, set]:
     return x.get("runs", 0), {p.strip() for p in x.get("players") or []}
 
 
+def _after_cut(s: dict, reduced: dict) -> bool:
+    """세션이 표본을 줄인 뒤에 시작했나. 줄인 시각(at)과 첫 판 시작 시각(started_at)이 둘 다 있으면 날짜보다 시각을 믿는다
+    (다음 날 기록하며 date를 기록한 날로 적어도 판 로그의 시각은 그대로다). 하나라도 없으면 날짜로 보고, 같은 날은 가르지 못한다."""
+    cut, start = instant(reduced.get("at")), instant(s.get("started_at"))
+    if cut and start:
+        return start >= cut
+    return s["date"] > reduced["date"]
+
+
 def _sample(sessions: list, hyp: str | None = None) -> dict:
     """세션들을 합친 표본: 세션 수, 판 수, 사람 수(같은 이름은 한 사람). 판별 로그 묶음이 있으면 로그를 넘지 않는다.
     hyp를 주면 그 가설의 test가 뺀 판(excluded_runs)을 판 수에서, 센 판이 남지 않은 사람을 사람 수에서 빼고 뺀 판 수를 excluded에 적는다."""
@@ -764,12 +777,13 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         reduced = (need or {}).get("reduced_from")
         original = {k: reduced[k] for k in ("players", "runs") if k in reduced} if reduced else {}
         filled = all(have[k] >= original[k] for k in original)   # 줄이기 전 표본도 채웠으면 줄인 것이 판정을 바꾸지 않았다
-        stale = [s["id"] for s in seen if s["date"] <= reduced["date"]] if reduced and not reduced["before_results"] and not filled else []
+        stale = [s["id"] for s in seen if not _after_cut(s, reduced)] if reduced and not reduced["before_results"] and not filled else []
         if v["result"] in DECIDED and stale:   # 줄인 날 뒤의 세션만 세면 미리 정한 작은 표본으로 새로 시험한 것과 같다. 같은 날은 날짜로 가를 수 없다
             _err(errors, "verdict_sample_reduced_after_results", where,
                  f"{RESULT_LABEL[v['result']]} 판정의 가설은 결과 파일을 연 뒤에 표본을 줄였는데(sample.reduced_from {reduced['date']}), "
-                 f"근거 세션 {josa(', '.join(stale), '이가')} 줄인 날이나 그 전의 기록입니다. 결과를 보고 멈춘 것과 구별되지 않습니다. "
-                 "줄인 날 뒤의 세션만으로 줄인 표본을 채우거나, 원래 표본을 채우거나, unknown(모름)으로 둡니다.")
+                 f"근거 세션 {josa(', '.join(stale), '이가')} 줄이기 전이거나 줄인 날의 기록입니다. 결과를 보고 멈춘 것과 구별되지 않습니다. "
+                 "줄인 날 뒤의 세션만으로 줄인 표본을 채우거나, 원래 표본을 채우거나, unknown(모름)으로 둡니다. "
+                 "같은 날 줄인 뒤에 시작한 세션이면 sample.reduced_from.at(줄인 시각)과 세션 started_at(첫 판 시작 시각)을 적어 가립니다.")
         elif v["result"] in DECIDED and reduced:   # 줄인 날보다 먼저 기록한 세션은 줄이기 전에 결과가 나와 있었다
             early = [s["id"] for s in seen if s["date"] < reduced["date"]]
             if early and not filled:
@@ -882,7 +896,7 @@ def print_counts(result: dict) -> None:
 
 
 # ---------- hypothesis: 가설 하나의 판정 자료 ----------
-SESSION_HEAD = ("id", "date", "build", "game_build", "players", "runs", "events", "logs", "simulated", "note")
+SESSION_HEAD = ("id", "date", "started_at", "build", "game_build", "players", "runs", "events", "logs", "simulated", "note")
 CUT_KEEP = ("result", "status", "criteria", "sessions", "cut_reason", "next_needs", "keep_unknown", "proposed_result")
 
 
