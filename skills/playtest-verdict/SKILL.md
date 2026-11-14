@@ -36,7 +36,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 `design/concepts.json`에서 시험할 컨셉의 `brief.hypotheses`마다 `id`를 넣는다(소문자·숫자·밑줄, 예: `density_timing`). 기록과 판정은 이 id로 가설을 가리킨다. 문장을 바꿔도 id는 그대로 둔다.
 
-시험 전에 가설마다 최소 표본(`"sample": {"players": 3, "runs": 15}`)과 기록할 값을 사용자와 정한다. 근거 세션을 합쳐 이보다 적으면 버팀·틀림 판정이 오류다(`verdict_sample_short`). 신호가 드문 사건(사망, 부화)의 건수에 기대면 그 최소 건수를 `sample.events`(`{"death_with_hatch": 6}`)에 적는다. 프로토타입이 기록할 값을 로그로 남기게 하면 옮겨 적는 실수가 줄어든다. 시험 조건(설정)이 여러 가지면 로그에 그 열을 두고 `runlog --group-by`로 나눠 모은다.
+시험 전에 가설마다 최소 표본(`"sample": {"players": 3, "runs": 15}`)과 기록할 값을 사용자와 정한다. 사람 수는 실제로 플레이할 수 있는 사람 수로 정한다([브리프 작성법](../concept-exploration/references/brief.md#가설-hypotheses-1개-이상)). 근거 세션을 합쳐 이보다 적으면 버팀·틀림 판정이 오류다(`verdict_sample_short`). 신호가 드문 사건(사망, 부화)의 건수에 기대면 그 최소 건수를 `sample.events`(`{"death_with_hatch": 6}`)에 적는다. 프로토타입이 기록할 값을 로그로 남기게 하면 옮겨 적는 실수가 줄어든다. 시험 조건(설정)이 여러 가지면 로그에 그 열을 두고 `runlog --group-by`로 나눠 모은다.
 
 표본은 결과를 보기 전에 정한 값이다. 플레이 도중이나 뒤에 표본을 줄이자는 말이 나오면 바로 고치지 않는다. 가설마다 사용자에게 묻고, 결과 파일을 열기 전에 [표본을 줄이자는 말이 나올 때](references/changes.md#표본을-줄이자는-말이-나올-때)를 따른다.
 

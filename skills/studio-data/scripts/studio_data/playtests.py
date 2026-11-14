@@ -762,14 +762,17 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                  f"{RESULT_LABEL[v['result']]} 판정의 근거 세션 {', '.join(wrong)}의 빌드가 가설이 세는 빌드({', '.join(allowed)})가 아닙니다. "
                  "세션의 build(커밋)나 game_build(판 로그의 빌드 지문)를 확인합니다. 다른 빌드의 기록이면 근거에서 뺍니다.")
         reduced = (need or {}).get("reduced_from")
-        if v["result"] in DECIDED and reduced and not reduced["before_results"]:
+        original = {k: reduced[k] for k in ("players", "runs") if k in reduced} if reduced else {}
+        filled = all(have[k] >= original[k] for k in original)   # 줄이기 전 표본도 채웠으면 줄인 것이 판정을 바꾸지 않았다
+        stale = [s["id"] for s in seen if s["date"] <= reduced["date"]] if reduced and not reduced["before_results"] and not filled else []
+        if v["result"] in DECIDED and stale:   # 줄인 날 뒤의 세션만 세면 미리 정한 작은 표본으로 새로 시험한 것과 같다. 같은 날은 날짜로 가를 수 없다
             _err(errors, "verdict_sample_reduced_after_results", where,
-                 f"{RESULT_LABEL[v['result']]} 판정의 가설은 결과 파일을 연 뒤에 표본을 줄였습니다(sample.reduced_from). "
-                 "결과를 보고 기준을 바꾼 것과 구별되지 않으므로 버팀·틀림이 아니라 unknown(모름)으로 둡니다. 원래 표본을 채우면 다시 판정할 수 있습니다.")
+                 f"{RESULT_LABEL[v['result']]} 판정의 가설은 결과 파일을 연 뒤에 표본을 줄였는데(sample.reduced_from {reduced['date']}), "
+                 f"근거 세션 {josa(', '.join(stale), '이가')} 줄인 날이나 그 전의 기록입니다. 결과를 보고 멈춘 것과 구별되지 않습니다. "
+                 "줄인 날 뒤의 세션만으로 줄인 표본을 채우거나, 원래 표본을 채우거나, unknown(모름)으로 둡니다.")
         elif v["result"] in DECIDED and reduced:   # 줄인 날보다 먼저 기록한 세션은 줄이기 전에 결과가 나와 있었다
             early = [s["id"] for s in seen if s["date"] < reduced["date"]]
-            original = {k: reduced[k] for k in ("players", "runs") if k in reduced}
-            if early and any(have[k] < original[k] for k in original):   # 줄이기 전 표본도 채웠으면 줄인 것이 판정을 바꾸지 않았다
+            if early and not filled:
                 _err(errors, "verdict_session_before_reduction", where,
                      f"{RESULT_LABEL[v['result']]} 판정의 근거 세션 {josa(', '.join(early), '은는')} 표본을 줄인 날({reduced['date']})보다 "
                      "먼저 기록한 세션이라 줄이기 전에 결과가 나와 있었습니다. 줄인 표본을 그 세션으로 채우면 결과를 보고 멈춘 것과 구별되지 않습니다. "
