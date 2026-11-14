@@ -32,7 +32,7 @@ SOURCE_READ_LIMIT = 5_000_000
 STAGE_FIELDS = {"stage", "entered", "cleared", "level", "level_end", "duration", "timed", "kills", "kill_rate", "played_length", "income", "source", "note"}
 GROUP_FIELDS = {"upgrades", "growth_build", "variant", "runs", "players", "stage_stats"}
 GREYBOX_FIELDS = {"check", "value", "passed", "n", "source", "note"}
-SESSION_FIELDS = {"id", "date", "concept", "build", "game_build", "players", "runs", "events", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note", "simulated"}
+SESSION_FIELDS = {"id", "date", "concept", "build", "game_build", "players", "runs", "events", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note", "simulated", "excluded_runs"}
 TOP_FIELDS = {"playtests", "verdicts", "note"}
 REF_LABEL = {"stages": "전투 단계", "upgrades": "영구 강화", "enemies": "적", "builds": "판 안 성장 빌드", "currencies": "재화", "greybox": "그레이박스 확인"}
 UNCHECKED_REASON = {
@@ -247,7 +247,7 @@ def _check_greybox(s: dict, where: str, errors: list) -> bool:
 def _hypothesis_ties(s: dict) -> list[str]:
     """세션에서 컨셉의 가설에 대어 보는 칸. 하나도 없으면 concept를 적지 않아도 된다."""
     notes = s.get("notes")
-    return ([k for k in ("observations", "events") if s.get(k)]
+    return ([k for k in ("observations", "events", "excluded_runs") if s.get(k)]
             + (["notes의 hypotheses"] if isinstance(notes, list) and any(isinstance(x, dict) and x.get("hypotheses") for x in notes) else []))
 
 
@@ -286,6 +286,16 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
     ev = s.get("events")
     if "events" in s and not (isinstance(ev, dict) and all(isinstance(k, str) and ID_PATTERN.match(k) and is_int(x, 0) for k, x in ev.items())):
         _err(errors, "schema", where, "events는 {사건 이름(소문자·숫자·밑줄): 이 세션에서 센 건수(0 이상의 정수)} 객체입니다. 이름은 가설 sample.events와 같게 씁니다.")
+        ok = False
+    ex = s.get("excluded_runs")
+    names = {p.strip() for p in players} if isinstance(players, list) and all(_text(p) for p in players) else set()
+    if "excluded_runs" in s and not (isinstance(ex, dict) and all(
+            isinstance(k, str) and ID_PATTERN.match(k) and isinstance(x, dict) and {"runs", "reason"} <= set(x) <= {"runs", "reason", "players"}
+            and is_int(x["runs"], 1) and _text(x["reason"]) and (not is_int(runs, 1) or x["runs"] <= runs)
+            and ("players" not in x or (isinstance(x["players"], list) and x["players"] and all(_text(p) and p.strip() in names for p in x["players"])))
+            for k, x in ex.items())):
+        _err(errors, "schema", where, "excluded_runs는 {가설 id: {runs: 그 가설의 test가 빼라고 한 판 수(1 이상, 세션 runs 이하), reason: 까닭, "
+             "players: 센 판이 하나도 남지 않은 사람(선택, 세션 players 안의 이름)}} 객체입니다.")
         ok = False
     obs = s.get("observations", [])
     if not isinstance(obs, list):
@@ -588,6 +598,8 @@ def _against(have: dict, need: dict | None, key: str, unit: str) -> str:
 def _sample_line(have: dict, need: dict | None, deviations: int, builds: list) -> str:
     """판정의 표본 글: 근거 세션 수, 판·사람(최소 표본과 나란히), 사건 수, 절차 이탈, 섞인 빌드. check 출력과 뷰어가 같은 글을 쓴다."""
     parts = [f"세션 {have['sessions']}", _against(have, need, "runs", "판"), _against(have, need, "players", "명")]
+    if have.get("excluded"):
+        parts[1] += f" (test가 뺀 판 {have['excluded']})"
     reduced = (need or {}).get("reduced_from")
     if reduced:   # 줄인 표본이면 줄이기 전 값과 때를 함께 보인다
         before = ", ".join(f"{reduced[k]}{u}" for k, u in (("runs", "판"), ("players", "명")) if k in reduced)
@@ -618,10 +630,23 @@ def _after_results(info: dict | None, hyp: str, sessions: list) -> str:
     return f" · 결과 뒤 기준 고침 {', '.join(dates)}" if dates else ""
 
 
-def _sample(sessions: list) -> dict:
-    """세션들을 합친 표본: 세션 수, 판 수, 사람 수(같은 이름은 한 사람). 판별 로그 묶음이 있으면 로그를 넘지 않는다."""
+def _excluded(s: dict, hyp: str | None) -> tuple[int, set]:
+    """그 가설의 test가 빼라고 한 (판 수, 센 판이 남지 않은 사람)(세션 excluded_runs)."""
+    x = ((s.get("excluded_runs") or {}).get(hyp) or {}) if hyp else {}
+    return x.get("runs", 0), {p.strip() for p in x.get("players") or []}
+
+
+def _sample(sessions: list, hyp: str | None = None) -> dict:
+    """세션들을 합친 표본: 세션 수, 판 수, 사람 수(같은 이름은 한 사람). 판별 로그 묶음이 있으면 로그를 넘지 않는다.
+    hyp를 주면 그 가설의 test가 뺀 판(excluded_runs)을 판 수에서, 센 판이 남지 않은 사람을 사람 수에서 빼고 뺀 판 수를 excluded에 적는다."""
     counted = [_counted(s) for s in sessions]
-    return {"sessions": len(sessions), "runs": sum(r for r, _ in counted), "players": len(set().union(*(p for _, p in counted)))}
+    gone = [_excluded(s, hyp) for s in sessions]
+    out = [min(n, r) for (n, _), (r, _) in zip(gone, counted)]
+    people = set().union(*(p - left for (_, left), (_, p) in zip(gone, counted)))   # 한 세션에서 판이 모두 빠진 사람도 다른 세션의 판으로 센다
+    have = {"sessions": len(sessions), "runs": sum(r for r, _ in counted) - sum(out), "players": len(people)}
+    if sum(out):
+        have["excluded"] = sum(out)
+    return have
 
 
 def _sample_text(sample: dict) -> str:
@@ -654,7 +679,8 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         if root is not None:
             _check_files(s, root, warnings)
             _check_values(s, root, warnings, numbers)
-        observed = [o["hypothesis"] for o in s.get("observations", [])] + [h for x in s.get("notes") or [] for h in x.get("hypotheses") or []]
+        observed = ([o["hypothesis"] for o in s.get("observations", [])] + [h for x in s.get("notes") or [] for h in x.get("hypotheses") or []]
+                    + list(s.get("excluded_runs") or {}))
         if "concept" not in s:
             continue
         if concepts is None:
@@ -715,14 +741,15 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                  "사람의 플레이만 버팀·틀림의 근거가 됩니다. 근거에서 빼거나 unknown(모름)으로 둡니다.")
         seen = [s for s in found if any(o["hypothesis"] == v["hypothesis"] for o in s.get("observations", []))]
         human = [s for s in seen if s.get("simulated") is not True]   # 표본은 사람의 플레이만 센다
-        have = _sample(human)   # 그 가설을 관찰한 근거 세션만 센다. 출력과 게이트가 같은 값을 쓴다
+        have = _sample(human, v["hypothesis"])   # 그 가설을 관찰한 근거 세션만 센다. 출력과 게이트가 같은 값을 쓴다
         need = concepts[v["concept"]].get("samples", {}).get(v["hypothesis"]) if concepts is not None else None
         if need and "events" in need:
             have["events"] = _events(human, need["events"])
         if v["result"] in DECIDED and seen and need and not bots and any(have[k] < need[k] for k in ("players", "runs") if k in need):   # 자동 플레이가 원인이면 그 오류 하나로 알린다   # 관찰값이 없으면 observation_missing이 말한다
             _err(errors, "verdict_sample_short", where,
                  f"{RESULT_LABEL[v['result']]} 판정의 근거 표본({_sample_text(have)})이 가설의 최소 표본({_sample_text(need)})보다 적습니다. "
-                 "세션을 더 하거나 unknown(모름)으로 둡니다. 표본을 줄이려면 playtest-verdict references/changes.md '표본을 줄이자는 말이 나올 때'를 따릅니다.")
+                 + (f"가설 test가 뺀 판(excluded_runs {have['excluded']}판)은 세지 않았습니다. " if have.get("excluded") else "")
+                 + "세션을 더 하거나 unknown(모름)으로 둡니다. 표본을 줄이려면 playtest-verdict references/changes.md '표본을 줄이자는 말이 나올 때'를 따릅니다.")
         short = {k: e for k, e in have.get("events", {}).items() if e["count"] < need["events"][k]}
         if v["result"] == "holds" and seen and short and not bots:   # 틀림은 사건에 기대지 않는 다른 쪽 신호로 낼 수 있어 막지 않는다
             _err(errors, "verdict_events_short", where,
@@ -885,6 +912,8 @@ def context(where: str, concepts_data: dict, data: dict, report: dict, stamp, ev
         if not (obs or notes or s.get("id") in cited):
             continue
         head = {k: s[k] for k in SESSION_HEAD if k in s}
+        if isinstance(s.get("excluded_runs"), dict) and hid in s["excluded_runs"]:   # 그 가설의 test가 뺀 판만 보인다
+            head["excluded_runs"] = s["excluded_runs"][hid]
         if everything or s.get("id") in last or s.get("id") not in cited:
             sessions.append({**head, "observations": obs, "notes": notes})
         else:
@@ -929,6 +958,8 @@ def print_context(got: dict) -> None:
     print(f"\n## 세션 {len(got['sessions'])}개 (이 가설의 관찰값·메모만. 마지막 판정의 근거와 아직 판정에 들지 않은 세션)")
     for s in got["sessions"]:
         print(" · ".join(f"{k} {_flat(s[k])}" for k in SESSION_HEAD if k in s) + (" · 그 전 판정의 근거(관찰값은 --all)" if s.get("earlier") else ""))
+        if s.get("excluded_runs"):
+            print("  test가 뺀 판: " + json.dumps(s["excluded_runs"], ensure_ascii=False))
         for o in s.get("observations", []):
             print("  관찰: " + json.dumps(o, ensure_ascii=False))
         for x in s.get("notes", []):

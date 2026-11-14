@@ -60,6 +60,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 - 가설별 관찰값(`observations`): 가설의 `failure_signal`을 판단하는 데 필요한 값. 로그에서 읽었으면 `source`에 파일을 적는다. 스크립트로 계산한 값(비율, 상관)은 그 출력을 세션 폴더에 결과 파일로 남기고(예: `python3 game/summarize.py playtests/pt_20261107_1 > playtests/pt_20261107_1/summary.txt`) `source`를 그 결과 파일로 둔다. 판정 에이전트는 스크립트를 돌리지 못하므로(훅이 막는다) 결과 파일이 없으면 값을 확인할 수 없다
 - 레벨의 그레이박스 확인 기록(`greybox`): `levels.json`의 항목 id마다 잰 값이나 판정. 항목은 `… check . --table levels`의 그레이박스 확인 표에 있다
 - 가설의 `sample.events`에 적은 사건을 이 세션에서 센 건수(`events`)
+- 가설 `test`가 표본에서 빼라고 한 판의 수와 까닭(`excluded_runs`). 예: 사람마다 첫 판을 빼면 그 수. 적지 않으면 세션의 판을 모두 센다
 - 그 밖의 관찰과 선호(`notes`). 시험 절차를 어긴 일은 `deviation`으로 적는다(무엇이 이탈인지는 [기록 형식](references/playtest-record.md)의 `notes`)
 
 기록하기 전에 가설마다 `hypothesis <컨셉>.<가설>`로 지난 판정이 남긴 "다음 시험 전에 풀 것"과 판정 기준 문장에 남은 `[가정]` 잣대(1단계)를 본다. 플레이 전에 정했어야 할 것(지난 판정이 정하라고 한 것, 남은 잣대)이 있으면 플레이 전에 정했는지 묻고 답을 세션 `notes`에 적는다. 묻지 못했거나 정하지 않고 플레이했으면 `deviation`으로 적는다.
