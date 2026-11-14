@@ -44,6 +44,7 @@
 | `simulated` | 아니오 | `true`면 사람이 아니라 자동 플레이 봇이나 스크립트가 한 플레이다. 표본(판·사람 수)에 세지 않고 버팀·틀림의 근거가 되지 못한다. 모름 판정의 참고로는 가리킬 수 있다. 그레이박스 확인과 레벨 구성이 보는 단계 기록에도 들지 않고, `[측정: …#세션]`의 출처가 되지 못한다(자동 플레이로 낸 값은 `[계산: …]`). 판 기록 형식이 같아도 사람의 플레이와 섞지 않는다 |
 | `runs` | 예 | 이 세션의 판 수 합계 |
 | `notes[].hypotheses` | 아니오 | 그 메모가 가리키는 가설 id 배열. `deviation`에 적으면 그 가설의 판정에만 절차 이탈로 센다. 없으면 모든 판정에 센다. 없는 가설 id는 `unknown_hypothesis`다 |
+| `excluded_runs` | 아니오 | 가설 `test`가 표본에서 빼라고 한 판(사람마다 첫 판, 절차를 어긴 판 등) `{가설 id: {runs: 뺀 판 수, reason: 까닭, players: 센 판이 하나도 남지 않은 사람}}`. 예: `{"deck_clicks": {"runs": 3, "reason": "사람마다 첫 판", "players": ["friend_b"]}}`. `runs`는 1 이상이고 세션 `runs`를 넘지 않는다. `players`는 선택이고 세션 `players` 안의 이름이다. 그 가설의 표본에서 판 수와 그 사람을 빼고 판정 줄에 `(test가 뺀 판 N)`으로 보인다. 빼고 남은 표본이 최소 표본보다 적으면 `verdict_sample_short`다. 세션 `events`도 뺀 판을 빼고 센다. 판정 에이전트가 보는 `hypothesis` 출력에 그 가설의 항목이 나온다 |
 | `events` | 아니오 | 가설 `sample.events`의 사건을 이 세션에서 센 건수 `{사건 이름: 0 이상의 정수}`. 이름은 `sample.events`와 같게 쓴다. 적지 않은 세션은 그 사건을 0건으로 센다 |
 | `observations` | 아니오 | `[{hypothesis, value, metric, n, source, note}]`. `hypothesis`(가설 id)와 `value`(문자열 또는 수)가 필수. 없고 단계 기록도 없으면 경고. 스크립트로 계산한 값은 그 출력을 세션 폴더에 결과 파일로 남기고 `source`를 그 파일로, `note`를 `[계산: 스크립트]`로 적는다. `value`의 수는 결과 파일의 수를 그대로 옮긴다 |
 | `notes` | 아니오 | `[{kind: observation / preference / deviation, text}]`. `deviation`은 시험 절차를 어긴 일이다. 가설 `test`의 절차를 지키지 않음(정한 설정 순서, 중간 결과를 본 뒤 플레이함)과, 플레이 전에 정할 것(남은 `[가정]` 잣대, 지난 판정이 정하라고 한 것)을 정하지 않고 플레이함 |
