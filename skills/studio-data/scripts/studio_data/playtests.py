@@ -706,7 +706,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
             _check_event_names(s, concepts[s["concept"]], warnings)
 
     verdicts: dict = {}
-    left: dict = {}   # 지난 판정이 남긴 '다음 시험 전에 풀 것' {가설: 글}. 새 판정이 나오기 전까지 보인다
+    left: dict = {}   # 지난 판정이 남긴 '다음 시험 전에 풀 것' {가설: 글}. 버팀·틀림 판정이 나오기 전까지 보인다
     restamp: dict = {}   # 예전 꼴 지문으로 기록한 판정 {판정: {from, to}}
     status_counts = {st: 0 for st in STATUSES + ("unspecified",)}
     for n, v in enumerate(raw_verdicts):
@@ -717,7 +717,9 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         status_counts[status] += 1
         if status == "cut":
             if _text(v.get("next_needs")):
-                left[where] = v["next_needs"]
+                left[where] = v["next_needs"]   # 더 새 판정의 글로 바뀐다
+            elif v.get("result") in DECIDED:
+                left.pop(where, None)   # 버팀·틀림은 cut으로 돌린 뒤에도 옛 할 일을 지운다
             continue  # 지난 판정은 기록으로만 남긴다
         if where in verdicts:
             _err(errors, "duplicate_verdict", where, "삭제(cut)되지 않은 판정이 둘 이상입니다. 지난 판정은 status를 cut으로 두고 남깁니다.")
