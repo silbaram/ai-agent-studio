@@ -333,10 +333,18 @@ def _greybox_log(entries: list[dict]) -> dict | None:
         for x in s["greybox"]:
             if not (isinstance(x, dict) and isinstance(x.get("check"), str)):
                 continue
-            kept = {k: x[k] for k, valid in (("value", c.is_number), ("passed", lambda v: isinstance(v, bool)), ("n", c.is_number)) if valid(x.get(k))}
+            kept = {k: x[k] for k, valid in (("value", c.is_number), ("passed", lambda v: isinstance(v, bool)), ("n", c.is_number),
+                                             ("expect", lambda v: v is not None and c.valid_range(v))) if valid(x.get(k))}
             if "value" in kept or "passed" in kept:
                 out.setdefault(x["check"], []).append({**kept, "session": s.get("id"), "date": s.get("date")})
     return out
+
+
+def _greybox_unread(entries: list[dict]) -> str:
+    """읽지 못한 플레이 기록 파일: "all"(읽은 기록 파일이 없음), "some"(다른 기록 파일은 읽음), ""(없음)."""
+    if not any(not d["ok"] and d["kind"] == "playtests" for d in entries):
+        return ""
+    return "some" if any(d["ok"] and d["kind"] == "playtests" for d in entries) else "all"
 
 
 def _played_stages(entries: list[dict]) -> dict:
@@ -472,6 +480,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
                 d["report"] = levels.validate(d["data"], enemies=by_id["enemies"], threat=_threat_scores(entries), combat=combat_data, economy=economy_data,
                                               kill_times=_kill_costs(entries, "time_to_kill"), kill_hits=_kill_costs(entries, "hits_to_kill"),
                                               enemy_curve=enemy_side.get("curve"), purchases=_purchase_plan(entries), greybox_log=_greybox_log(entries),
+                                              greybox_unread=_greybox_unread(entries),
                                               played_stages=_played_stages(entries), grown_kills=grown, grown_exit_kills=grown_exit, grown_unread=grown_unread)
                 first = next(x for x in entries if x["ok"] and x["kind"] == "levels")
                 if d is not first:  # 단계 범위와 처치 수는 파일을 넘어 세지 않는다. 일부만 세어 틀린 결과를 내지 않게 한 파일로 둔다

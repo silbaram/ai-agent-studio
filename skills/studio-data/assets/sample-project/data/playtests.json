@@ -72,7 +72,7 @@
       "upgrades": ["weapon_1", "vitality_1"],
       "logs": ["playtests/pt_20261119_1/runs.csv"],
       "greybox": [
-        { "check": "crypt_forge_buy", "value": 285, "n": 30 },
+        { "check": "crypt_forge_buy", "value": 285, "n": 30, "expect": [270, 330] },
         { "check": "citadel_gate_rest", "passed": true, "n": 26 }
       ],
       "stage_stats": [

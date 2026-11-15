@@ -27,8 +27,8 @@ KIND_LABELS = {"concepts": "컨셉", "systems": "시스템 설계", "items": "�
 LIST_KEYS = {"combat": ("stages",), "budget": ("archetypes",), "crafting": ("enhance", "recipes"), "economy": ("stages", "purchases"),
              "growth": ("choices", "builds")}  # 항목 배열의 키가 종류 이름과 다른 경우
 ACK_CHECKED = ("levels", "economy", "systems")  # 확인이 그 파일 안에서만 쓰이는 종류. 아이템·적의 확인은 다른 파일의 검사가 읽는다
-TARGET_ONLY_ACK_CODES = ("greybox_failed",)  # 대상마다만 확인하는 경고. 한 줄로 덮으면 나중에 실패하는 대상까지 가려진다
-LEVEL_ACK_CODES = ("curve_unused_point", "enemy_not_in_stage", "enemy_unplaced", "greybox_failed", "kill_time_over_length", "kills_differ", "kills_not_linked", "long_stretch", "purchase_off_span",
+TARGET_ONLY_ACK_CODES = ("greybox_expect_changed", "greybox_failed", "greybox_record_conflict")  # 대상마다만 확인하는 경고. 한 줄로 덮으면 나중에 실패하는 대상까지 가려진다
+LEVEL_ACK_CODES = ("curve_unused_point", "enemy_not_in_stage", "enemy_unplaced", "greybox_expect_changed", "greybox_failed", "greybox_record_conflict", "kill_time_over_length", "kills_differ", "kills_not_linked", "long_stretch", "purchase_off_span",
                    "reward_drought", "strong_run", "time_gap", "time_outside_stage")  # 레벨 구성이 내는 경고. 테스트가 검사기와 맞춰 본다
 ECONOMY_ACK_CODES = ("currency_piles_up", "duplicate_purchase", "enhance_gap", "gear_before_purchase", "kill_not_in_stage", "meta_income_differs", "meta_order_differs",
                      "requirement_missing", "reward_missing", "target_out_of_range", "unaffordable")  # 재화 흐름이 내는 경고
