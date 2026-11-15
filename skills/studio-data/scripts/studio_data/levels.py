@@ -23,7 +23,7 @@ DEFAULT_TOLERANCE = bg.DEFAULT_TOLERANCE
 ENCOUNTER_FIELDS = {"id", "name", "role", "enemies", "repeat", "enemy_repeat", "intent", "provenance", "note", "at", "duration", "rest", "reward", "hazard", "purchases", "open_for"}
 LEVEL_FIELDS = {"id", "name", "combat_stage", "encounters", "intent", "status", "provenance", "acknowledged", "note", "greybox"}
 GREYBOX_FIELDS = {"id", "check", "encounter", "expect", "note"}
-GREYBOX_LABEL = {"passed": "통과", "failed": "실패", "open": "판정 없음", "none": "기록 없음"}
+GREYBOX_LABEL = {"passed": "통과", "failed": "실패", "open": "판정 없음", "none": "기록 없음", "unread": "기록 읽지 못함"}
 BUDGET_FIELDS = {"curve", "roles", "tolerance", "kills_tolerance", "provenance", "note"}
 CURVE_FIELDS = {"growth", "base", "rate", "values", "note"}  # 곡선의 기준은 전투 단계의 순서로 정해져 있어 by를 쓰지 않는다
 TOP_FIELDS = {"threat_budget", "pacing", "levels", "branches", "note"}
@@ -1045,7 +1045,7 @@ def _judge(item: dict, record: dict | None) -> str:
     return "open"
 
 
-def _greybox_rows(lv: dict, log: dict | None, seen: set, homes: dict, errors: list, warnings: list) -> list:
+def _greybox_rows(lv: dict, log: dict | None, seen: set, homes: dict, errors: list, warnings: list, unread: str = "") -> list:
     """레벨의 그레이박스 확인 항목과 판정. log: 플레이 기록 {항목 id: 날짜순 기록}. 마지막 기록이 지금의 판정이다.
     homes: 파일의 조우 {조우 id: 레벨 id}. 다른 레벨의 조우를 가리키면 오타가 아니라 자리가 틀린 것이다."""
     raw = lv.get("greybox", [])
@@ -1075,11 +1075,15 @@ def _greybox_rows(lv: dict, log: dict | None, seen: set, homes: dict, errors: li
             ok = False
         if not ok:
             continue
-        record = ((log or {}).get(item["id"]) or [None])[-1]
-        status = _judge(item, record)
+        records = [] if unread == "all" else (log or {}).get(item["id"]) or []
+        record = records[-1] if records else None
+        status = "unread" if unread == "all" else _judge(item, record)
         got = record or {}
+        earlier = [r["session"] for r in records[:-1] if "failed" in (_judge(item, r), _judge({"expect": r.get("expect")}, r))] if status == "open" else []
         rows.append({"id": item["id"], "check": item["check"], "encounter": item.get("encounter"), "expect": item.get("expect"), "status": status,
-                     "value": got.get("value"), "session": got.get("session"), "date": got.get("date"), "n": got.get("n")})
+                     "value": got.get("value"), "session": got.get("session"), "date": got.get("date"), "n": got.get("n"),
+                     "earlier_failed": earlier[-1] if earlier else None})
+        _greybox_record_warnings(lv["id"], item, got, status, warnings)
         if status == "failed":
             told = f"값 {_fmt(got['value'])}" if "value" in got else "실패로 기록"
             aim = f", 기대 {c.range_text(item['expect'])}" if item.get("expect") is not None else ""
@@ -1089,7 +1093,33 @@ def _greybox_rows(lv: dict, log: dict | None, seen: set, homes: dict, errors: li
     return rows
 
 
-def _greybox_note(rows: list, log: dict | None, played: dict | None = None, written: set | None = None) -> list:
+def _greybox_record_warnings(lid: str, item: dict, got: dict, status: str, warnings: list) -> None:
+    """마지막 기록이 판정을 말없이 정하는 두 경우(180번). 수와 적어 둔 판정이 엇갈림, 플레이 때 범위로는 판정이 달랐음."""
+    at, aim, then = f"{lid}.{item['id']}", item.get("expect"), got.get("expect")
+    rng = aim if aim is not None else then   # 항목에 범위가 없으면 기록이 적은 플레이 때 범위와 견준다(기록 안의 엇갈림)
+    if rng is not None and "value" in got and "passed" in got and c.out_of_range(got["value"], rng) == got["passed"]:
+        whose = "기대" if aim is not None else "기록의 플레이 때 기대"
+        shown = GREYBOX_LABEL[status] if aim is not None else f"{GREYBOX_LABEL[status]}(항목에 expect가 없어 passed를 따름)"
+        _err(warnings, "greybox_record_conflict", at,
+             f"그레이박스 확인 {item['id']}: 값 {c.josa(_fmt(got['value']), '은는')} {whose} {c.range_text(rng)} {'밖' if got['passed'] else '안'}인데 기록에 "
+             f"passed: {'true' if got['passed'] else 'false'}가 있습니다(세션 {got['session']}). {shown}로 봅니다. "
+             "둘 중 틀린 쪽을 기록에서 고칩니다.", owner=lid, part=item["id"])
+        if aim is None:
+            return
+    if then is None or "value" not in got:
+        return
+    before = _judge({"expect": then}, got)
+    if before != status:
+        pin = c.range_measured(got["value"], then) if before == "failed" else {}   # 넓혀 통과시킨 쪽은 값을 확인 값으로 묶어, 더 벗어나면 다시 알린다
+        now = f"지금 기대 {c.range_text(aim)}" if aim is not None else "지금은 기대 범위가 없습니다"
+        _err(warnings, "greybox_expect_changed", at,
+             f"그레이박스 확인 {item['id']}: 플레이 때 기대 {c.range_text(then)}로는 값 {c.josa(_fmt(got['value']), '이가')} {GREYBOX_LABEL[before]}인데, {now}라 "
+             f"{GREYBOX_LABEL[status]}입니다(세션 {got['session']}). 판정은 지금 범위로 냅니다. 결과를 본 뒤 범위를 바꿨으면 근거와 고치기 전 범위를 "
+             f"항목 note에 적고 레벨에서 {{\"greybox_expect_changed\": {{\"{item['id']}\": 이유}}}}로 확인합니다.", owner=lid, part=item["id"],
+             **({"value": f"값 {_fmt(got['value'])}"} if pin else {}), **pin)
+
+
+def _greybox_note(rows: list, log: dict | None, played: dict | None = None, written: set | None = None, unread: str = "") -> list:
     """확인 목록을 어디까지 해 봤는가. 목록을 쓰지 않는 게임에는 말하지 않는다. 다만 목록 없이 그 단계를 플레이한 기록이 있으면 알린다.
     written: 목록을 적은 레벨. 항목이 형식 오류로 모두 빠진 레벨은 오류로 알렸으므로 목록이 없는 레벨로 세지 않는다."""
     items = [x for lv in rows for x in lv["greybox"]]
@@ -1106,7 +1136,14 @@ def _greybox_note(rows: list, log: dict | None, played: dict | None = None, writ
     bare = [lv["id"] for lv in rows if not lv["greybox"] and lv["id"] not in written]
     if bare:
         text += f" · 항목이 없는 레벨: {', '.join(bare)}"
-    return [text + (" · 플레이 기록을 함께 읽지 않았습니다" if log is None else "")]
+    tail = (" · 플레이 기록 파일을 읽지 못해 판정하지 않았습니다" if unread == "all" else " · 플레이 기록을 함께 읽지 않았습니다" if log is None else
+            " · 읽지 못한 플레이 기록 파일이 있어 그 기록은 판정에 들지 않았습니다" if unread == "some" else "")
+    hidden = [f"{x['id']}(앞 기록 세션 {c.josa(x['earlier_failed'], '은는')} 실패)" for x in items if x.get("earlier_failed")]
+    out = [text + tail]
+    if hidden:   # 180번: 마지막 기록에 값만 있고 expect가 없으면 판정 없음이라, 앞 실패가 보이지 않는다
+        out.append(f"판정 없음인 그레이박스 확인의 앞 기록이 실패였습니다: {', '.join(hidden)}. 마지막 기록에 값만 있고 항목에 expect가 없어 "
+                   "판정하지 않았습니다. 항목에 expect를 두거나 기록에 passed를 적습니다.")
+    return out
 
 
 def _pace_used(data: dict, ordered: list) -> bool:
@@ -1152,13 +1189,15 @@ def _notes(budget, cfg, rows: list, kill_check: list, gaps: list) -> list:
 def validate(data: dict, enemies: dict | None = None, threat: dict | None = None, combat: dict | None = None, economy: dict | None = None,
              kill_times: dict | None = None, kill_hits: dict | None = None, enemy_curve: dict | None = None, purchases: dict | None = None,
              greybox_log: dict | None = None, played_stages: dict | None = None, grown_kills: dict | None = None, grown_exit_kills: dict | None = None,
-             grown_unread: bool = False) -> dict:
+             grown_unread: bool = False, greybox_unread: str = "") -> dict:
     """enemies: 함께 읽은 적의 {id: 항목}, threat: 적의 위협도 {id: 값}(적 검사와 같은 값), combat·economy: 전투 계산·재화 흐름 파일 내용.
     kill_times·kill_hits: 전투 계산의 처치 시간과 타수 {단계: {적: 값}}, enemy_curve: 스탯 예산의 적 곡선. 참고 값이라 없어도 미확인이 아니다.
     grown_kills: 판 안 성장 빌드마다의 처치 시간과 타수 {빌드: {단계: {적: {time_to_kill, hits_to_kill}}}}. 단계 표의 성장 반영 칸에만 쓴다. 없어도 미확인이 아니다.
     grown_exit_kills: 같은 형식으로 그 단계를 나갈 때(다음 단계에 들어설 때) 레벨의 값.
     grown_unread: 판 안 성장에 오류가 있어 그 값을 쓰지 않았다. 성장 반영 칸이 빈 이유를 참고 줄로 알린다.
     purchases: 재화 흐름이 계산한 구매 {id: 행}, greybox_log: 플레이 기록의 그레이박스 확인 {항목 id: 날짜순 기록}.
+    greybox_unread: 읽지 못한 플레이 기록 파일. "all"이면 읽은 기록 파일이 없어 확인 항목은 '기록 없음'이 아니라 '기록 읽지 못함'이다(179번).
+    "some"이면 다른 기록 파일은 읽어 판정하고 참고 줄로 알린다.
     played_stages: 플레이 기록의 단계 기록 {단계 id: 세션 수}. 확인 항목이 없는 레벨의 단계를 플레이했으면 알린다.
     적이나 전투 계산이 없으면 미확인으로 센다. 재화 흐름은 조우가 구매를 가리킬 때만 미확인이고, 그 밖에는 있을 때만 맞춰 본다."""
     errors: list = []
@@ -1200,9 +1239,10 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
     for lv in active:
         _known_keys(lv, LEVEL_FIELDS, lv["id"], errors)
         ack = lv.get("acknowledged")
-        if isinstance(ack, dict) and isinstance(ack.get("greybox_failed"), str):
-            _err(errors, "schema", lv["id"], "greybox_failed는 항목마다 {\"greybox_failed\": {항목 id: 이유}}로 확인합니다. "
-                                             "글 한 줄은 어떤 실패도 덮지 않습니다. 덮으면 나중에 실패하는 항목까지 가려지기 때문입니다.")
+        for code in c.TARGET_ONLY_ACK_CODES if isinstance(ack, dict) else ():
+            if isinstance(ack.get(code), str):
+                _err(errors, "schema", lv["id"], f"{c.josa(code, '은는')} 항목마다 {{\"{code}\": {{항목 id: 이유}}}}로 확인합니다. "
+                                                 "글 한 줄은 어떤 항목도 덮지 않습니다. 덮으면 나중에 경고가 나는 항목까지 가려지기 때문입니다.")
         link = lv.get("combat_stage")
         if link is not None and not isinstance(link, str):
             _err(errors, "schema", lv["id"], f"combat_stage는 전투 단계 id입니다: {link!r}")
@@ -1259,7 +1299,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
         info["threat"] = None if total is None or info["threat"] is None else round(info["threat"] + total, 4)
         rows.append({"id": lv["id"], "name": lv.get("name"), "stage": sid, "encounters": mine, "kills": {k: round(v, 4) for k, v in kills.items()},
                      "kills_partial": not complete, "threat": None if total is None else round(total, 4),
-                     "greybox": _greybox_rows(lv, greybox_log, checks, homes, errors, warnings)})
+                     "greybox": _greybox_rows(lv, greybox_log, checks, homes, errors, warnings, greybox_unread)})
     kills_tol = cfg["kills_tolerance"] if cfg else DEFAULT_TOLERANCE
 
     def counted(sid: str) -> bool:
@@ -1333,7 +1373,7 @@ def validate(data: dict, enemies: dict | None = None, threat: dict | None = None
         "run_threat_range": one_way,
         "branches": branches,
         "notes": _notes(budget, cfg, stage_rows, _kill_check_note(listed, by_stage, links, economy, counted, dropped, astray),
-                        _gap_notes(stage_rows, economy, unit, enemy_curve) + _grown_notes(stage_rows, grown_unread)) + pace_notes + walk_notes + _greybox_note(rows, greybox_log, played_stages, written),
+                        _gap_notes(stage_rows, economy, unit, enemy_curve) + _grown_notes(stage_rows, grown_unread)) + pace_notes + walk_notes + _greybox_note(rows, greybox_log, played_stages, written, greybox_unread),
         "pacing": {"used": _pace_used(data, ordered), "time_unit": unit, "carry_levels": settings["carry_levels"], "strong_at": round(settings["strong_at"], 4),
                    "order": [lv["id"] for lv in ordered], **pacing},
         "encounters": computed,

@@ -12,7 +12,7 @@ import posixpath
 import re
 from pathlib import Path
 
-from .common import ID_PATTERN, STATUSES, YARDSTICK_TAG, ack_reason, check_identity, did_you_mean, instant, is_int, is_number, unknown_keys_text, josa
+from .common import ID_PATTERN, STATUSES, YARDSTICK_TAG, ack_reason, check_identity, did_you_mean, instant, is_int, is_number, unknown_keys_text, josa, valid_range
 from .common import valid_date as common_valid_date
 from .common import add_issue as _err
 
@@ -31,7 +31,7 @@ DATE_TIME = re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)
 SOURCE_READ_LIMIT = 5_000_000
 STAGE_FIELDS = {"stage", "entered", "cleared", "level", "level_end", "duration", "timed", "kills", "kill_rate", "played_length", "income", "source", "note"}
 GROUP_FIELDS = {"upgrades", "growth_build", "variant", "runs", "players", "stage_stats"}
-GREYBOX_FIELDS = {"check", "value", "passed", "n", "source", "note"}
+GREYBOX_FIELDS = {"check", "value", "passed", "n", "source", "note", "expect"}
 SESSION_FIELDS = {"id", "date", "concept", "build", "game_build", "players", "runs", "events", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note", "simulated", "excluded_runs", "started_at"}
 TOP_FIELDS = {"playtests", "verdicts", "note"}
 REF_LABEL = {"stages": "전투 단계", "upgrades": "영구 강화", "enemies": "적", "builds": "판 안 성장 빌드", "currencies": "재화", "greybox": "그레이박스 확인"}
@@ -208,11 +208,20 @@ def check_refs(s: dict, refs: dict | None, errors: list, warnings: list, missing
             continue
         for x in dict.fromkeys(ids):
             if x not in known:
-                advice = (" levels.json의 greybox에 있는 항목 id를 적습니다. 그 뒤에 항목을 지웠으면 기록은 그대로 둡니다." if kind == "greybox" else
+                advice = (" levels.json의 greybox에 있는 항목 id를 적습니다. 그 뒤에 항목을 지웠으면 기록은 그대로 둡니다. "
+                          f"지운 항목은 게이트에서 빠집니다(이 세션의 기록: {_greybox_said(s, x)})." if kind == "greybox" else
                           " 그 뒤에 바뀐 것이면 기록은 그대로 둡니다(calibrate의 통과율 비교는 지금 데이터로 계산할 수 없는 기록을 뺍니다).")
                 hint = did_you_mean(x, known)
                 # 그레이박스 기록의 오타는 그 기록을 버려서 앞 판정이 그대로 남으므로 경고로 두지 않는다
                 _err(errors if kind == "greybox" and hint else warnings, "unknown_reference", s["id"], f"{REF_LABEL[kind]} 데이터에 없는 id입니다: {x}.{hint}{advice}")
+
+
+def _greybox_said(s: dict, check: str) -> str:
+    """세션의 그레이박스 기록 하나를 짧게(167번: 지운 항목의 기록이 실패였는지 보이게)."""
+    x = next((g for g in reversed(s.get("greybox") or []) if isinstance(g, dict) and g.get("check") == check), {})
+    said = ([f"값 {x['value']:g}"] if is_number(x.get("value")) else []) + \
+           ([("통과" if x["passed"] else "실패") + "로 기록"] if isinstance(x.get("passed"), bool) else [])
+    return ", ".join(said) or "값 없음"
 
 
 def _check_greybox(s: dict, where: str, errors: list) -> bool:
@@ -237,6 +246,9 @@ def _check_greybox(s: dict, where: str, errors: list) -> bool:
             ok = False
         if "passed" in x and not isinstance(x["passed"], bool):
             _err(errors, "schema", where, f"{at}.passed는 true나 false입니다.")
+            ok = False
+        if "expect" in x and not valid_range(x["expect"]):
+            _err(errors, "schema", where, f"{at}.expect는 플레이할 때 levels.json 항목의 기대 범위 [최소, 최대]를 옮긴 것입니다: {x['expect']!r}")
             ok = False
         if "n" in x and not is_int(x["n"], 1):
             _err(errors, "schema", where, f"{at}.n(해 본 판 수)은 1 이상의 정수여야 합니다. 해 보지 않았으면 기록을 적지 않습니다.")

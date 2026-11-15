@@ -231,7 +231,7 @@ const LABEL = {
           stage_counts_mismatch: "단계 판 수 어긋남", unknown_reference: "지금 데이터에 없는 id",
           gear_before_purchase: "구매보다 앞선 기준 장비", unknown_role: "없는 역할", kills_differ: "처치 수 다름", kill_time_over_length: "단계 길이를 넘는 처치 시간", kills_not_linked: "이어지지 않은 처치 수", enemy_unplaced: "조우에 없는 적", curve_unused_point: "곡선의 남는 값", enemy_not_in_stage: "전투 단계 밖 적",
           long_stretch: "쉬는 곳 사이가 김", reward_drought: "보상 사이가 김", strong_run: "강한 조우 연속", time_gap: "비는 시간", time_outside_stage: "단계 밖 시각",
-          purchase_off_span: "시각이 어긋난 구매", unknown_purchase: "없는 구매", greybox_failed: "그레이박스 실패", unknown_encounter: "없는 조우",
+          purchase_off_span: "시각이 어긋난 구매", unknown_purchase: "없는 구매", greybox_failed: "그레이박스 실패", greybox_record_conflict: "기록의 값과 판정이 엇갈림", greybox_expect_changed: "플레이 뒤 바뀐 기대 범위", unknown_encounter: "없는 조우",
           pillar_unserved: "맡는 시스템 없는 필러", mvp_unserved: "맡는 시스템 없는 MVP", scope_mismatch: "브리프와 다른 범위", scope_dependency: "범위를 넘는 의존", dependency_cycle: "의존 순환",
           change_unreadable: "변경의 시스템 줄을 읽지 못함", change_without_system: "시스템을 밝히지 않은 변경", design_changed: "명세 뒤에 바뀐 규칙", rule_of_unlinked_system: "잇지 않은 시스템의 규칙", unknown_rule: "설계에 없는 규칙", rule_in_non_goals: "Non-Goals의 규칙", out_of_scope_in_spec: "명세의 범위 밖 항목", system_not_in_mvp: "이번에 만들지 않는 시스템", concept_not_approved: "승인되지 않은 컨셉", foundation_unused: "아무도 기대지 않는 기반", out_of_scope_claimed: "범위 밖 항목을 맡음", system_without_pillar: "필러 없는 시스템", system_without_rules: "규칙 없는 시스템", duplicate_item: "두 번 적은 항목", unknown_pillar: "없는 필러", unknown_mvp: "없는 MVP 항목", unknown_out_of_scope: "없는 범위 밖 항목", unknown_system: "없는 시스템" },
   unchecked: { concepts_unreadable: "컨셉 파일을 읽지 못함", nothing: "계산한 것 없음", value: "가치 비교(스탯 예산 없음)", meta: "메타 성장 설정 없음", drop_tables: "드랍 테이블 없음",
@@ -1192,7 +1192,7 @@ function renderLevels(ds, idx) {
         el("td", { class: "text", text: `${x.id}: ${x.check}` }), el("td", { class: "mono", text: x.encounter || "–" }),
         el("td", { class: "num" }, Array.isArray(x.expect) ? `${x.expect[0] ?? ""}~${x.expect[1] ?? ""}` : dash()),
         el("td", {}, x.session ? (given(x.value) ? `${fmt(x.value)} (${x.session})` : x.session) : dash()),
-        el("td", { class: x.status === "failed" ? "off" : "", text: { passed: "통과", failed: "실패", open: "판정 없음", none: "기록 없음" }[x.status] || x.status }))), "") : null));
+        el("td", { class: x.status === "failed" ? "off" : "", text: { passed: "통과", failed: "실패", open: "판정 없음", none: "기록 없음", unread: "기록 읽지 못함" }[x.status] || x.status }))), "") : null));
   }
   return out;
 }
