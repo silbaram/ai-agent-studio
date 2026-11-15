@@ -365,6 +365,10 @@ def check_verdict(v, n: int, errors: list) -> str | None:
     if "next_needs" in v and not _text(v["next_needs"]):
         _err(errors, "schema", where, "next_needs는 다음 시험 전에 풀 것을 적는 글입니다(비우지 않습니다).")
         ok = False
+    if "needs_resolved" in v and not (_text(v["needs_resolved"]) and _text(v.get("next_needs"))):
+        _err(errors, "schema", where, "needs_resolved는 그 판정의 next_needs를 플레이 전에 어떻게 풀었는지 적는 글입니다"
+             "(예: \"사용자 결정(2026-11-15): 4장 미만 판은 뺀다. 가설 test에 적었다\"). next_needs가 있는 판정에만 씁니다.")
+        ok = False
     if "keep_unknown" in v and not (_text(v["keep_unknown"]) and v.get("result") == "unknown"):
         _err(errors, "schema", where, "keep_unknown은 모름 판정에 사용자가 모름으로 두기로 한 결정을 적는 글입니다"
              "(예: \"사용자 결정(2026-11-12): 사망 쪽은 모름으로 둔다\").")
@@ -706,7 +710,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
             _check_event_names(s, concepts[s["concept"]], warnings)
 
     verdicts: dict = {}
-    left: dict = {}   # 지난 판정이 남긴 '다음 시험 전에 풀 것' {가설: 글}. 버팀·틀림 판정이 나오기 전까지 보인다
+    left: dict = {}   # 지난 판정이 남긴 '다음 시험 전에 풀 것' {가설: {text, resolved}}. 버팀·틀림 판정이 나오기 전까지 보인다
     restamp: dict = {}   # 예전 꼴 지문으로 기록한 판정 {판정: {from, to}}
     status_counts = {st: 0 for st in STATUSES + ("unspecified",)}
     for n, v in enumerate(raw_verdicts):
@@ -717,7 +721,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         status_counts[status] += 1
         if status == "cut":
             if _text(v.get("next_needs")):
-                left[where] = v["next_needs"]   # 더 새 판정의 글로 바뀐다
+                left[where] = {"text": v["next_needs"], "resolved": v.get("needs_resolved")}   # 더 새 판정의 글로 바뀐다
             elif v.get("result") in DECIDED:
                 left.pop(where, None)   # 버팀·틀림은 cut으로 돌린 뒤에도 옛 할 일을 지운다
             continue  # 지난 판정은 기록으로만 남긴다
@@ -797,7 +801,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                          if x.get("kind") == "deviation" and v["hypothesis"] in (x.get("hypotheses") or [v["hypothesis"]]))
         verdicts[where] = {"result": v["result"], "status": status, "reason": v["reason"], "sample": have, "need": need,
                            "deviations": deviations, "criteria": criteria, "proposed_result": v.get("proposed_result"), "next_needs": v.get("next_needs"),
-                           "keep_unknown": v.get("keep_unknown"),
+                           "needs_resolved": v.get("needs_resolved"), "keep_unknown": v.get("keep_unknown"),
                            "sample_text": _sample_line(have, need, deviations, _builds(seen))
                            + (f" · 자동 플레이 세션 {len(seen) - len(human)}개 뺌" if len(seen) > len(human) else "")
                            + (_after_results(concepts.get(v["concept"]), v["hypothesis"], seen) if concepts is not None and criteria == "ok" else "")}
@@ -826,9 +830,11 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
     # 선택한 컨셉이 없고 판정까지 한 컨셉이 있으면 되돌린 것이다. 판정이 없는 컨셉(승인 전에 설계하는 중)은 되돌린 것이 아니다
     reverted = sorted({w.split(".")[0] for w in verdicts if w.split(".")[0] in concepts}) \
         if concepts and not any(info["approved"] for info in concepts.values()) else []
-    next_needs = {w: {"text": x["next_needs"], "cut": False} for w, x in verdicts.items() if x["next_needs"] and x["result"] == "unknown"}
-    next_needs.update({w: {"text": x["keep_unknown"], "cut": False, "kept": True} for w, x in verdicts.items() if x["keep_unknown"]})
-    next_needs.update({w: {"text": text, "cut": True} for w, text in left.items()
+    next_needs = {w: {"text": x["next_needs"], "cut": False, "resolved": x["needs_resolved"]}
+                  for w, x in verdicts.items() if x["next_needs"] and x["result"] == "unknown"}
+    next_needs.update({w: {"text": x["keep_unknown"], "cut": False, "kept": True, "resolved": x["needs_resolved"]}
+                       for w, x in verdicts.items() if x["keep_unknown"]})
+    next_needs.update({w: {**old, "cut": True} for w, old in left.items()
                        if w not in next_needs and not (w in verdicts and verdicts[w]["result"] in DECIDED)})
     counts = {r: sum(1 for x in verdicts.values() if x["result"] == r) for r in RESULTS}
     reason = None
@@ -885,8 +891,12 @@ def verdict_line(where: str, v: dict) -> str:
 def next_needs_line(where: str, x: dict) -> str:
     """옮겨 적은 잣대 태그는 브리프와 어긋날 수 있어 빼고 보인다."""
     if x.get("kept"):
-        return f"모름으로 둠({where}): {YARDSTICK_TAG.sub('', x['text'])}"
-    return f"다음 시험 전에 풀 것({where}): {YARDSTICK_TAG.sub('', x['text'])}" + (" (지난 판정)" if x["cut"] else "")
+        done = f" · 풀어 둠: {YARDSTICK_TAG.sub('', x['resolved'])}" if x.get("resolved") else ""   # 푼 할 일이 말없이 가려지지 않게
+        return f"모름으로 둠({where}): {YARDSTICK_TAG.sub('', x['text'])}{done}"
+    tail = " (지난 판정)" if x["cut"] else ""
+    if x.get("resolved"):   # 플레이 전에 풀어 둔 할 일. 무엇을 풀었는지도 보인다
+        return f"풀어 둠({where}): {YARDSTICK_TAG.sub('', x['resolved'])} · 풀 것이었던 글: {YARDSTICK_TAG.sub('', x['text'])}{tail}"
+    return f"다음 시험 전에 풀 것({where}): {YARDSTICK_TAG.sub('', x['text'])}{tail}"
 
 
 def print_counts(result: dict) -> None:
@@ -899,7 +909,7 @@ def print_counts(result: dict) -> None:
 
 # ---------- hypothesis: 가설 하나의 판정 자료 ----------
 SESSION_HEAD = ("id", "date", "started_at", "build", "game_build", "players", "runs", "events", "logs", "simulated", "note")
-CUT_KEEP = ("result", "status", "criteria", "sessions", "cut_reason", "next_needs", "keep_unknown", "proposed_result")
+CUT_KEEP = ("result", "status", "criteria", "sessions", "cut_reason", "next_needs", "needs_resolved", "keep_unknown", "proposed_result")
 
 
 def _mine(x, cid: str, hid: str) -> bool:

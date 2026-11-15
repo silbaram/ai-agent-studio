@@ -10,7 +10,7 @@ description: "Records prototype playtest sessions as data, has a read-only judge
 ## 원칙
 
 - **기록이 증거다.** 판정은 `data/playtests.json`에 적힌 관찰값만 근거로 쓴다. 대화에서 들은 인상, 만든 쪽의 설명, 에이전트의 추측은 증거가 아니다.
-- **관찰과 선호를 나눈다.** "3판부터 예고를 안 보고 거리만 벌렸다"는 관찰이다. "재미있다", "소리가 좋다"는 선호다. 선호는 `notes`에 `preference`로 남기되 판정 근거로 쓰지 않는다.
+- **관찰과 선호를 나눈다.** "3판부터 예고를 안 보고 거리만 벌렸다"는 관찰이다. "재미있다"는 선호다. 선호는 `notes`에 `preference`로 남기되 판정 근거로 쓰지 않는다.
 - **모르면 unknown이다.** 표본이 계획보다 적거나, 신호가 나왔는지 기록으로 가릴 수 없으면 `unknown`이다. unknown은 실패가 아니다.
 - **값을 지어내지 않는다.** 관찰값은 플레이한 사람이 말한 것이나 로그 파일에서 읽은 것만 적는다. 에이전트가 짐작한 값을 관찰값으로 적지 않는다.
 - **판정은 따로, 확정은 사용자가.** 판정 에이전트(읽기 전용)가 제안하고, 메인 에이전트가 `proposed`로 기록하고, 사용자가 확인하면 `approved`로 바꾼다.
@@ -40,7 +40,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 표본은 결과를 보기 전에 정한 값이다. 플레이 도중이나 뒤에 표본을 줄이자는 말이 나오면 바로 고치지 않는다. 가설마다 사용자에게 묻고, 결과 파일을 열기 전에 [표본을 줄이자는 말이 나올 때](references/changes.md#표본을-줄이자는-말이-나올-때)를 따른다.
 
-판정 기준 문장에 남은 `[가정]` 잣대(문턱, 구간)도 플레이 전에 정한다. 결과를 본 뒤에 정하면 표본을 줄이는 것과 같은 문제가 생긴다. `check . --fail-on-assumed`의 컨셉 gate 줄이 남은 칸(`brief.hypotheses[…]`, `brief.prototype.success_criteria`)을 가리킨다. 그 줄은 값을 줄여 보이므로(`외 N개`), 사용자에게는 `hypothesis <컨셉>.<가설>`의 가설 문장과 브리프의 `success_criteria` 문장을 통째로 보이고 정하게 한다. 데이터 파일의 gate 줄(적 체력, 카드 피해)은 플레이로 맞출 값이라 여기서 정하지 않는다. 사용자가 정한 값만 바꾸는 법은 [4단계](#4-측정값을-올린다). 정하지 않은 채 플레이했는지는 2단계가 확인한다.
+판정 기준 문장에 남은 `[가정]` 잣대(문턱, 구간)와 지난 판정이 남긴 "다음 시험 전에 풀 것"도 플레이 전에 정한다. 결과를 본 뒤 정하면 표본을 줄일 때와 같은 문제가 생긴다. 잣대는 `check . --fail-on-assumed`의 컨셉 gate 줄이 남은 칸(`brief.hypotheses[…]`, `brief.prototype.success_criteria`)을 가리킨다. 그 줄은 값을 줄여 보이므로(`외 N개`), 사용자에게는 `hypothesis <컨셉>.<가설>`의 가설 문장과 브리프의 `success_criteria` 문장을 통째로 보이고 정하게 한다. 데이터 파일의 gate 줄(적 체력, 카드 피해)은 플레이로 맞출 값이라 여기서 정하지 않는다. 사용자가 정한 잣대만 바꾸는 법은 [4단계](#4-측정값을-올린다), 푼 할 일은 그 판정의 `needs_resolved`에 적는다([형식](references/playtest-record.md#판정)). 정하지 않고 플레이했는지는 2단계가 본다.
 
 플레이 전에 시험판 화면에서 가설마다 아래를 본다. 화면을 띄울 수 없으면 화면 문구를 만드는 코드를 읽고, 그것도 못 하면 확인하지 못했다고 사용자에게 알리고 직접 보게 한다.
 - **질문 문장:** 플레이 중 묻는 질문이 가설 `test`에 적힌 문장과 같은지.
@@ -50,6 +50,8 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
   - 인용이 없을 때: "없음"을 적는다. 일상어로 보여도 에이전트가 빼지 않는다. "없음" 줄은 사용자에게 보여 플레이어에게 분명한 말인지 정하게 하고, 사용자가 정하기 전에는 어긋남으로 본다.
 - **어긋나면 플레이 전에 고친다:** 화면에 없는 것은 시험판에 더하고, 다시 빌드해 빌드 지문이 바뀌었으면 기준선을 다시 계산한 뒤 플레이 전에 커밋해 둔다. 가설 문장은 고칠 안을 사용자에게 보이고 정하게 한다. 사용자에게 물을 수 없으면 문장은 고치지 않고 정할 것으로 남긴다. 말을 고치는 법은 [가설 작성법](../concept-exploration/references/brief.md#가설-hypotheses-1개-이상)의 '지표를 정의한다'다. 문장을 고치면 판정 기준 지문이 바뀌고, 이미 판정한 가설이면 [판정한 가설의 문장을 고칠 때](references/changes.md#판정한-가설의-문장을-고칠-때)를 따른다.
 
+플레이 중 묻는 질문이 있으면 뜻을 물을 때 줄 설명 글도 플레이 전에 정한다. 도중에는 그 글만 주고 답하는 법은 말하지 않으며, 몇 번째 판에서 물었는지 `notes`에 적는다.
+
 지표의 정의(구간 길이, 문턱, 무엇을 뺄지)는 가설의 `test`가 원본이다. 계산 스크립트에 같은 값을 상수로 두면, 결과 파일 첫머리에 계산에 쓴 정의를 찍게 한다. 한쪽만 바뀌어도 판정 에이전트가 `test`와 견줄 수 있다.
 
 ### 2. 플레이한 뒤: 세션을 기록한다
@@ -57,13 +59,13 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 한 번 모여 플레이할 때마다 `data/playtests.json`의 `playtests`에 세션 하나를 넣는다. 형식은 [references/playtest-record.md](references/playtest-record.md).
 
 - 날짜, 플레이한 사람, 빌드(커밋 해시), 판 수, 원본 로그 파일 경로(`logs`), 판 로그에 있으면 첫 판 시작 시각(`started_at`)
-- 가설별 관찰값(`observations`): 가설의 `failure_signal`을 판단하는 데 필요한 값. 로그에서 읽었으면 `source`에 파일을 적는다. 스크립트로 계산한 값(비율, 상관)은 그 출력을 세션 폴더에 결과 파일로 남기고(예: `python3 game/summarize.py playtests/pt_20261107_1 > playtests/pt_20261107_1/summary.txt`) `source`를 그 결과 파일로 둔다. 판정 에이전트는 스크립트를 돌리지 못하므로(훅이 막는다) 결과 파일이 없으면 값을 확인할 수 없다
+- 가설별 관찰값(`observations`): 가설의 `failure_signal`을 판단하는 데 필요한 값. 로그에서 읽었으면 `source`에 파일을 적는다. 스크립트로 계산한 값(비율, 상관)은 그 출력을 세션 폴더에 결과 파일로 남기고(예: `python3 game/summarize.py playtests/pt_20261107_1 > playtests/pt_20261107_1/summary.txt`) `source`를 그 결과 파일로 둔다. 판정 에이전트는 스크립트를 돌리지 못하므로 결과 파일이 없으면 값을 확인할 수 없다
 - 레벨의 그레이박스 확인 기록(`greybox`): `levels.json`의 항목 id마다 잰 값이나 판정. 항목은 `… check . --table levels`의 그레이박스 확인 표에 있다
 - 가설의 `sample.events`에 적은 사건을 이 세션에서 센 건수(`events`)
-- 가설 `test`가 표본에서 빼라고 한 판의 수와 까닭(`excluded_runs`). 예: 사람마다 첫 판을 빼면 그 수. 적지 않으면 세션의 판을 모두 센다
+- 가설 `test`가 표본에서 빼라고 한 판의 수와 까닭(`excluded_runs`). 적지 않으면 세션의 판을 모두 센다
 - 그 밖의 관찰과 선호(`notes`). 시험 절차를 어긴 일은 `deviation`으로 적는다(무엇이 이탈인지는 [기록 형식](references/playtest-record.md)의 `notes`)
 
-기록하기 전에 가설마다 `hypothesis <컨셉>.<가설>`로 지난 판정이 남긴 "다음 시험 전에 풀 것"과 판정 기준 문장에 남은 `[가정]` 잣대(1단계)를 본다. 플레이 전에 정했어야 할 것(지난 판정이 정하라고 한 것, 남은 잣대)이 있으면 플레이 전에 정했는지 묻고 답을 세션 `notes`에 적는다. 묻지 못했거나 정하지 않고 플레이했으면 `deviation`으로 적는다.
+기록하기 전에 가설마다 `hypothesis <컨셉>.<가설>`로 1단계에서 정할 것(남은 `[가정]` 잣대, "다음 시험 전에 풀 것")이 남았는지 본다. 남았거나 "풀어 둠"이면 플레이 전에 정했는지 묻고 답을 세션 `notes`에 적는다. 묻지 못했거나 정하지 않고 플레이했으면 `deviation`으로 적는다.
 
 관찰값의 수는 결과 파일이나 로그의 수를 반올림하지 않고 그대로 옮긴다. 사용자에게 묻지 않고 채운 값이 있으면 그 사실을 보고한다. 기록 파일을 지우지 않는다. 여러 세션을 합쳐 다시 계산해야 나오는 값은 [형식](references/playtest-record.md#여러-세션을-합친-값)을 따른다.
 
@@ -88,11 +90,6 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 ### 5. 가정값을 보정한다
 
 세션에 단계 기록과 그때 가진 영구 강화를 적었으면 `calibrate`로 기획의 가정값과 비교한다. 평균을 손으로 내지 않는다. 프로토타입의 판별 로그(CSV)는 `runlog`로 모아 세션에 합친다. 시간이 다 되면 끝나는 단계(5분 회색 상자)는 `runlog --timed 단계`로 모은다. 형식, 시험 조건별로 보기, 읽는 법, 제안을 옮기는 순서는 [references/calibration.md](references/calibration.md).
-
-```bash
-python3 .claude/skills/studio-data/scripts/studio.py runlog playtests/pt_20261112_1/runs.csv
-python3 .claude/skills/studio-data/scripts/studio.py calibrate data/meta_combat.json --out reports/calibrate.json
-```
 
 제안은 자동으로 적용하지 않는다. 사용자에게 보여 주고 어느 값을 옮길지 정한다. 레벨을 먼저 옮기고 생존 곡선을 옮긴다. 옮긴 값에는 출처를 남긴다. 기획 목표 범위는 의도이므로 바꾸지 않는다.
 
