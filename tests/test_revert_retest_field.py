@@ -5,7 +5,7 @@ import unittest
 from contextlib import redirect_stdout
 
 from _studio import ROOT, changes_section, concepts as cc
-from test_verdict_field import CONCEPTS, approved, hyp, judge, printed, stamp, three, verdict
+from test_verdict_field import CONCEPTS, approved, judge, printed, stamp, three, verdict
 
 SECTION = "컨셉을 되돌릴 때"
 

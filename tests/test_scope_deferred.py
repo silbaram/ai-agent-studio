@@ -6,7 +6,6 @@ import time
 import unittest
 
 from _studio import ROOT, run_cli
-from studio_data import scope
 from test_scope import HookCase
 
 

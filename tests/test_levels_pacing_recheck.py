@@ -5,7 +5,7 @@ import unittest
 from _studio import ROOT, STUDIO, common, levels as lv, level_guide, level_format
 from test_economy import base, validate as economy_validate
 from test_levels import BUDGET, COMBAT, ENEMIES, THREAT, both, enc, level, row, run
-from test_levels_field import ECONOMY, notes, printed
+from test_levels_field import ECONOMY, notes
 from test_levels_pacing import PLAN, paced, quiet, spans, strong, warn_codes
 from test_levels_pacing_field import spend
 from test_levels_recheck import Project, warning

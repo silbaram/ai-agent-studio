@@ -3,7 +3,6 @@ import json
 import unittest
 
 from _studio import ROOT, run_cli
-from studio_data import scope
 from test_scope import HookCase
 
 CMD = "python3 .claude/skills/studio-data/scripts/studio.py"

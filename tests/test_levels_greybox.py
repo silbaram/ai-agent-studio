@@ -1,10 +1,9 @@
 """그레이박스 확인 목록(L3) 테스트: 레벨마다 그래픽 없이 확인할 항목과 플레이 기록의 연결. 표준 라이브러리 unittest만 사용한다."""
-import json
 import unittest
 
-from _studio import ROOT, SAMPLE, STUDIO, common, levels as lv, playtests as pt
-from test_levels import BUDGET, COMBAT, ENEMIES, THREAT, both, codes, enc, level, row, run
-from test_levels_field import notes, printed
+from _studio import ROOT, STUDIO, common, levels as lv, playtests as pt
+from test_levels import BUDGET, COMBAT, ENEMIES, THREAT, both, codes, enc, level, run
+from test_levels_field import notes
 from test_levels_recheck import Project, warning
 
 

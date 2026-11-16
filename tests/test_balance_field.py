@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from _studio import ROOT, calibrate as cal, cli, datasets, run_cli
-from test_calibrate import CONFIG, Workspace, session, validate, codes
+from test_calibrate import Workspace, session, validate, codes
 
 
 def row(r, kind, stage, item=None):

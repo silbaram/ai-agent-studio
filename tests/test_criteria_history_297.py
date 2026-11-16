@@ -4,9 +4,9 @@ import copy
 import json
 import unittest
 
-from _studio import changes_section, common, concepts as cc, ROOT, STUDIO
+from _studio import changes_section, concepts as cc, ROOT, STUDIO
 from test_scope import Project
-from test_verdict_field import CONCEPTS, approved, hyp, judge, printed, stamp, three, verdict
+from test_verdict_field import CONCEPTS, approved, hyp, judge, stamp, three, verdict
 
 OLD_TEST = "그레이박스 적 1종 [가정], 패턴 3개 [가정], 3명 [가정]에게 5판 [가정]씩 한다"
 OLDER_SIGNAL = "5판 [가정] 동안 같은 패턴에 맞는 비율이 줄지 않는다"

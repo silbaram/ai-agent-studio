@@ -1,11 +1,8 @@
 """컨셉 기록 검사기 테스트. 표준 라이브러리 unittest만 사용한다."""
 import copy
-import io
 import json
-import sys
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from _studio import SAMPLE as SAMPLE_DIR, concepts as cc, run_cli as studio_cli

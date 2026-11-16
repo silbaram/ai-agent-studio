@@ -3,10 +3,9 @@ import copy
 import io
 import json
 import math
-import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr
 from pathlib import Path
 
 from _studio import SAMPLE, common, enemies as ve, items as vi, meta_sim as sm, run_cli as studio_cli, upgrades as vu, viewer

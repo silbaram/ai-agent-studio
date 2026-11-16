@@ -206,10 +206,6 @@ def _tag_typo(name: str) -> str | None:
     return close[0] if close else None
 
 
-def _has_tag(text: str) -> bool:
-    return bool(STRICT_TAG.search(text) or LOOSE_TAG.search(text))
-
-
 def _tag_follows(text: str, end: int, until: int) -> bool:
     """수치 끝(end)부터 다음 수치(until) 전까지 같은 문장 안에 태그가 있는가. 문장이 끝나거나 수치를 감싼 괄호가 닫히면 멈춘다
     ('(판 끝 30초 전은 빈칸) 공격 강화만 센다 [가정]'의 태그는 30초의 것이 아니다). 수치 뒤에 연 괄호 안의 문장 끝은 보지 않는다."""

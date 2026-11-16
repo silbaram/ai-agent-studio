@@ -2,7 +2,6 @@
 import copy
 import io
 import json
-import re
 import shutil
 import tempfile
 import unittest
@@ -10,7 +9,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from _studio import ROOT, SAMPLE, STUDIO, common, concepts as cc, economy as ec, growth as gr, run_cli, systems as sy
-from test_growth import COMBAT, ENEMIES, data as growth_data, validate as growth_validate
+from test_growth import COMBAT, ENEMIES, data as growth_data
 
 BRIEF = {"pillars": [{"name": "욕심이 곧 성장", "test": "t"}, {"name": "숙성이 읽힌다", "test": "t"}], "mvp": ["보석 숙성 3단계", "조준 무기"], "out_of_scope": ["멀티플레이"]}
 CONCEPTS = [{"id": "gems", "status": "approved", "brief": BRIEF}]
