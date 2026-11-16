@@ -1,0 +1,223 @@
+"""production-handoff: 가설이 버틴 뒤 엔진을 정하고 본 게임으로 넘어가는 절차 문서. 검사기는 없다(사용자 결정 2026-11-16).
+표준 라이브러리 unittest만 사용한다."""
+import re
+import unittest
+
+from _studio import ROOT, cli, provenance as cp, section
+
+SKILL = ROOT / "skills/production-handoff"
+DOC = SKILL / "SKILL.md"
+RECORD = SKILL / "references/production-record.md"
+GROW = SKILL / "references/grow-prototype.md"
+TRIAL = SKILL / "references/engine-trial.md"
+
+
+def read(path):
+    return path.read_text(encoding="utf-8")
+
+
+def frontmatter(text):
+    return text.split("---")[1]
+
+
+class SkillShape(unittest.TestCase):
+    def test_entry_and_codex_card_exist(self):
+        self.assertTrue(DOC.is_file())
+        self.assertTrue(RECORD.is_file())
+        self.assertTrue((SKILL / "agents/openai.yaml").is_file())
+
+    def test_description_is_english_and_says_when(self):
+        head = frontmatter(read(DOC))
+        self.assertIn("name: production-handoff", head)
+        self.assertRegex(head, r'description: "[A-Z]')
+        self.assertIn("Use when", head)
+
+    def test_no_scripts_and_under_the_size_cap(self):
+        self.assertFalse((SKILL / "scripts").exists())   # 파이썬 코드는 studio-data에만 둔다
+        self.assertLess(len(read(DOC).encode("utf-8")), 20000)
+
+
+class Flow(unittest.TestCase):
+    def test_gate_reuses_the_existing_check(self):
+        text = read(DOC)
+        self.assertIn("check . --fail-on-assumed", text)
+        self.assertIn("하지 않은 확인은 통과가 아니다", text)
+
+    def test_engine_is_the_users_decision_with_an_exact_version(self):
+        text = read(DOC)
+        for word in ("필수 조건", "엔진 시험", "[결정: 사용자", "버전"):
+            self.assertIn(word, text, word)
+
+    def test_two_paths_for_the_prototype(self):
+        text = read(DOC)
+        for word in ("버리고 새로", "키워 가기", "원본", "같은 시드"):
+            self.assertIn(word, text, word)
+
+    def test_hypotheses_are_rechecked_on_the_real_build(self):
+        text = read(DOC)
+        for word in ("`builds`", "`sample`", "작은 표본"):
+            self.assertIn(word, text, word)
+
+    def test_outcomes_include_going_back(self):
+        text = read(DOC)
+        for word in ("진행", "되돌아가기", "그만두기"):
+            self.assertIn(word, text, word)
+
+
+class Record(unittest.TestCase):
+    def test_record_lives_in_design_and_names_its_sections(self):
+        text = read(RECORD)
+        self.assertIn("design/production.md", text)
+        for head in ("## 엔진", "## 넘어가기 판정", "## 시험판", "## 가져갈 것과 버릴 것", "## 본 게임 빌드에서 다시 확인"):
+            self.assertIn(head, text, head)
+
+    def test_record_template_has_no_provenance_errors(self):
+        report = cp.check_paths_cli([str(RECORD), str(DOC)])
+        errors = [f"{r.path}:{f.line}: {f.message}" for r in report for f in r.findings if f.level == "error"]
+        self.assertEqual(errors, [])
+
+
+class Links(unittest.TestCase):
+    def test_readme_and_guide_list_the_skill(self):
+        for rel in ("README.md", "docs/guide.md"):
+            self.assertIn("production-handoff", read(ROOT / rel), rel)
+        self.assertIn("(skills/production-handoff/SKILL.md)", read(ROOT / "README.md"))
+
+    def test_counts_say_fourteen(self):
+        for rel in ("README.md", "docs/guide.md", "docs/walkthrough.html"):
+            text = read(ROOT / rel)
+            self.assertNotRegex(text, r"스킬 13개|열세 (개|폴더)", rel)
+
+    def test_neighbouring_skills_point_to_it(self):
+        for rel in ("skills/concept-exploration/SKILL.md", "skills/scope-guard/SKILL.md"):
+            self.assertIn("../production-handoff/SKILL.md", read(ROOT / rel), rel)
+
+    def test_architecture_roadmap_has_the_stage(self):
+        self.assertTrue(re.search(r"\|[^|\n]*\|[^|\n]*`production-handoff`", read(ROOT / "docs/architecture.md")))
+
+
+class DryRunFixes(unittest.TestCase):
+    """my-cards 복사본에서 손으로 돌려 보고 찾은 곳(2026-11-16)."""
+
+    def test_step1_quotes_the_real_gate_lines(self):
+        # 가설 쪽 gate 줄은 data/playtests.json 아래에 나온다. 전체 FAIL은 데이터 gate 때문일 수 있다.
+        step1 = read(DOC).split("### 1.")[1].split("### 2.")[0]
+        self.assertNotIn("컨셉 gate 줄", read(DOC))
+        self.assertIn("data/playtests.json", step1)
+        self.assertIn(cli.GATE_LABELS["playtests"].rstrip(": "), step1)
+        self.assertIn(cli.REFUTED_GATE.rstrip(": "), step1)
+        self.assertIn("FAIL", step1)
+
+    def test_openspec_condition_only_when_used(self):
+        step1 = read(DOC).split("### 1.")[1].split("### 2.")[0]
+        self.assertIn("OpenSpec을 쓰는", step1)
+
+    def test_engine_in_brief_assumed_is_not_decided(self):
+        step2 = read(DOC).split("### 2.")[1].split("### 3.")[0]
+        self.assertIn("`constraints.assumed`", step2)
+
+    def test_headless_rules_are_a_condition_from_the_tests(self):
+        step2 = read(DOC).split("### 2.")[1].split("### 3.")[0]
+        self.assertIn("화면 없이", step2)
+        self.assertIn("화면 없이", read(RECORD))
+
+    def test_logs_and_bots_stay_until_main_verdicts(self):
+        text = read(DOC)
+        self.assertIn("개발용 빌드", text)
+        self.assertNotIn("기록 내려받기", text)   # 판 로그는 버리는 시험용 기능이 아니다
+
+    def test_real_build_name_differs_from_prototype(self):
+        step7 = read(DOC).split("### 7.")[1].split("### 8.")[0]
+        self.assertIn("`game_build`", step7)
+        self.assertIn("시험판 세션에 없는", step7)
+
+
+class Strengths(unittest.TestCase):
+    """조사한 저장소의 장점을 우리 도구로 옮긴 것."""
+
+    def test_flow_table_names_user_decisions_and_stops(self):
+        flow = section(DOC, "흐름")
+        self.assertIn("| 단계 | 사용자가 정하는 것 | 멈추는 조건 |", flow)
+
+    def test_rare_paths_live_in_references(self):
+        text = read(DOC)
+        self.assertIn("| 이럴 때 | 읽을 곳 |", text)
+        for ref in ("references/grow-prototype.md", "references/engine-trial.md"):
+            self.assertIn(f"({ref}", text, ref)
+        self.assertTrue(GROW.is_file())
+        self.assertTrue(TRIAL.is_file())
+
+    def test_parity_compares_two_output_files(self):
+        grow = read(GROW)
+        for word in ("같은 시드", "원본", "두 결과 파일"):
+            self.assertIn(word, grow, word)
+        self.assertIn("동일성 확인", read(RECORD))
+
+    def test_knowledge_risk_is_a_candidate_column(self):
+        self.assertIn("| 지식 위험 |", read(RECORD))
+        trial = read(TRIAL)
+        for level in ("높음", "중간", "낮음"):
+            self.assertIn(level, trial, level)
+
+    def test_prototype_isolation_is_checked(self):
+        step5 = read(DOC).split("### 5.")[1].split("### 6.")[0]
+        self.assertIn("grep", step5)
+        self.assertIn("격리 확인", read(RECORD))
+
+    def test_new_references_have_no_provenance_errors(self):
+        paths = [str(x) for x in (GROW, TRIAL) if x.is_file()]
+        self.assertEqual(len(paths), 2)
+        report = cp.check_paths_cli(paths)
+        errors = [f"{r.path}:{f.line}: {f.message}" for r in report for f in r.findings if f.level == "error"]
+        self.assertEqual(errors, [])
+
+
+class ReviewFixes(unittest.TestCase):
+    """먼저 검토에서 찾은 곳(2026-11-16)."""
+
+    def step(self, n):
+        return read(DOC).split(f"### {n}.")[1].split(f"### {n + 1}.")[0]
+
+    def test_old_gate_wording_is_gone_everywhere(self):
+        self.assertNotIn("컨셉 gate 줄", read(RECORD))
+        line = [x for x in read(ROOT / "docs/architecture.md").splitlines() if "`production-handoff`)" in x and x.startswith("- ")]
+        self.assertEqual(len(line), 1)
+        self.assertNotIn("컨셉 gate", line[0])
+
+    def test_record_gate_rows_follow_step1(self):
+        gate = read(RECORD).split("## 넘어가기 판정")[1]
+        self.assertIn("data/playtests.json", gate)
+        self.assertIn("모름으로 둠", gate)
+        self.assertIn("design/concepts.json", gate)
+
+    def test_step1_has_no_contradicting_two_lines_rule(self):
+        self.assertNotIn("위 두 줄이 없으면", self.step(1))
+
+    def test_step1_says_main_hypotheses_left_are_fine(self):
+        self.assertIn("`_main`", self.step(1))
+
+    def test_step1_handles_the_brief_gate_line(self):
+        step1 = self.step(1)
+        self.assertIn("`== design/concepts.json`", step1)
+        self.assertIn("success_criteria", step1)
+
+    def test_isolation_uses_git_grep_and_the_archive_in_grow(self):
+        step5 = self.step(5)
+        self.assertIn("git grep -n", step5)
+        self.assertNotIn("grep -rn", step5)
+        self.assertIn("원본 복사본", step5)
+
+    def test_dev_build_tools_follow_the_step2_condition(self):
+        self.assertIn("가설의 `test`가", self.step(5))
+
+    def test_scope_guard_points_to_dev_build_rule(self):
+        self.assertIn("../production-handoff/SKILL.md#5-시험판을-어떻게-할지-정한다", read(ROOT / "skills/scope-guard/SKILL.md"))
+
+    def test_architecture_records_the_dry_run(self):
+        line = [x for x in read(ROOT / "docs/architecture.md").splitlines() if "`production-handoff`)" in x and x.startswith("- ")][0]
+        for word in ("손 시험", "`game_build`", "지식 위험", "격리 확인"):
+            self.assertIn(word, line, word)
+
+
+if __name__ == "__main__":
+    unittest.main()

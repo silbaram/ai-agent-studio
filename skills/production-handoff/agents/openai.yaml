@@ -1,0 +1,4 @@
+interface:
+  display_name: "본 게임으로 넘어가기"
+  short_description: "가설이 버틴 뒤 엔진을 조건과 시험으로 고르고, 시험판을 버릴지 키울지 정하고, 본 게임 빌드에서 가설을 작게 다시 확인함"
+  default_prompt: "Use $production-handoff to check that this game's playtest gate passed, help me choose the engine from must-have conditions and a small trial, decide what happens to the greybox prototype, and plan re-checking the held hypotheses on the real build."
