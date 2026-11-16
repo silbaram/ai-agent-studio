@@ -1,10 +1,7 @@
 """수치 출처 태그 검사기 테스트. 표준 라이브러리 unittest만 사용한다."""
-import io
 import json
-import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
 from pathlib import Path
 
 from _studio import ROOT, concepts as cc, provenance as cp, run_cli as studio_cli

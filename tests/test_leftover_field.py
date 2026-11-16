@@ -3,7 +3,7 @@ import copy
 import json
 import unittest
 
-from _studio import ROOT, SAMPLE, STUDIO, calibrate as cal, concepts as cc, meta_sim as sm, playtests as pt, provenance as cp, run_cli, level_guide, level_format
+from _studio import ROOT, SAMPLE, calibrate as cal, concepts as cc, meta_sim as sm, playtests as pt, provenance as cp, level_format
 from test_calibrate import Workspace
 from test_levels import both, enc, level, run
 from test_levels_field import ECONOMY

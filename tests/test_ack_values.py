@@ -1,5 +1,4 @@
 """확인할 때의 값(148, 166번): 이유에 적은 '(확인 값 N)'보다 경고의 값이 나빠지면 확인이 풀린다. 표준 라이브러리 unittest만 사용한다."""
-import json
 import unittest
 
 from _studio import ROOT, STUDIO, common, levels as lv

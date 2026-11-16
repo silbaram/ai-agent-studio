@@ -1,16 +1,14 @@
 """게이트 통과 길(2026-11-09) 현장 시험의 이슈 300~304 테스트. 표준 라이브러리 unittest만 사용한다."""
 import copy
-import io
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
 from pathlib import Path
 
-from _studio import calibrate as cal, changes_section, common, datasets, ROOT, run_cli, STUDIO
+from _studio import calibrate as cal, changes_section, common, ROOT, run_cli, STUDIO
 from test_balance_field import row, printed as cal_printed
 from test_calibrate import Workspace
-from test_verdict_field import judge, printed, stamp, three, verdict, codes
+from test_verdict_field import judge, stamp, three, verdict, codes
 
 STAGE = {"id": "zone_1", "duration": 300, "kills": {"crawler": 250, "elite": 2}, "income": {"seed": 15},
          "status": "proposed", "provenance": {"kind": "assumed"}}

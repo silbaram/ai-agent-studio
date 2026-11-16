@@ -1,15 +1,14 @@
 """레벨 페이싱 현장 시험(이슈 118~142) 테스트: 네 가지 게임 모양에서 막힌 것을 고친 동작. 표준 라이브러리 unittest만 사용한다."""
-import json
 import re
 import subprocess
 import sys
 import unittest
 
-from _studio import ROOT, STUDIO, common, economy as ec, levels as lv, run_cli, level_guide, level_format
+from _studio import ROOT, STUDIO, common, levels as lv, level_guide, level_format
 from test_economy import base, validate as economy_validate
 from test_levels import BUDGET, COMBAT, ENEMIES, THREAT, both, enc, level, row, run
 from test_levels_field import ECONOMY, notes, printed
-from test_levels_pacing import PLAN, clock_note, paced, quiet, spans, strong, warn_codes
+from test_levels_pacing import PLAN, paced, quiet, spans, strong, warn_codes
 from test_levels_recheck import Project, warning
 
 

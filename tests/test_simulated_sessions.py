@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _studio import ROOT, SAMPLE, calibrate as cal, datasets, playtests as pt, provenance as cp
+from _studio import ROOT, SAMPLE, calibrate as cal, datasets, provenance as cp
 from test_playtests import codes, session, validate, verdict
 
 

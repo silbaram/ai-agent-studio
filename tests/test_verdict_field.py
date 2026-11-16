@@ -2,13 +2,12 @@
 import copy
 import io
 import json
-import re
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from _studio import ROOT, SAMPLE, STUDIO, common, concepts as cc, crafting as cr, playtests as pt, run_cli
+from _studio import ROOT, SAMPLE, STUDIO, common, concepts as cc, playtests as pt, run_cli
 from test_crafting import data as craft_data, track, validate as craft_validate
 
 CONCEPTS = json.loads((SAMPLE / "design/concepts.json").read_text(encoding="utf-8"))
