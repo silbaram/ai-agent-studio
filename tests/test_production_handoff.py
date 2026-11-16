@@ -219,5 +219,89 @@ class ReviewFixes(unittest.TestCase):
             self.assertIn(word, line, word)
 
 
+class DraftCompletion(unittest.TestCase):
+    """초본을 마치려고 더한 것(2026-11-16): 이미 쓰는 엔진 알아보기, 엔진 시험 뒤 위험 목록."""
+
+    def test_existing_engine_is_found_from_project_files(self):
+        trial = read(TRIAL)
+        self.assertIn("## 이미 쓰는 엔진 알아보기", trial)
+        for marker in ("project.godot", "ProjectSettings/ProjectVersion.txt", ".uproject", "default.project.json", "package.json"):
+            self.assertIn(marker, trial, marker)
+        step2 = read(DOC).split("### 2.")[1].split("### 3.")[0]
+        self.assertIn("references/engine-trial.md#이미-쓰는-엔진-알아보기", step2)
+
+    def test_found_engine_still_needs_the_user(self):
+        section = read(TRIAL).split("## 이미 쓰는 엔진 알아보기")[1].split("\n## ")[0]
+        self.assertIn("사용자", section)
+
+    def test_risk_list_after_the_trial(self):
+        trial = read(TRIAL)
+        self.assertIn("## 위험 목록", trial)
+        self.assertIn("| 위험 | 미리 보이는 신호 | 할 일 |", read(RECORD))
+        step3 = read(DOC).split("### 3.")[1].split("### 4.")[0]
+        self.assertIn("references/engine-trial.md#위험-목록", step3)
+
+    def test_risk_list_has_no_made_up_odds(self):
+        section = read(TRIAL).split("## 위험 목록")[1].split("\n## ")[0]
+        self.assertIn("가능성이나 영향을 숫자나 등급으로 매기지 않는다", section)
+        self.assertIn("엔진 시험에서 막힌 곳", section)   # 위험의 출처
+
+
+def detect_section():
+    return read(TRIAL).split("## 이미 쓰는 엔진 알아보기")[1].split("\n## ")[0]
+
+
+class DraftReviewFixes(unittest.TestCase):
+    """초본 마무리분 먼저 검토(2026-11-17)에서 고친 것."""
+
+    def test_partial_version_is_not_the_exact_version(self):
+        section = detect_section()
+        self.assertIn("버전 단서", section)
+        self.assertIn("GUID", section)
+        self.assertIn("정확한 버전은 사용자에게", section)
+
+    def test_engine_without_version_pinning(self):
+        step4 = read(DOC).split("### 4.")[1].split("### 5.")[0]
+        self.assertIn("고정할 수 없음", step4)
+        self.assertIn("고정할 수 없음", read(RECORD))
+
+    def test_search_scope_skips_dependency_and_tool_folders(self):
+        section = detect_section()
+        for folder in ("node_modules", ".git", ".claude", "archive"):
+            self.assertIn(folder, section, folder)
+        self.assertIn("아래 폴더", section)   # 시험판이 하위 폴더에 있는 경우(my-cards prototype/)
+
+    def test_report_shows_detection_and_risk_list(self):
+        report = read(DOC).split("## 보고")[1].split("\n## ")[0]
+        self.assertIn("이미 쓰는 엔진", report)
+        self.assertIn("위험 목록", report)
+        trial_risk = read(TRIAL).split("## 위험 목록")[1]
+        self.assertNotIn("후보 표와 함께 보인다", trial_risk)   # 보이는 규칙은 보고 한 곳
+
+    def test_fixed_engine_still_gets_trial_and_risk_list(self):
+        step2 = read(DOC).split("### 2.")[1].split("### 3.")[0]
+        self.assertIn("엔진 시험", step2)
+        self.assertIn("위험 목록", step2)
+        self.assertNotIn("3단계를 건너뛴다", step2)
+
+    def test_doc_only_pass_is_marked(self):
+        step3 = read(DOC).split("### 3.")[1].split("### 4.")[0]
+        self.assertIn("통과(문서)", step3)
+        self.assertIn("통과(문서)", read(RECORD))
+        self.assertIn("통과(문서)", read(TRIAL).split("## 위험 목록")[1])
+
+    def test_package_json_version_source(self):
+        row = [l for l in detect_section().splitlines() if l.startswith("| `package.json`")][0]
+        for lock in ("package-lock.json", "pnpm-lock.yaml", "yarn.lock"):
+            self.assertIn(lock, row, lock)
+        self.assertIn("엔진 없이", row)
+
+    def test_rules_are_not_repeated(self):
+        field = [l for l in read(RECORD).splitlines() if l.startswith("| 위험 목록 |")][0]
+        self.assertNotIn("가능성", field)
+        step2 = read(DOC).split("### 2.")[1].split("### 3.")[0]
+        self.assertNotIn("확인하기 전에는 정해진 것이 아니다", step2)
+
+
 if __name__ == "__main__":
     unittest.main()
