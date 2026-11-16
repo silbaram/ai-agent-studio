@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>그림으로 보는 사용 순서</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=Black+Han+Sans&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* 레이아웃: 회색 상자 작업대. 위쪽 단계 막대, 단계마다 카드 한 장(설명 + 그림 + 말해 볼 문장) */
+:root {
+  --bg: #e9ecee;
+  --card: #f9fafa;
+  --ink: #1d2226;
+  --muted: #5a646a;
+  --line: #ccd3d7;
+  --box: #dde2e5;
+  --accent: #e8661c;
+  --accent-soft: #fbe3d4;
+  --accent-ink: #ffffff;
+  --human: #2563a8;
+  --human-soft: #dde9f6;
+  --agent: #c2540f;
+  --agent-soft: #fbe3d4;
+  --tool: #4a5560;
+  --tool-soft: #e1e5e8;
+  --good: #2f7d50;
+  --good-soft: #dcefe3;
+  --bad: #b83232;
+  --bad-soft: #f6dcdc;
+  --wait: #66717c;
+  --wait-soft: #e3e7ea;
+  --p1: #a86f12; --p2: #2563a8; --p3: #6b46c1; --p4: #2f7d50;
+  --display: "Black Han Sans", "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181b; --card: #1c2226; --ink: #e7ebee; --muted: #9ba6ad; --line: #333c42; --box: #283035;
+    --accent: #f0803f; --accent-soft: #3a2a20; --accent-ink: #14181b;
+    --human: #72aef0; --human-soft: #1f2d3d; --agent: #f0915a; --agent-soft: #3a2a20; --tool: #a9b4bd; --tool-soft: #283035;
+    --good: #63c48f; --good-soft: #1d3327; --bad: #f07a7a; --bad-soft: #3b2222; --wait: #a9b4bd; --wait-soft: #283035;
+    --p1: #e0a84a; --p2: #72aef0; --p3: #ab90f2; --p4: #63c48f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14181b; --card: #1c2226; --ink: #e7ebee; --muted: #9ba6ad; --line: #333c42; --box: #283035;
+  --accent: #f0803f; --accent-soft: #3a2a20; --accent-ink: #14181b;
+  --human: #72aef0; --human-soft: #1f2d3d; --agent: #f0915a; --agent-soft: #3a2a20; --tool: #a9b4bd; --tool-soft: #283035;
+  --good: #63c48f; --good-soft: #1d3327; --bad: #f07a7a; --bad-soft: #3b2222; --wait: #a9b4bd; --wait-soft: #283035;
+  --p1: #e0a84a; --p2: #72aef0; --p3: #ab90f2; --p4: #63c48f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.7;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 72px;
+}
+.wrap { max-width: 940px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1, h2 { font-family: var(--display); font-weight: 400; text-wrap: balance; margin: 0; letter-spacing: 0.01em; }
+h1 { font-size: clamp(2.1rem, 7vw, 3.4rem); line-height: 1.12; }
+h2 { font-size: clamp(1.4rem, 4.4vw, 1.85rem); line-height: 1.25; }
+h3 { font-size: 1rem; margin: 0; }
+p { margin: 0; max-width: 64ch; }
+code { font-family: var(--mono); font-size: 0.86em; background: var(--box); padding: 1px 6px; border-radius: 4px; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* 머리 */
+.hero { padding-top: 40px; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 28px; align-items: center; }
+.hero-text { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.kicker { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.12rem; color: var(--muted); }
+.lede b { color: var(--ink); }
+.hero-art { min-width: 0; }
+.hero-art svg { width: 100%; height: auto; display: block; }
+@media (max-width: 720px) { .hero { grid-template-columns: 1fr; padding-top: 28px; } .hero-art { max-width: 320px; } }
+
+/* 단계 막대 */
+.stepbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; border-bottom: 1px solid var(--line); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.stepbar ol { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.stepbar ol::-webkit-scrollbar { display: none; }
+.stepbar a { display: flex; align-items: center; gap: 6px; white-space: nowrap; text-decoration: none; color: var(--ink); font-size: 0.86rem; font-weight: 500; padding: 5px 12px 5px 5px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+.stepbar a span { width: 24px; height: 24px; border-radius: 50%; background: var(--box); display: grid; place-items: center; font-family: var(--display); font-size: 0.85rem; }
+.stepbar a:hover { border-color: var(--accent); }
+.stepbar a:hover span { background: var(--accent); color: var(--accent-ink); }
+
+/* 역할 배지 */
+.who { display: inline-flex; align-items: center; gap: 5px; font-size: 0.8rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.who.h { color: var(--human); background: var(--human-soft); }
+.who.a { color: var(--agent); background: var(--agent-soft); }
+.who.t { color: var(--tool); background: var(--tool-soft); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.9rem; color: var(--muted); }
+
+/* 한눈에 보기 */
+.overview { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+.ov-row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.ov { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; text-decoration: none; color: inherit; padding: 0 4px; }
+.ov .sq { width: 58px; height: 58px; border-radius: 12px; background: var(--box); display: grid; place-items: center; font-family: var(--display); font-size: 1.45rem; transition: transform .15s; }
+.ov:hover .sq { transform: translateY(-2px); background: var(--accent-soft); }
+.ov.hl .sq { background: var(--accent); color: var(--accent-ink); }
+.ov .nm { font-size: 0.88rem; font-weight: 700; line-height: 1.3; }
+.ov:not(:last-child)::after { content: ""; position: absolute; top: 28px; right: -7px; width: 14px; height: 2px; background: var(--line); }
+.ov-back { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ov-back div { border-radius: 10px; padding: 10px 12px; font-size: 0.9rem; line-height: 1.45; }
+.ov-back b { display: block; }
+.ov-back .g { background: var(--good-soft); } .ov-back .g b { color: var(--good); }
+.ov-back .b { background: var(--bad-soft); } .ov-back .b b { color: var(--bad); }
+.ov-back .w { background: var(--wait-soft); } .ov-back .w b { color: var(--wait); }
+@media (max-width: 720px) {
+  .ov-row { grid-template-columns: 1fr; gap: 10px; }
+  .ov { flex-direction: row; text-align: left; gap: 12px; }
+  .ov .sq { width: 42px; height: 42px; font-size: 1.05rem; border-radius: 10px; flex: none; }
+  .ov:not(:last-child)::after { top: auto; bottom: -9px; left: 20px; right: auto; width: 2px; height: 8px; }
+  .ov-back { grid-template-columns: 1fr; }
+}
+
+/* 단계 카드 */
+.step { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 26px; display: flex; flex-direction: column; gap: 20px; scroll-margin-top: 64px; }
+.step-top { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: start; }
+.badge { width: 54px; height: 54px; border-radius: 14px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-family: var(--display); font-size: 1.6rem; }
+.badge.plain { background: var(--box); color: var(--ink); }
+.step-head { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.roles-line { display: flex; flex-wrap: wrap; gap: 6px; }
+.fig { background: var(--bg); border-radius: 12px; padding: 18px; min-width: 0; }
+.scroll { overflow-x: auto; }
+.cap { font-size: 0.88rem; color: var(--muted); }
+.points { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; max-width: 64ch; }
+@media (max-width: 560px) { .step { padding: 18px; } .step-top { grid-template-columns: 1fr; gap: 10px; } .badge { width: 44px; height: 44px; font-size: 1.3rem; } }
+
+/* 말해 볼 문장 */
+.say { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; align-items: start; }
+.say .face { width: 36px; height: 36px; border-radius: 50%; background: var(--human-soft); color: var(--human); display: grid; place-items: center; font-weight: 700; font-size: 0.8rem; }
+.say .bubble { background: var(--human-soft); border-radius: 4px 14px 14px 14px; padding: 12px 14px; font-size: 0.94rem; }
+.say .bubble small { display: block; color: var(--muted); font-size: 0.78rem; margin-bottom: 2px; }
+
+/* 명령 */
+.cmds { display: flex; flex-direction: column; gap: 10px; }
+.cmd-label { font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; }
+.cmd { display: flex; border-radius: 10px; overflow: hidden; background: #1f262b; }
+.cmd pre { margin: 0; padding: 11px 14px; font-family: var(--mono); font-size: 0.82rem; color: #e7ebee; overflow-x: auto; flex: 1; min-width: 0; }
+.cmd button { border: 0; background: #2d363c; color: #e7ebee; font: 600 0.8rem var(--body); padding: 0 14px; cursor: pointer; }
+.cmd button:hover { background: var(--accent); color: #fff; }
+
+/* 폴더 나무 */
+.tree { font-family: var(--mono); font-size: 0.84rem; line-height: 1.95; white-space: pre; }
+.tree .c { color: var(--muted); }
+.tree .n { color: var(--accent); font-weight: 600; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+
+/* 깔때기 */
+.funnel { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.funnel .bar { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; text-align: center; font-size: 0.92rem; line-height: 1.45; max-width: 100%; }
+.funnel .bar small { display: block; color: var(--muted); font-size: 0.8rem; }
+.funnel .bar.pick { background: var(--human); color: #fff; border-color: var(--human); font-weight: 700; }
+.funnel .dn { color: var(--muted); font-size: 0.75rem; line-height: 1; }
+
+/* 약속서 */
+.brief { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.brief .cell { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.brief .cell .ic { font-size: 1.3rem; line-height: 1; margin-bottom: 4px; }
+.brief .cell p { font-size: 0.86rem; color: var(--muted); }
+.brief .star { border: 2px solid var(--accent); background: var(--accent-soft); }
+@media (max-width: 720px) { .brief { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .brief { grid-template-columns: 1fr; } }
+
+/* SVG */
+svg text { fill: var(--ink); font-family: var(--body); }
+svg .mut { fill: var(--muted); }
+svg .bx { fill: var(--card); stroke: var(--line); }
+svg .ln { stroke: var(--muted); fill: none; stroke-width: 1.6; }
+svg .acc { fill: var(--accent); }
+svg .acc-t { fill: var(--accent-ink); }
+svg .hum { fill: var(--human); }
+svg .bad-s { stroke: var(--bad); }
+svg .bad-t { fill: var(--bad); }
+svg .grey { fill: var(--box); }
+.svg-min { min-width: 560px; }
+.svg-min svg { width: 100%; height: auto; display: block; }
+
+/* 숫자 출처 */
+.prov { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; align-items: stretch; }
+.prov .p { position: relative; background: var(--card); border: 1px solid var(--line); border-top: 5px solid currentColor; border-radius: 10px; padding: 12px; margin-right: 18px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.prov .p:last-child { margin-right: 0; }
+.prov .p:not(:last-child)::after { content: "→"; position: absolute; right: -16px; top: 40%; color: var(--muted); font-weight: 700; }
+.prov .p b { font-family: var(--mono); font-size: 0.92rem; }
+.prov .p span { color: var(--ink); font-size: 0.86rem; line-height: 1.45; }
+.prov .p1 { color: var(--p1); } .prov .p2 { color: var(--p2); } .prov .p3 { color: var(--p3); } .prov .p4 { color: var(--p4); }
+.firm { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
+@media (max-width: 680px) {
+  .prov { grid-template-columns: 1fr; gap: 14px; }
+  .prov .p { margin-right: 0; }
+  .prov .p:not(:last-child)::after { content: "↓"; right: auto; left: 50%; top: auto; bottom: -19px; }
+  .firm { display: none; }
+}
+
+/* 시간줄 */
+.timeline { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.timeline .t { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.timeline .t h3 { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.timeline .t ul { margin: 0; padding-left: 18px; font-size: 0.9rem; }
+@media (max-width: 680px) { .timeline { grid-template-columns: 1fr; } }
+
+/* 판정 */
+.judge { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-bottom: 14px; }
+.judge .c { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 0.9rem; line-height: 1.35; text-align: center; }
+.judge .c small { display: block; color: var(--muted); font-size: 0.78rem; }
+.judge .c.hum { background: var(--human); color: #fff; border-color: var(--human); font-weight: 700; }
+.judge .ar { color: var(--muted); font-weight: 700; }
+.verdict { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.verdict .v { border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.verdict .v h3 { font-size: 1.08rem; display: flex; align-items: center; gap: 8px; }
+.verdict .v h3 small { font-weight: 400; font-size: 0.8rem; color: var(--muted); }
+.verdict .v p { font-size: 0.9rem; }
+.verdict .ok { background: var(--good-soft); } .verdict .ok h3 { color: var(--good); }
+.verdict .no { background: var(--bad-soft); } .verdict .no h3 { color: var(--bad); }
+.verdict .un { background: var(--wait-soft); } .verdict .un h3 { color: var(--wait); }
+@media (max-width: 680px) { .verdict { grid-template-columns: 1fr; } }
+
+/* 범위 */
+.gate { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1.1fr); gap: 10px; align-items: center; }
+.gate .c { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 0.9rem; text-align: center; min-width: 0; }
+.gate .q { border: 2px dashed var(--accent); }
+.gate .ar { color: var(--muted); font-weight: 700; }
+.gate .ends { display: flex; flex-direction: column; gap: 8px; }
+.gate .ends .c { text-align: left; }
+.gate .ends .y { border-left: 5px solid var(--good); }
+.gate .ends .n { border-left: 5px solid var(--human); }
+@media (max-width: 640px) { .gate { grid-template-columns: 1fr; } .gate .ar { transform: rotate(90deg); justify-self: center; } }
+
+/* 역할 */
+.roles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.roles .r { border-radius: 14px; padding: 18px; min-width: 0; }
+.roles .r h3 { font-size: 1.05rem; margin-bottom: 8px; }
+.roles .r ul { margin: 0; padding-left: 18px; font-size: 0.92rem; }
+.roles .h { background: var(--human-soft); } .roles .h h3 { color: var(--human); }
+.roles .a { background: var(--agent-soft); } .roles .a h3 { color: var(--agent); }
+.roles .t { background: var(--tool-soft); } .roles .t h3 { color: var(--tool); }
+@media (max-width: 720px) { .roles { grid-template-columns: 1fr; } }
+
+/* 아직 없는 것 */
+.todo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.todo .x { border: 2px dashed var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.todo .x .tape { height: 10px; border-radius: 3px; background: repeating-linear-gradient(-45deg, var(--accent) 0 8px, var(--box) 8px 16px); width: 64px; }
+.todo .x p { font-size: 0.9rem; color: var(--muted); }
+@media (max-width: 720px) { .todo { grid-template-columns: 1fr; } }
+
+.section-title { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+footer { color: var(--muted); font-size: 0.86rem; border-top: 1px solid var(--line); padding-top: 18px; display: flex; flex-direction: column; gap: 4px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .ov .sq { transition: none; } }
+</style>
+</head>
+<body>
+
+<nav class="stepbar" aria-label="단계">
+  <div class="wrap">
+    <ol>
+      <li><a href="#s1"><span>1</span>설치</a></li>
+      <li><a href="#s2"><span>2</span>아이디어 고르기</a></li>
+      <li><a href="#s3"><span>3</span>약속서</a></li>
+      <li><a href="#s4"><span>4</span>만들 것 나누기</a></li>
+      <li><a href="#s5"><span>5</span>시험판</a></li>
+      <li><a href="#s6"><span>6</span>직접 해 보기</a></li>
+      <li><a href="#s7"><span>7</span>판정</a></li>
+      <li><a href="#scope"><span>+</span>범위 지키기</a></li>
+    </ol>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="hero-text">
+    <span class="kicker">ai-agent-studio · 게임 기획 스킬 13개</span>
+    <h1>그림으로 보는<br>사용 순서</h1>
+    <p class="lede"><b>아이디어를 시험할 수 있는 문장으로 바꾸고, 그림 없이 만들어 직접 해 본 뒤, 기록만 보고 맞았는지 정합니다.</b> 이 페이지는 그 순서를 단계마다 그림 한 장으로 보여 줍니다.</p>
+    <div class="legend">누가 하나 <span class="who h">🙋 사람</span><span class="who a">🤖 에이전트</span><span class="who t">🧮 도구</span></div>
+  </div>
+  <div class="hero-art" aria-hidden="true">
+    <svg viewBox="0 0 300 220">
+      <rect x="10" y="150" width="280" height="12" rx="3" class="grey"/>
+      <rect x="30" y="96" width="54" height="54" rx="6" class="grey"/>
+      <rect x="96" y="70" width="54" height="80" rx="6" class="acc"/>
+      <rect x="162" y="110" width="40" height="40" rx="6" class="grey"/>
+      <rect x="214" y="84" width="60" height="66" rx="6" class="grey"/>
+      <circle cx="123" cy="52" r="12" class="hum"/>
+      <rect x="40" y="176" width="220" height="10" rx="3" fill="url(#tape)"/>
+      <defs><pattern id="tape" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="14" class="acc"/><rect x="7" width="7" height="14" class="grey"/></pattern></defs>
+      <text x="150" y="208" text-anchor="middle" font-size="12" class="mut">그림 없는 시험판: 네모와 색만으로</text>
+    </svg>
+  </div>
+</header>
+
+<!-- 한눈에 -->
+<section class="overview" aria-labelledby="ov-h">
+  <h2 id="ov-h">한눈에 보기</h2>
+  <div class="ov-row">
+    <a class="ov" href="#s1"><div class="sq">1</div><span class="nm">설치</span></a>
+    <a class="ov" href="#s2"><div class="sq">2</div><span class="nm">아이디어 고르기</span></a>
+    <a class="ov" href="#s3"><div class="sq">3</div><span class="nm">약속서 쓰기</span></a>
+    <a class="ov" href="#s4"><div class="sq">4</div><span class="nm">만들 것 나누기</span></a>
+    <a class="ov hl" href="#s5"><div class="sq">5</div><span class="nm">그림 없는 시험판</span></a>
+    <a class="ov" href="#s6"><div class="sq">6</div><span class="nm">직접 해 보기</span></a>
+    <a class="ov" href="#s7"><div class="sq">7</div><span class="nm">판정</span></a>
+  </div>
+  <div class="ov-back">
+    <div class="g"><b>✅ 맞았다</b>숫자와 레벨을 다듬는다</div>
+    <div class="b"><b>❌ 틀렸다</b>규칙을 고쳐 다시 하거나 2번으로</div>
+    <div class="w"><b>❔ 아직 모른다</b>모자란 것을 채워 6번 다시</div>
+  </div>
+</section>
+
+<!-- 1 -->
+<section class="step" id="s1">
+  <div class="step-top">
+    <div class="badge">1</div>
+    <div class="step-head">
+      <h2>게임 폴더에 설치한다</h2>
+      <div class="roles-line"><span class="who h">🙋 사람</span></div>
+      <p>게임 폴더 안에 스킬 13개를 모두 넣습니다. 필요한 것은 Node.js(설치할 때만)와 Python 3.9 이상입니다.</p>
+    </div>
+  </div>
+  <div class="two">
+    <div class="fig">
+<div class="tree" aria-label="설치 뒤 폴더"><span class="n">내-게임/</span>
+├─ .claude/
+│  ├─ skills/        <span class="c">← 스킬 13개</span>
+│  ├─ agents/        <span class="c">← 판정 에이전트</span>
+│  └─ settings.json  <span class="c">← 자동 검사</span>
+├─ design/           <span class="c">← 아이디어·약속서</span>
+├─ data/             <span class="c">← 게임 숫자</span>
+└─ playtests/        <span class="c">← 플레이 기록</span></div>
+    </div>
+    <div class="cmds">
+      <div><div class="cmd-label">① 스킬 넣기 (Claude Code)</div>
+        <div class="cmd"><pre>npx skills add silbaram/ai-agent-studio --skill '*' --agent claude-code --copy</pre><button type="button" data-copy>복사</button></div></div>
+      <div><div class="cmd-label">② 판정 에이전트와 자동 검사 넣기</div>
+        <div class="cmd"><pre>python3 .claude/skills/studio-data/scripts/studio.py setup claude .</pre><button type="button" data-copy>복사</button></div></div>
+      <div><div class="cmd-label">③ 데이터를 브라우저로 보기 (뷰어)</div>
+        <div class="cmd"><pre>python3 .claude/skills/studio-data/scripts/studio.py view .</pre><button type="button" data-copy>복사</button></div></div>
+    </div>
+  </div>
+  <p class="cap">Codex와 Windows는 명령이 조금 다릅니다. <a href="../README.md#설치">README의 설치</a>를 보세요.</p>
+</section>
+
+<!-- 2 -->
+<section class="step" id="s2">
+  <div class="step-top">
+    <div class="badge">2</div>
+    <div class="step-head">
+      <h2>아이디어 후보를 걸러 하나를 고른다</h2>
+      <div class="roles-line"><span class="who a">🤖 후보 만들기</span><span class="who h">🙋 고르기</span></div>
+      <p>에이전트가 후보를 많이 만들고 걸러서 몇 개만 보여 줍니다. <b>고르는 것은 사람입니다.</b> "가장 재미있어 보이는 것"으로 점수를 매기지 않습니다.</p>
+    </div>
+  </div>
+  <div class="fig">
+    <div class="funnel">
+      <div class="bar" style="width:100%">원하는 것 묻기 (5개 이하)<small>한 판 길이, 원하는 느낌, 피할 것…</small></div>
+      <div class="dn">▼</div>
+      <div class="bar" style="width:86%">서로 다른 후보 12개</div>
+      <div class="dn">▼</div>
+      <div class="bar" style="width:72%">쉬운 꼼수로 깨 보기<small>가만히 있기, 버튼 하나만 누르기…</small></div>
+      <div class="dn">▼</div>
+      <div class="bar" style="width:58%">겹치는 후보 정리</div>
+      <div class="dn">▼</div>
+      <div class="bar" style="width:46%">비교표 3~5개</div>
+      <div class="dn">▼</div>
+      <div class="bar pick" style="width:38%">🙋 하나를 고른다</div>
+    </div>
+  </div>
+  <ul class="points">
+    <li>꼼수 하나로 이기는 후보는 규칙을 하나 바꿔 다시 봅니다. 정말 안 되는 것만 뺍니다.</li>
+    <li>뺀 후보도 지우지 않고 이유와 함께 남깁니다.</li>
+    <li><b>이미 만들고 있는 게임이면</b> 후보를 만들지 않고 3번으로 바로 갑니다.</li>
+  </ul>
+  <div class="say"><div class="face">나</div><div class="bubble"><small>이렇게 말하면 됩니다</small>$concept-exploration으로 혼자 만드는, 한 판이 짧은 카드 게임 아이디어를 찾아줘. 재미 점수로 고르지 말고 구조가 다른 후보를 비교표로 보여줘.</div></div>
+</section>
+
+<!-- 3 -->
+<section class="step" id="s3">
+  <div class="step-top">
+    <div class="badge">3</div>
+    <div class="step-head">
+      <h2>고른 아이디어를 약속서로 적는다</h2>
+      <div class="roles-line"><span class="who a">🤖 초안</span><span class="who h">🙋 다듬기</span><span class="who t">🧮 빠진 칸 검사</span></div>
+      <p>"이 게임은 이것을 지키고, 이것은 하지 않는다"는 약속서(브리프)입니다. 아직 숫자를 정하는 단계가 아닙니다.</p>
+    </div>
+  </div>
+  <div class="fig">
+    <div class="brief">
+      <div class="cell"><div class="ic">💭</div><h3>느끼게 할 것</h3><p>한 문장</p></div>
+      <div class="cell"><div class="ic">📌</div><h3>꼭 지킬 것</h3><p>2~5개</p></div>
+      <div class="cell"><div class="ic">🚫</div><h3>안 할 것</h3><p>1개 이상</p></div>
+      <div class="cell"><div class="ic">🔁</div><h3>반복 구조</h3><p>30초 / 한 판 / 판 사이</p></div>
+      <div class="cell star"><div class="ic">⭐</div><h3>가설</h3><p>"이럴 것이다" + "이러면 틀린 것" + 몇 명이 몇 판</p></div>
+      <div class="cell star"><div class="ic">⭐</div><h3>가장 작은 시험판</h3><p>하루~사흘에 만들 범위</p></div>
+      <div class="cell"><div class="ic">📦</div><h3>처음 만들 것</h3><p>7개 이하</p></div>
+      <div class="cell"><div class="ic">✂️</div><h3>안 만들 것</h3><p>목록</p></div>
+      <div class="cell"><div class="ic">🏷️</div><h3>숫자에 출처</h3><p>판정 기준의 숫자에는 [가정] 같은 표시</p></div>
+    </div>
+  </div>
+  <p class="cap">⭐ 두 칸이 뒤의 모든 단계의 기준이 됩니다. 도구는 빠진 칸이 있는지만 검사합니다. 가설이 정말 틀릴 수 있는 문장인지는 사람이 봅니다.</p>
+</section>
+
+<!-- 4 -->
+<section class="step" id="s4">
+  <div class="step-top">
+    <div class="badge">4</div>
+    <div class="step-head">
+      <h2>만들 것(시스템)을 나누고 순서를 본다</h2>
+      <div class="roles-line"><span class="who a">🤖 나누기</span><span class="who t">🧮 순서와 경고</span></div>
+      <p>전투, 성장, 상점처럼 필요한 시스템을 나누고, 무엇이 무엇에 기대는지 적습니다. 도구가 만드는 순서를 알려 줍니다.</p>
+    </div>
+  </div>
+  <div class="fig scroll">
+    <div class="svg-min">
+    <svg viewBox="0 0 640 220" role="img" aria-label="약속서의 꼭 지킬 것이 시스템에 이어지고, 의존에 따라 만드는 순서가 나오는 그림">
+      <text x="10" y="20" class="mut" font-size="12">약속서</text>
+      <rect x="10" y="32" width="128" height="36" rx="8" class="acc"/><text x="74" y="55" text-anchor="middle" font-size="13" class="acc-t" font-weight="700">꼭 지킬 것 A</text>
+      <rect x="10" y="80" width="128" height="36" rx="8" class="acc"/><text x="74" y="103" text-anchor="middle" font-size="13" class="acc-t" font-weight="700">꼭 지킬 것 B</text>
+      <rect x="10" y="168" width="128" height="36" rx="8" fill="none" class="bad-s" stroke-width="1.6" stroke-dasharray="5 4"/><text x="74" y="191" text-anchor="middle" font-size="13" class="bad-t">안 만들 것</text>
+
+      <text x="214" y="20" class="mut" font-size="12">시스템</text>
+      <rect x="214" y="32" width="136" height="36" rx="8" class="bx"/><text x="282" y="55" text-anchor="middle" font-size="13">이동·전투</text>
+      <rect x="214" y="80" width="136" height="36" rx="8" class="bx"/><text x="282" y="103" text-anchor="middle" font-size="13">판 안 성장</text>
+      <rect x="214" y="124" width="136" height="36" rx="8" class="bx"/><text x="282" y="147" text-anchor="middle" font-size="13">상점·재화</text>
+      <rect x="214" y="168" width="136" height="36" rx="8" fill="none" class="bad-s" stroke-width="1.6" stroke-dasharray="5 4"/><text x="282" y="191" text-anchor="middle" font-size="13" class="bad-t">온라인 순위 ⚠</text>
+
+      <path class="ln" d="M138 50 H214"/><path class="ln" d="M138 98 H214"/><path class="ln" d="M138 98 C176 98 176 142 214 142"/>
+      <path d="M138 186 H214" fill="none" class="bad-s" stroke-width="1.6" stroke-dasharray="5 4"/>
+      <text x="176" y="180" text-anchor="middle" font-size="11" class="bad-t">경고</text>
+
+      <text x="430" y="20" class="mut" font-size="12">만드는 순서</text>
+      <circle cx="446" cy="50" r="15" class="hum"/><text x="446" y="55" text-anchor="middle" font-size="13" fill="#fff" font-weight="700">1</text><text x="472" y="55" font-size="13">이동·전투</text>
+      <circle cx="446" cy="98" r="15" class="hum"/><text x="446" y="103" text-anchor="middle" font-size="13" fill="#fff" font-weight="700">2</text><text x="472" y="103" font-size="13">판 안 성장</text>
+      <circle cx="446" cy="142" r="15" class="hum"/><text x="446" y="147" text-anchor="middle" font-size="13" fill="#fff" font-weight="700">3</text><text x="472" y="147" font-size="13">상점·재화</text>
+      <path class="ln" d="M446 65 V83"/><path class="ln" d="M446 113 V127"/>
+    </svg>
+    </div>
+  </div>
+  <ul class="points">
+    <li>어떤 약속에도 이어지지 않거나 "안 만들 것"에 걸리는 시스템은 경고가 나옵니다.</li>
+    <li>무엇부터 만들지, 시험판에 무엇을 넣을지는 사람이 정합니다.</li>
+  </ul>
+</section>
+
+<!-- 5 -->
+<section class="step" id="s5">
+  <div class="step-top">
+    <div class="badge">5</div>
+    <div class="step-head">
+      <h2>그림 없는 시험판을 만든다</h2>
+      <div class="roles-line"><span class="who a">🤖 게임 코드</span><span class="who t">🧮 계산과 검사</span></div>
+      <p>시험판은 네모와 색만으로 만듭니다. 재미를 확인하는 데 그림은 필요 없습니다. 게임 코드는 평소처럼 에이전트와 만듭니다(이 스킬들이 코드를 대신 짜지는 않습니다).</p>
+    </div>
+  </div>
+  <p><b>숫자는 처음부터 <code>data/</code> 파일 한 곳에 둡니다.</b> 게임도, 밸런스 계산도 같은 파일을 읽습니다.</p>
+  <div class="fig scroll">
+    <div class="svg-min">
+    <svg viewBox="0 0 640 262" role="img" aria-label="게임과 밸런스 스킬 여섯 개가 data 폴더의 같은 파일을 읽는 그림">
+      <rect x="10" y="104" width="150" height="54" rx="10" fill="none" stroke="var(--ink)" stroke-width="1.6" stroke-dasharray="6 4"/>
+      <text x="85" y="128" text-anchor="middle" font-size="13" font-weight="700">회색 상자 게임</text>
+      <text x="85" y="146" text-anchor="middle" font-size="11" class="mut">파일을 읽어 씀</text>
+      <path class="ln" d="M160 131 H244"/>
+      <text x="202" y="124" text-anchor="middle" font-size="11" class="mut">읽음</text>
+
+      <rect x="244" y="98" width="150" height="66" rx="12" class="acc"/>
+      <text x="319" y="126" text-anchor="middle" font-size="15" class="acc-t" font-weight="700">data/*.json</text>
+      <text x="319" y="146" text-anchor="middle" font-size="11" class="acc-t">숫자는 여기 한 곳</text>
+
+      <g font-size="12">
+        <rect x="452" y="8" width="180" height="34" rx="8" class="bx"/><text x="542" y="30" text-anchor="middle">몇 대에 잡나</text>
+        <rect x="452" y="50" width="180" height="34" rx="8" class="bx"/><text x="542" y="72" text-anchor="middle">단계별로 너무 센가</text>
+        <rect x="452" y="92" width="180" height="34" rx="8" class="bx"/><text x="542" y="114" text-anchor="middle">레벨업 선택이 고른가</text>
+        <rect x="452" y="134" width="180" height="34" rx="8" class="bx"/><text x="542" y="156" text-anchor="middle">강화·합성 비용</text>
+        <rect x="452" y="176" width="180" height="34" rx="8" class="bx"/><text x="542" y="198" text-anchor="middle">돈이 언제 모이나</text>
+        <rect x="452" y="218" width="180" height="34" rx="8" class="bx"/><text x="542" y="240" text-anchor="middle">방과 웨이브 배치</text>
+      </g>
+      <g class="ln">
+        <path d="M394 131 C424 131 424 25 452 25"/><path d="M394 131 C424 131 424 67 452 67"/><path d="M394 131 C424 131 424 109 452 109"/>
+        <path d="M394 131 C424 131 424 151 452 151"/><path d="M394 131 C424 131 424 193 452 193"/><path d="M394 131 C424 131 424 235 452 235"/>
+      </g>
+      <text x="319" y="200" text-anchor="middle" font-size="11" class="mut">check 하나로 서로 어긋난 곳을 찾는다</text>
+    </svg>
+    </div>
+  </div>
+
+  <h3>숫자 옆에는 어디서 왔는지 표시합니다</h3>
+  <div>
+    <div class="prov">
+      <div class="p p1"><b>[가정]</b><span>일단 정한 값</span></div>
+      <div class="p p2"><b>[계산]</b><span>도구로 맞춘 값</span></div>
+      <div class="p p3"><b>[결정]</b><span>사람이 정한 기준</span></div>
+      <div class="p p4"><b>[측정]</b><span>플레이 기록에서 잰 값</span></div>
+    </div>
+    <div class="firm"><span>말랑한 숫자</span><span>단단한 숫자</span></div>
+  </div>
+  <p class="cap"><code>[가정]</code>이 남아 있으면 "확정"이라고 말하지 못합니다. Claude Code에서는 파일을 고칠 때마다 검사가 자동으로 돕니다. 직접 돌릴 때는 아래 명령입니다.</p>
+  <div class="cmd"><pre>python3 .claude/skills/studio-data/scripts/studio.py check .</pre><button type="button" data-copy>복사</button></div>
+</section>
+
+<!-- 6 -->
+<section class="step" id="s6">
+  <div class="step-top">
+    <div class="badge">6</div>
+    <div class="step-head">
+      <h2>직접 해 보고 기록한다</h2>
+      <div class="roles-line"><span class="who h">🙋 플레이</span><span class="who a">🤖 기록</span></div>
+      <p>재미는 <b>사람이 직접 해 본 기록</b>으로만 정합니다. 결과를 본 뒤 기준을 바꾸면 안 되므로, 기준은 플레이 전에 정합니다.</p>
+    </div>
+  </div>
+  <div class="timeline">
+    <div class="t"><h3>🙋 플레이 전</h3><ul>
+      <li>몇 명이 몇 판 할지</li>
+      <li>어디부터 틀렸다고 볼지</li>
+      <li>화면에 필요한 것이 보이는지</li></ul></div>
+    <div class="t"><h3>🙋 플레이</h3><ul>
+      <li>사람이 직접 한다</li>
+      <li>봇이 돌린 판은 봇이라고 표시</li></ul></div>
+    <div class="t"><h3>🤖 플레이 뒤</h3><ul>
+      <li><code>data/playtests.json</code>에 기록</li>
+      <li>말한 것과 로그에 있는 것만 적는다</li></ul></div>
+  </div>
+  <div class="say"><div class="face">나</div><div class="bubble"><small>이렇게 말하면 됩니다</small>$playtest-verdict로 오늘 플레이한 것 기록해줘. 나 혼자 5판 했고 빌드는 지금 커밋이야. 판정은 studio-judge에게 맡겨서 제안만 보여줘.</div></div>
+</section>
+
+<!-- 7 -->
+<section class="step" id="s7">
+  <div class="step-top">
+    <div class="badge">7</div>
+    <div class="step-head">
+      <h2>기록만 보고 판정한다</h2>
+      <div class="roles-line"><span class="who a">🤖 심판이 제안</span><span class="who h">🙋 확정</span></div>
+      <p>판정은 <b>기록만 읽는 심판 에이전트</b>(<code>studio-judge</code>)가 제안하고, <b>사람이 확정합니다.</b> 심판은 파일을 고칠 수 없습니다(Claude Code).</p>
+    </div>
+  </div>
+  <div class="fig">
+    <div class="judge">
+      <div class="c">플레이 기록</div><span class="ar">→</span>
+      <div class="c">🤖 심판<small>기록만 읽음</small></div><span class="ar">→</span>
+      <div class="c">판정 제안</div><span class="ar">→</span>
+      <div class="c hum">🙋 사람이 확정</div>
+    </div>
+    <div class="verdict">
+      <div class="v ok"><h3>✅ 맞았다 <small>버팀</small></h3><p>잰 값을 [측정]으로 올리고 숫자와 레벨을 다듬습니다.</p></div>
+      <div class="v no"><h3>❌ 틀렸다 <small>틀림</small></h3><p>규칙 하나를 고쳐 다시 시험하거나, 2번으로 돌아가 다른 아이디어를 고릅니다.</p></div>
+      <div class="v un"><h3>❔ 아직 모른다 <small>모름</small></h3><p>실패가 아닙니다. 모자란 것을 채워 6번을 다시 합니다.</p></div>
+    </div>
+  </div>
+  <div><div class="cmd-label">확정하기 전에 [가정]이 남았는지 막는 검사</div>
+    <div class="cmd"><pre>python3 .claude/skills/studio-data/scripts/studio.py check . --fail-on-assumed</pre><button type="button" data-copy>복사</button></div></div>
+</section>
+
+<!-- 범위 -->
+<section class="step" id="scope">
+  <div class="step-top">
+    <div class="badge plain">+</div>
+    <div class="step-head">
+      <h2>늘 옆에서: 범위 지키기</h2>
+      <div class="roles-line"><span class="who t">🧮 scope-guard</span><span class="who h">🙋 넓힐지 정하기</span></div>
+      <p>만들다 보면 처음 약속보다 기능이 늘어납니다. 개발 작업을 <a href="https://github.com/Fission-AI/OpenSpec">OpenSpec</a>(따로 설치하는 외부 도구)으로 나누면, 그 작업이 약속서의 범위 안인지 봅니다. Claude Code에서는 범위를 넓히는 편집 앞에서 사용자에게 묻습니다.</p>
+    </div>
+  </div>
+  <div class="fig">
+    <div class="gate">
+      <div class="c">개발 작업</div><span class="ar">→</span>
+      <div class="c q">약속서의 범위 안?</div><span class="ar">→</span>
+      <div class="ends"><div class="c y">예 → 그대로 진행</div><div class="c n">아니오 → 🙋 넓힐지 사람이 정한다</div></div>
+    </div>
+  </div>
+  <p class="cap">OpenSpec을 쓰지 않으면 이 부분만 빠지고 나머지는 그대로 씁니다.</p>
+</section>
+
+<!-- 역할 -->
+<div class="section-title"><h2>누가 무엇을 하나</h2></div>
+<div class="roles">
+  <div class="r h"><h3>🙋 사람</h3><ul>
+    <li>아이디어를 고른다</li><li>틀렸다고 볼 기준을 정한다</li><li>직접 플레이한다</li><li>판정을 확정한다</li><li>범위를 넓힐지 정한다</li></ul></div>
+  <div class="r a"><h3>🤖 에이전트</h3><ul>
+    <li>후보와 약속서 초안을 쓴다</li><li>시험판 코드를 만든다</li><li>기록을 옮겨 적는다</li><li>모르는 것은 정하지 않고 묻는다</li></ul></div>
+  <div class="r t"><h3>🧮 도구</h3><ul>
+    <li>처치 시간, 비용, 돈 흐름을 계산한다</li><li>빠진 칸과 어긋난 숫자를 찾는다</li><li>뷰어로 보여 준다</li><li>재미는 계산하지 않는다</li></ul></div>
+</div>
+
+<!-- 아직 -->
+<div class="section-title"><h2>아직 하지 않는 것</h2></div>
+<div class="todo">
+  <div class="x"><div class="tape" aria-hidden="true"></div><h3>엔진 고르기</h3><p>처음에 "엔진 후보"를 적어 두기만 합니다. 데이터는 어느 엔진이든 읽을 수 있는 JSON/CSV로 두지만, 엔진별로 확인하지는 않았습니다.</p></div>
+  <div class="x"><div class="tape" aria-hidden="true"></div><h3>본 게임으로 넘어가기</h3><p>가설이 맞은 뒤 시험판을 본 게임으로 어떻게 다시 만들지 정한 단계가 없습니다.</p></div>
+  <div class="x"><div class="tape" aria-hidden="true"></div><h3>그래픽과 사운드</h3><p>재미를 확인한 뒤 <a href="https://github.com/silbaram/game-art-skills">game-art-skills</a>로 넘길 계획이고, 그 연결은 보류 중입니다.</p></div>
+</div>
+
+<footer>
+  <span>말뜻은 <a href="guide.md#꼭-알아-둘-말">쉬운 안내</a>, 설치와 명령은 <a href="../README.md">README</a>, 자세한 규칙은 각 스킬의 <code>SKILL.md</code>에 있습니다.</span>
+  <span>이 파일은 저장소를 받은 뒤 브라우저로 열어 봅니다.</span>
+</footer>
+
+</div>
+
+<script>
+document.querySelectorAll("[data-copy]").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    var pre = btn.parentElement.querySelector("pre");
+    function selectIt() {
+      var r = document.createRange(); r.selectNodeContents(pre);
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      btn.textContent = "선택됨";
+    }
+    try {
+      navigator.clipboard.writeText(pre.textContent).then(function () { btn.textContent = "복사됨"; }, selectIt);
+    } catch (e) { selectIt(); }
+    setTimeout(function () { btn.textContent = "복사"; }, 1600);
+  });
+});
+</script>
+</body>
+</html>
