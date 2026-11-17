@@ -303,5 +303,36 @@ class DraftReviewFixes(unittest.TestCase):
         self.assertNotIn("확인하기 전에는 정해진 것이 아니다", step2)
 
 
+class FieldTestFixes(unittest.TestCase):
+    """현장 시험(2026-11-17)에서 찾은 377·378."""
+
+    def test_prototype_evidence_has_its_own_marker(self):
+        step3 = read(DOC).split("### 3.")[1].split("### 4.")[0]
+        self.assertIn("통과(시험판)", step3)
+        self.assertIn("통과(시험판)", read(RECORD))
+
+    def test_step1_stop_writes_no_new_record(self):
+        step1 = read(DOC).split("### 1.")[1].split("### 2.")[0]
+        self.assertIn("기록을 새로 만들지 않고", step1)
+        self.assertIn("이미 기록이 있으면", step1)
+
+    def test_substituted_trial_marker(self):
+        step2 = read(DOC).split("### 2.")[1].split("### 3.")[0]
+        self.assertIn("대신한 확인은 `통과(시험판)`", step2)
+
+    def test_substituted_trial_does_not_grade_knowledge(self):
+        risk = read(TRIAL).split("## 지식 위험")[1].split("\n## ")[0]
+        self.assertIn("시험판으로 대신했으면", risk)
+        self.assertIn("확인하지 못함", risk)
+        risks = read(TRIAL).split("## 위험 목록")[1]
+        self.assertIn("확인하지 못함인 까닭", risks)
+
+    def test_record_template_shows_prototype_evidence(self):
+        record = read(RECORD)
+        self.assertIn("통과(시험판): <", record)
+        field = [l for l in record.splitlines() if l.startswith("| 후보의 통과·실패 |")][0]
+        self.assertIn("세션 id", field)
+
+
 if __name__ == "__main__":
     unittest.main()
