@@ -205,7 +205,7 @@ class ReviewFixes(unittest.TestCase):
         step5 = self.step(5)
         self.assertIn("git grep -n", step5)
         self.assertNotIn("grep -rn", step5)
-        self.assertIn("원본 복사본", step5)
+        self.assertIn("원본으로 남긴 폴더", step5)
 
     def test_dev_build_tools_follow_the_step2_condition(self):
         self.assertIn("가설의 `test`가", self.step(5))
@@ -332,6 +332,89 @@ class FieldTestFixes(unittest.TestCase):
         self.assertIn("통과(시험판): <", record)
         field = [l for l in record.splitlines() if l.startswith("| 후보의 통과·실패 |")][0]
         self.assertIn("세션 id", field)
+
+
+class RealRunFixes(unittest.TestCase):
+    """my-cards 실제 넘어가기(2026-11-17)에서 찾은 379~382."""
+
+    @staticmethod
+    def step(n):
+        return read(DOC).split(f"### {n}.")[1].split(f"### {n + 1}.")[0]
+
+    def test_no_engine_pins_build_tool_versions(self):
+        step4 = self.step(4)
+        self.assertIn("엔진 없이", step4)
+        self.assertIn("빌드 도구", step4)
+        self.assertIn("lock 파일", step4)
+        chosen = read(RECORD).split("### 고른 엔진")[1].split("## 시험판")[0]
+        self.assertIn("빌드 도구", chosen)
+
+    def test_grow_keeps_the_original_where_records_point(self):
+        first = read(GROW).split("## 순서")[1].split("\n2. ")[0]
+        self.assertIn("경로를 가리키면", first)
+        self.assertIn("새 폴더", first)
+        self.assertIn("본 게임 코드 폴더: <", read(RECORD))
+        self.assertNotIn("원본 복사 위치", read(RECORD))
+
+    def test_isolation_searches_the_original_folder(self):
+        step5 = self.step(5)
+        self.assertIn("원본으로 남긴 폴더", step5)
+        self.assertNotIn("본 게임 코드가 시험판 폴더에서 자라므로", step5)
+
+    def test_detection_skips_the_kept_original(self):
+        found = read(TRIAL).split("## 이미 쓰는 엔진 알아보기")[1].split("\n## ")[0]
+        self.assertIn("시험판 보관 위치", found)
+
+    def test_recheck_is_not_the_copy_right_after_growing(self):
+        step7 = self.step(7)
+        self.assertIn("키워 간 직후", step7)
+        self.assertIn("화면과 조작", step7)
+
+    def test_screen_only_build_is_told_apart(self):
+        step7 = self.step(7)
+        self.assertIn("화면만 바꾸", step7)
+        self.assertIn("화면 판", step7)
+        recheck = read(RECORD).split("## 본 게임 빌드에서 다시 확인")[1].split("## 넘어가기 판정")[0]
+        self.assertIn("가르는 것", recheck)
+        self.assertIn("화면과 조작", recheck)
+
+
+class RealRunReviewFixes(unittest.TestCase):
+    """379~382 수정의 먼저 검토(2026-11-17)."""
+
+    step = staticmethod(RealRunFixes.step)
+
+    def test_no_screen_change_means_no_main_hypotheses(self):
+        step7 = self.step(7)
+        self.assertIn("다시 확인할 변화 없음", step7)
+        self.assertIn("`_main` 가설을 더하지 않고", step7)
+
+    def test_screen_version_lives_in_game_build(self):
+        step7 = self.step(7)
+        self.assertIn("화면 판", step7)
+        self.assertNotIn("커밋만 적는다", step7)
+        self.assertIn("플레이 중에 화면을 고쳐도", step7)
+
+    def test_only_visible_information_goes_in_first(self):
+        step7 = self.step(7)
+        self.assertNotIn("본 게임에 넣을 것은", step7)
+        self.assertIn("넣을 정보는 다시 확인 전에", step7)
+
+    def test_no_engine_pin_waits_for_the_game_folder(self):
+        step4 = self.step(4)
+        self.assertIn("5단계에서", step4)
+        self.assertIn("시험판의 프로젝트 파일은 고치지 않는다", step4)
+
+    def test_one_field_for_the_original(self):
+        record = read(RECORD)
+        self.assertNotIn("원본 위치", record)
+        self.assertNotIn("원본 위치", read(TRIAL))
+        self.assertIn("'시험판 보관 위치'", self.step(5))
+
+    def test_field_row_links_instead_of_restating(self):
+        row = [l for l in read(RECORD).splitlines() if l.startswith("| 키워 간 직후 빌드와 가르는 것 |")][0]
+        self.assertNotIn("화면만 바꾸면", row)
+        self.assertIn("SKILL.md", row)
 
 
 if __name__ == "__main__":
