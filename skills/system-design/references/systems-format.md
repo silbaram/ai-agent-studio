@@ -15,6 +15,7 @@
       "mvp": ["템포 3단계"],
       "rules": [{ "id": "tempo_up", "text": "패링에 성공하면 템포가 한 단계 오른다" }],
       "depends_on": ["combat_input"],
+      "hypotheses": ["tempo_choice"],
       "status": "approved"
     }
   ]
@@ -45,6 +46,7 @@
 | `out_of_scope` | 아니오 | 가리키는 범위 밖 항목. 브리프 `out_of_scope`의 문구 그대로 |
 | `rules` | 아니오 | 규칙 `{id, text, note}` 배열. `id`는 시스템 안에서 겹치지 않는다 |
 | `depends_on` | 아니오 | 먼저 있어야 하는 시스템 id 배열 |
+| `hypotheses` | 아니오 | 이 시스템을 써서 시험하는 브리프 가설의 id 배열(브리프 `hypotheses`의 `id` 그대로). 가설의 `test`가 플레이에서 이 시스템을 거쳐야 결과가 나오면 적는다 |
 | `status` | 아니오 | `proposed`, `approved`, `cut`. `cut`은 계산에서 뺀다 |
 | `acknowledged` | 아니오 | 확인한 경고 `{코드: 이유}`나 `{코드: {대상: 이유}}`. 오류는 확인으로 끄지 못한다 |
 
@@ -65,6 +67,7 @@
 | `brief_missing` | 오류 | 컨셉에 브리프가 없음 |
 | `unknown_pillar`, `unknown_mvp`, `unknown_out_of_scope` | 오류 | 브리프에 없는 문구. 브리프의 범위 밖 항목이면 이 코드 대신 `out_of_scope_claimed` |
 | `unknown_system` | 오류 | `depends_on`이 없는 시스템을 가리킴 |
+| `unknown_hypothesis` | 오류 | `hypotheses`가 브리프에 없는 가설 id를 가리킴 |
 | `cut_referenced` | 경고 | 삭제된 시스템에 의존함, 삭제된 컨셉에 이음. 되돌리며 `cut`한 컨셉이면 다음 컨셉을 고를 때까지 그대로 둔다 |
 | `pillar_unserved` | 경고 | 범위가 `mvp`인 시스템이 맡지 않는 필러. 일부러 미룬 것이면 어느 시스템에서든 `{"pillar_unserved": {필러 이름: 이유}}`로 확인한다 |
 | `mvp_unserved` | 경고 | 범위가 `mvp`인 시스템이 맡지 않는 MVP 항목. 확인은 `pillar_unserved`와 같다 |
@@ -76,7 +79,8 @@
 | `scope_mismatch` | 경고 | `mvp`인데 MVP 항목이 없음(기반 시스템 제외), `mvp`가 아닌데 MVP 항목을 맡음, `out`인데 범위 밖 항목이 없음(이름·의도·규칙 글에 나오는 범위 밖 항목이 있으면 메시지에 적는다) |
 | `system_without_pillar` | 경고 | `out`이 아닌데 필러가 없음(기반 시스템 제외) |
 | `system_without_rules` | 경고 | `out`이 아닌데 규칙이 없음 |
-| `duplicate_item` | 경고 | `pillars`, `mvp`, `out_of_scope`, `depends_on`에 같은 항목이 두 번 있음 |
+| `system_untested` | 경고 | 범위가 `mvp`인데 `hypotheses`가 없음(기반 시스템 제외). 브리프에 id가 있는 가설이 없으면 보지 않는다. 시험하지 않기로 했으면 그 시스템에서 `{"system_untested": 까닭}`으로 확인한다. 확인해도 `check`의 '가설 없이 만드는 MVP 시스템' 줄에 남는다 |
+| `duplicate_item` | 경고 | `pillars`, `mvp`, `out_of_scope`, `depends_on`, `hypotheses`에 같은 항목이 두 번 있음 |
 
 형식 오류가 난 시스템은 계산과 표에서 빠지고, `check`가 빠진 시스템과 그 수를 적는다. 시스템 수는 빠진 것도 센다. 상태별 수는 id와 상태를 읽은 시스템만 센다(형식 오류로 빠졌어도 id와 상태가 맞으면 센다). 빠진 시스템이 있으면 그 시스템에 대한 의존을 없는 시스템으로 말하지 않고, `pillar_unserved`와 `mvp_unserved`를 보지 않는다.
 

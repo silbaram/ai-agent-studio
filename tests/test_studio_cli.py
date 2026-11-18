@@ -57,7 +57,7 @@ class Check(unittest.TestCase):
     def test_whole_sample_project_passes(self):
         code, out = run_cli("check", self.root)
         self.assertEqual(code, 0)
-        self.assertIn("전체: 파일 12개 · 오류 0 · 경고 0 · 확인한 경고 1 → PASS", out)
+        self.assertIn("전체: 파일 12개 · 오류 0 · 경고 0 · 확인한 경고 3 → PASS", out)
 
     def test_json_payload_lists_every_dataset(self):
         code, out = run_cli("check", self.root, "--json")

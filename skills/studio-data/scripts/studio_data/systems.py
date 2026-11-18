@@ -12,10 +12,10 @@ from .common import add_issue as _err, did_you_mean
 
 SCOPES = {"mvp": "MVP", "later": "나중", "out": "범위 밖"}
 TOP_FIELDS = {"concept", "systems", "note"}
-SYSTEM_FIELDS = {"id", "name", "intent", "scope", "foundation", "pillars", "mvp", "out_of_scope", "rules", "depends_on", "status", "provenance", "acknowledged", "note"}
+SYSTEM_FIELDS = {"id", "name", "intent", "scope", "foundation", "pillars", "mvp", "out_of_scope", "rules", "depends_on", "hypotheses", "status", "provenance", "acknowledged", "note"}
 RULE_FIELDS = {"id", "text", "note"}
 LINKS = (("pillars", "unknown_pillar", "필러"), ("mvp", "unknown_mvp", "MVP 항목"), ("out_of_scope", "unknown_out_of_scope", "범위 밖 항목"))  # 키, 오류 코드, 이름
-LISTS = ("pillars", "mvp", "out_of_scope", "depends_on")
+LISTS = ("pillars", "mvp", "out_of_scope", "depends_on", "hypotheses")
 
 
 def _nfc(text: str) -> str:
@@ -48,7 +48,7 @@ def _pick_concept(data: dict, concepts: list, errors: list, warnings: list) -> d
 
 
 def _brief_items(concept: dict | None, errors: list) -> dict | None:
-    """브리프의 {pillars, mvp, out_of_scope} 목록. 브리프가 없으면 오류를 남기고 None."""
+    """브리프의 {pillars, mvp, out_of_scope, hypotheses(가설 id)} 목록. 브리프가 없으면 오류를 남기고 None."""
     if concept is None:
         return None
     brief = concept.get("brief")
@@ -57,7 +57,9 @@ def _brief_items(concept: dict | None, errors: list) -> dict | None:
         return None
     pillars = brief.get("pillars")
     texts = {k: [_nfc(x) for x in brief.get(k) or [] if isinstance(x, str)] if isinstance(brief.get(k) or [], list) else [] for k in ("mvp", "out_of_scope")}
-    return {"pillars": [_nfc(p["name"]) for p in pillars if isinstance(p, dict) and isinstance(p.get("name"), str)] if isinstance(pillars, list) else [], **texts}
+    hyps = brief.get("hypotheses")
+    ids = [h["id"] for h in hyps if isinstance(h, dict) and isinstance(h.get("id"), str)] if isinstance(hyps, list) else []
+    return {"pillars": [_nfc(p["name"]) for p in pillars if isinstance(p, dict) and isinstance(p.get("name"), str)] if isinstance(pillars, list) else [], **texts, "hypotheses": ids}
 
 
 def _text_list(s: dict, key: str, errors: list) -> bool:
@@ -114,6 +116,9 @@ def _check_links(s: dict, items: dict, errors: list) -> None:
                      "만들려면 브리프를 바꿀지 사용자에게 묻습니다.")
             else:
                 _err(errors, code, s["id"], f"브리프에 없는 {label}입니다: {x}.{did_you_mean(x, items[key])} 브리프의 문구 그대로 적습니다.")
+    for x in s.get("hypotheses", []):
+        if x not in items["hypotheses"]:
+            _err(errors, "unknown_hypothesis", s["id"], f"브리프에 없는 가설 id입니다: {x}.{did_you_mean(x, items['hypotheses'])} 브리프 hypotheses의 id 그대로 적습니다.")
 
 
 def _check_repeats(s: dict, warnings: list) -> None:
@@ -162,6 +167,17 @@ def _check_scope(s: dict, items: dict | None, warnings: list) -> None:
         _err(warnings, "system_without_pillar", sid, "어떤 필러도 맡지 않습니다. 필러를 돕지 않는 시스템은 만들 이유를 다시 봅니다. 다른 시스템이 기대는 기반이면 foundation을 true로 둡니다.", owner=sid)
     if scope != "out" and not s.get("rules"):
         _err(warnings, "system_without_rules", sid, "규칙이 없습니다. 구현할 수 있게 규칙을 문장으로 적습니다.", owner=sid)
+
+
+UNTESTED = ("가설이 닿지 않는 MVP 시스템입니다. 재미를 시험하지 않고 만듭니다. 이 시스템을 쓰는 가설이 있으면 hypotheses에 적고, "
+            "시험하지 않기로 했으면 사용자와 정해 acknowledged에 까닭을 적습니다(system-design SKILL.md '6. 경고를 처리한다').")
+
+
+def _untested(live: dict, items: dict | None) -> list:
+    """가설이 닿지 않는 MVP 시스템(기반 제외). 브리프에 가설 id가 없으면 이을 것이 없어 묻지 않는다."""
+    if not items or not items["hypotheses"]:
+        return []
+    return [s for s in live.values() if s["scope"] == "mvp" and not s.get("foundation", False) and not s.get("hypotheses")]
 
 
 def _check_dependencies(live: dict, cut: set, known: set, lost: set, errors: list, warnings: list) -> None:
@@ -278,10 +294,13 @@ def validate(data: dict, concepts: list | None = None, concepts_unreadable: bool
         _err(errors, "dependency_cycle", loop[0], f"시스템이 서로 의존합니다: {', '.join(loop)}. 먼저 만들 수 있는 쪽이 없습니다. 의존을 끊거나 한 시스템으로 합칩니다.")
     if items is not None and not lost:   # 빠진 시스템이 맡던 것을 빠졌다고 말하지 않는다
         _check_coverage(live, items, warnings)
+    untested = _untested(live, items)
+    for s in untested:
+        _err(warnings, "system_untested", s["id"], UNTESTED, owner=s["id"])
     order = list(SCOPES)
     blocked = _unplaced(live, steps)
     rows = [{"id": s["id"], "name": s.get("name"), "scope": s["scope"], "foundation": s.get("foundation", False), "order": steps.get(s["id"]), "waits_on": blocked.get(s["id"], []), "pillars": s.get("pillars", []), "mvp": s.get("mvp", []),
-             "out_of_scope": s.get("out_of_scope", []), "depends_on": s.get("depends_on", []), "rules": len(s.get("rules", []))}
+             "out_of_scope": s.get("out_of_scope", []), "depends_on": s.get("depends_on", []), "hypotheses": s.get("hypotheses", []), "rules": len(s.get("rules", []))}
             for s in sorted(live.values(), key=lambda x: (steps.get(x["id"], 10 ** 6), order.index(x["scope"]), x["id"]))]
     return {
         "kind": "systems",
@@ -292,6 +311,7 @@ def validate(data: dict, concepts: list | None = None, concepts_unreadable: bool
         "concept": concept.get("id") if concept else None,
         "brief_out_of_scope": items["out_of_scope"] if items else None,
         "rows": rows,
+        "untested": [{"id": s["id"], "reason": c.ack_reason(s, "system_untested")} for s in sorted(untested, key=lambda x: x["id"])],   # 가설 없이 만드는 MVP 시스템과 확인한 까닭
         "unchecked": len(missing),
         "unchecked_kinds": sorted(missing),
         "errors": errors,
@@ -312,6 +332,9 @@ def print_extra(result: dict) -> None:
     for x in result["rows"]:
         step = f"{x['order']}단계" if x["order"] else "단계 없음" + (f"(단계가 없는 의존: {', '.join(x['waits_on'])})" if x.get("waits_on") else "")
         print(f"시스템 {_title(x)}: {SCOPES[x['scope']]} · {step} · 규칙 {x['rules']}개")
+    if result.get("untested"):
+        print("가설 없이 만드는 MVP 시스템: " + ", ".join(x["id"] + ("" if x["reason"] else "(확인 안 함)") for x in result["untested"])
+              + (". 확인한 까닭은 확인한 경고 줄에 있다" if any(x["reason"] for x in result["untested"]) else ""))
     if {"concepts", "concepts_unreadable"} & set(result["unchecked_kinds"]):
         print("시스템 설계 미확인: 컨셉을 함께 검사하지 않았거나 읽지 못해 브리프와의 연결을 보지 못함")
     if "nothing" in result["unchecked_kinds"]:
@@ -320,10 +343,10 @@ def print_extra(result: dict) -> None:
 
 def table(data: dict, result: dict, ids: list[str] | None = None) -> str:
     """만드는 순서로 본 시스템 표(마크다운)."""
-    rows = ["| 순서 | 시스템 | 범위 | 필러 | MVP | 의존 | 규칙 |", "|---|---|---|---|---|---|---|"]
+    rows = ["| 순서 | 시스템 | 범위 | 필러 | MVP | 가설 | 의존 | 규칙 |", "|---|---|---|---|---|---|---|---|"]
     for x in result["rows"]:
         cells = ("–" if x["order"] is None else str(x["order"]), c.table_cell(_title(x)), SCOPES[x["scope"]] + ("(기반)" if x["foundation"] else ""), c.table_cell(", ".join(x["pillars"])), c.table_cell(", ".join(x["mvp"])),
-                 c.table_cell(", ".join(x["depends_on"])), str(x["rules"]))
+                 c.table_cell(", ".join(x["hypotheses"])), c.table_cell(", ".join(x["depends_on"])), str(x["rules"]))
         rows.append("| " + " | ".join(cells) + " |")
     return "\n".join(rows)
 
