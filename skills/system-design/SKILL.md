@@ -41,7 +41,7 @@ description: "Lists the systems a game needs with their rules and dependencies, 
 - `mvp`: 이 시스템이 맡는 브리프의 MVP 항목. 문구 그대로 쓴다.
 - `scope`: `mvp`(이번에 만듦), `later`(나중), `out`(브리프가 뺀 것).
 - `out_of_scope`: `scope`가 `out`이면 브리프의 범위 밖 항목을 가리킨다. 자꾸 거론되는 것을 빼 둔 채로 기록한다.
-- `hypotheses`: 이 시스템을 써서 시험하는 브리프 가설의 id. 가설은 이 게임만의 위험한 주장 몇 개라 모든 시스템에 닿지 않는다. 닿지 않는 MVP 시스템은 재미를 시험하지 않고 만드는 것이므로 6단계에서 사용자와 정한다.
+- `hypotheses`: 이 시스템의 재미를 시험하는 브리프 가설의 id. 잇는 기준은 [형식 문서의 `systems`](references/systems-format.md#systems) 표의 `hypotheses` 칸이다. 가설은 이 게임만의 위험한 주장 몇 개라 모든 시스템에 닿지 않는다. 닿지 않는 MVP 시스템은 재미를 시험하지 않고 만드는 것이므로 6단계에서 사용자와 정한다.
 
 안티필러는 사람이 본다. 시스템을 적을 때 안티필러와 부딪치지 않는지 한 번씩 읽는다. 도구는 뜻을 읽지 못한다.
 
@@ -71,7 +71,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table systems
 - `system_without_pillar`: 필러를 돕지 않는 시스템이다. 기반이면 `foundation`을 적고, 아니면 만들 이유를 다시 본다.
 - `foundation_unused`: 기대는 시스템이 없는 기반이다. 의존을 적거나 표시를 뺀다.
 - `system_without_rules`: 규칙이 없어 구현할 수 없다.
-- `system_untested`: 가설이 닿지 않는 MVP 시스템이다. 시험하는 가설이 있는데 빠뜨렸으면 `hypotheses`에 적는다. 없으면 사용자에게 묻는다: 이 게임만의 주장이 걸린 시스템이면 [concept-exploration](../concept-exploration/SKILL.md)에서 브리프에 가설을 더하고, 장르에서 흔한 규칙이거나 시험판에서 뺀 시스템처럼 시험하지 않고 만들기로 했으면 그 시스템의 `acknowledged`에 `{"system_untested": "까닭 [결정: 사용자 YYYY-MM-DD]"}`로 적는다.
+- `system_untested`: 가설이 닿지 않는 MVP 시스템이다. 이 시스템의 재미를 시험하는 가설이 있는데 빠뜨렸으면 `hypotheses`에 적는다(기준은 [형식 문서의 `systems`](references/systems-format.md#systems)). 없으면 사용자에게 묻는다: 이 게임만의 주장이 걸린 시스템이면 [concept-exploration](../concept-exploration/SKILL.md)에서 브리프에 가설을 더하고, 장르에서 흔한 규칙이거나 시험판에서 뺀 시스템처럼 시험하지 않고 만들기로 했으면 그 시스템의 `acknowledged`에 `{"system_untested": "까닭 [결정: 사용자 YYYY-MM-DD]"}`로 적는다.
 
 ## 보고
 
