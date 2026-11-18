@@ -186,5 +186,22 @@ class LinkCriterion(unittest.TestCase):
         self.assertNotIn("이 시스템을 쓰는 가설", msg)
         self.assertIn("systems-format.md", msg)
 
+
+class AckReason(unittest.TestCase):
+    """384: 시험하지 않는 까닭은 사용자의 말이다. 고른 길의 설명을 까닭으로 옮기지 않는다."""
+    def test_step6_gives_reason_examples_and_points_to_the_shared_rule(self):
+        skill = (ROOT / "skills/system-design/SKILL.md").read_text(encoding="utf-8")
+        step6 = next(l for l in skill.splitlines() if l.startswith("- `system_untested`:"))
+        self.assertIn("더 플레이해 시험하지 않는다", step6)   # 현실적인 까닭도 자리가 있다
+        self.assertIn("studio-data/SKILL.md#실행", step6)   # 까닭 규칙은 공통 규칙 한 곳에
+        self.assertNotIn("덧붙인 설명", step6)
+        self.assertNotIn("장르에서 흔한 규칙이거나 시험판에서 뺀 시스템처럼 시험하지 않고 만들기로 했으면", step6)
+
+    def test_the_reason_rule_is_in_the_shared_acknowledgement_rule(self):
+        text = (ROOT / "skills/studio-data/SKILL.md").read_text(encoding="utf-8")
+        rule = next(l for l in text.splitlines() if l.startswith("- **확인한 경고.**"))
+        self.assertIn("덧붙인 설명", rule)
+        self.assertIn("묻거나", rule)
+
 if __name__ == "__main__":
     unittest.main()

@@ -71,7 +71,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table systems
 - `system_without_pillar`: 필러를 돕지 않는 시스템이다. 기반이면 `foundation`을 적고, 아니면 만들 이유를 다시 본다.
 - `foundation_unused`: 기대는 시스템이 없는 기반이다. 의존을 적거나 표시를 뺀다.
 - `system_without_rules`: 규칙이 없어 구현할 수 없다.
-- `system_untested`: 가설이 닿지 않는 MVP 시스템이다. 이 시스템의 재미를 시험하는 가설이 있는데 빠뜨렸으면 `hypotheses`에 적는다(기준은 [형식 문서의 `systems`](references/systems-format.md#systems)). 없으면 사용자에게 묻는다: 이 게임만의 주장이 걸린 시스템이면 [concept-exploration](../concept-exploration/SKILL.md)에서 브리프에 가설을 더하고, 장르에서 흔한 규칙이거나 시험판에서 뺀 시스템처럼 시험하지 않고 만들기로 했으면 그 시스템의 `acknowledged`에 `{"system_untested": "까닭 [결정: 사용자 YYYY-MM-DD]"}`로 적는다.
+- `system_untested`: 가설이 닿지 않는 MVP 시스템이다. 이 시스템의 재미를 시험하는 가설이 있는데 빠뜨렸으면 `hypotheses`에 적는다(기준은 [형식 문서의 `systems`](references/systems-format.md#systems)). 없으면 사용자에게 길을 묻는다: [concept-exploration](../concept-exploration/SKILL.md)에서 브리프에 가설을 더해 시험하거나, 시험하지 않고 만든다. 이 게임만의 주장이 걸린 시스템이면 가설을 더하는 쪽을 권한다. 시험하지 않으면 그 시스템의 `acknowledged`에 `{"system_untested": "까닭 [결정: 사용자 YYYY-MM-DD]"}`로 적는다. 까닭의 예: 장르에서 흔한 규칙이다, 시험판에서 뺐다, 더 플레이해 시험하지 않는다. 까닭을 받는 법은 [studio-data의 '확인한 경고'](../studio-data/SKILL.md#실행)다.
 
 ## 보고
 
