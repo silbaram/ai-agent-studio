@@ -467,6 +467,22 @@ class RecheckSampleSize(unittest.TestCase):
         row = [l for l in read(RECORD).splitlines() if l.startswith("| <가설 id> | <가설 id>_main |")][0]
         self.assertIn("묶음", row)
 
+    def test_record_counts_bundles_by_verdict(self):
+        # 386: 모름이 나온 묶음도 그 크기로는 가를 수 없으므로 신호만 세지 않는다
+        row = [l for l in read(RECORD).splitlines() if l.startswith("| <가설 id> | <가설 id>_main |")][0]
+        self.assertNotIn("신호", row)
+        for word in ("버팀", "틀림", "모름"):
+            self.assertIn(word, row)
+
+    def test_procedure_shows_and_records_bundles_by_verdict(self):
+        steps = self.part("시험판 판을 묶어 보기").splitlines()
+        show = [l for l in steps if l.startswith("3. ")][0]
+        record = [l for l in steps if l.startswith("4. ")][0]
+        for line in (show, record):
+            self.assertIn("판정별 묶음 수", line)
+        self.assertIn("가설마다", show)   # 틀림 쪽 가설만 알리지 않는다
+        self.assertNotIn("신호", "\n".join(steps))
+
 
 if __name__ == "__main__":
     unittest.main()
