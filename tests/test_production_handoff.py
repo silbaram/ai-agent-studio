@@ -417,5 +417,56 @@ class RealRunReviewFixes(unittest.TestCase):
         self.assertIn("SKILL.md", row)
 
 
+class RecheckSampleSize(unittest.TestCase):
+    """385: 다시 확인 표본을 줄이면 시험판 판을 그 크기로 묶어 같은 판정을 내 본다. 순서는 references/recheck-sample.md 한 곳에."""
+    REF = SKILL / "references/recheck-sample.md"
+
+    @staticmethod
+    def step7():
+        return read(DOC).split("### 7.")[1].split("### 8.")[0]
+
+    def part(self, title):
+        return read(self.REF).split(f"## {title}", 1)[1].split("\n## ", 1)[0]
+
+    def test_step4_points_to_the_bundle_check(self):
+        item = self.step7().split("4. `sample`", 1)[1].split("\n5. ", 1)[0]
+        self.assertIn("references/recheck-sample.md#시험판-판을-묶어-보기", item)
+        self.assertIn("사용자에게 보인다", item)
+        self.assertNotIn("판 순서대로", item)   # 묶는 법은 참고 문서에만
+        self.assertIn("references/recheck-sample.md", read(DOC).split("## 흐름", 1)[0])   # 이럴 때 표
+
+    def test_bundles_keep_excluded_runs_and_the_sample_shape(self):
+        part = self.part("시험판 판을 묶어 보기")
+        self.assertIn("판 순서대로", part)
+        self.assertIn("빼는 판도", part)   # 센 판만 묶으면 빠지는 판 때문의 모름이 안 보인다
+        self.assertNotIn("센 판만", part)
+        self.assertIn("사람마다", part)   # 사람 수 x 판 수 표본
+        self.assertIn("남은 판", part)
+
+    def test_bundles_show_the_whole_verdict_with_the_prototype_tools(self):
+        part = self.part("시험판 판을 묶어 보기")
+        self.assertIn("버팀·틀림·모름", part)
+        self.assertIn("시험판 보관 위치", part)
+        self.assertIn("표본 칸", part)   # 보인 결과는 기록에 남긴다
+        self.assertNotIn("버틴 가설인데도", part)
+
+    def test_a_refuted_recheck_looks_at_the_same_comparison(self):
+        para = [l for l in self.step7().splitlines() if "다시 확인에서 틀림이 나오면" in l][0]
+        self.assertIn("4번", para)
+        self.assertIn("references/recheck-sample.md#틀림이-표본-크기-탓일-수-있을-때", para)
+        self.assertNotIn("after_results", para)   # 순서는 참고 문서에만
+
+    def test_a_sample_size_refutation_has_a_way_forward(self):
+        part = self.part("틀림이 표본 크기 탓일 수 있을 때")
+        self.assertIn("references/changes.md#판정한-가설의-문장을-고칠-때", part)
+        self.assertIn("after_results", part)
+        self.assertIn("고친 뒤의 세션으로만", part)   # 지난 판과 합쳐 판을 더하지 않는다
+        self.assertIn("사용자가 한다", part)
+
+    def test_record_keeps_what_was_shown(self):
+        row = [l for l in read(RECORD).splitlines() if l.startswith("| <가설 id> | <가설 id>_main |")][0]
+        self.assertIn("묶음", row)
+
+
 if __name__ == "__main__":
     unittest.main()
