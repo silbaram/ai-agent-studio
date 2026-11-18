@@ -169,7 +169,7 @@ def _check_scope(s: dict, items: dict | None, warnings: list) -> None:
         _err(warnings, "system_without_rules", sid, "규칙이 없습니다. 구현할 수 있게 규칙을 문장으로 적습니다.", owner=sid)
 
 
-UNTESTED = ("가설이 닿지 않는 MVP 시스템입니다. 재미를 시험하지 않고 만듭니다. 이 시스템을 쓰는 가설이 있으면 hypotheses에 적고, "
+UNTESTED = ("가설이 닿지 않는 MVP 시스템입니다. 재미를 시험하지 않고 만듭니다. 이 시스템의 재미를 시험하는 가설이 있으면 hypotheses에 적고(기준은 system-design references/systems-format.md '`systems`'의 hypotheses 칸), "
             "시험하지 않기로 했으면 사용자와 정해 acknowledged에 까닭을 적습니다(system-design SKILL.md '6. 경고를 처리한다').")
 
 

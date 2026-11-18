@@ -148,5 +148,43 @@ class ReviewFixes(unittest.TestCase):
         src = (ROOT / "skills/studio-data/scripts/studio_data/systems.py").read_text(encoding="utf-8")
         self.assertNotIn('x.get("hypotheses", [])', src)
 
+
+class LinkCriterion(unittest.TestCase):
+    """383: 잇는 기준은 가설의 주장이 그 시스템에 대한 것인가이고, 형식 문서 한 곳에만 있다."""
+    @staticmethod
+    def field_row():
+        fmt = (ROOT / "skills/system-design/references/systems-format.md").read_text(encoding="utf-8")
+        return next(l for l in fmt.splitlines() if l.startswith("| `hypotheses` |"))
+
+    def test_the_field_row_links_by_the_claim_not_by_passing_through(self):
+        row = self.field_row()
+        self.assertIn("`claim`", row)
+        self.assertNotIn("거쳐야 결과가 나오면", row)
+        self.assertIn("재는 데만", row)   # 결과를 재는 데만 쓰이는 시스템은 적지 않는다
+
+    def test_no_system_kind_is_excluded_by_name(self):
+        row = self.field_row()   # 화면이나 진행도 주장이 그것에 달려 있으면 잇는다(예시 enemy_cues, my-tactics campaign)
+        self.assertNotIn("값을 보여 주는 화면", row)
+        self.assertNotIn("판을 이어 가는 진행", row)
+
+    def test_the_criterion_is_what_the_claim_depends_on_not_its_words(self):
+        row = self.field_row()
+        self.assertIn("달려 있으면", row)
+        self.assertIn("낱말", row)   # 주장 문장에 시스템의 낱말이 나오는지로 가리지 않는다
+        self.assertNotIn("경험을 말하면", row)
+
+    def test_skill_points_to_the_field_row(self):
+        skill = (ROOT / "skills/system-design/SKILL.md").read_text(encoding="utf-8")
+        step3 = next(l for l in skill.splitlines() if l.startswith("- `hypotheses`:"))
+        step6 = next(l for l in skill.splitlines() if l.startswith("- `system_untested`:"))
+        for line in (step3, step6):
+            self.assertIn("references/systems-format.md#systems", line)
+            self.assertNotIn("claim", line)   # 기준 문장은 형식 문서에만
+
+    def test_the_warning_says_the_same_criterion(self):
+        msg = sy.UNTESTED
+        self.assertNotIn("이 시스템을 쓰는 가설", msg)
+        self.assertIn("systems-format.md", msg)
+
 if __name__ == "__main__":
     unittest.main()
