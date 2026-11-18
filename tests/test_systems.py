@@ -342,7 +342,7 @@ class Output(unittest.TestCase):
 
     def test_the_table_lays_out_the_order(self):
         text = sy.table({}, run(system("b", depends_on=["a"], name="보석 | 숙성"), system("a")))
-        self.assertIn("| 순서 | 시스템 | 범위 | 필러 | MVP | 의존 | 규칙 |", text)
+        self.assertIn("| 순서 | 시스템 | 범위 | 필러 | MVP | 가설 | 의존 | 규칙 |", text)
         self.assertIn("| 2 | 보석 \\| 숙성 (b) | MVP |", text)
 
     def test_the_report_prints_the_order(self):
