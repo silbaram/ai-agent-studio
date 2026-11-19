@@ -3,7 +3,7 @@
 import re
 import unittest
 
-from _studio import ROOT, cli, provenance as cp, section
+from _studio import ROOT, changes_section, cli, provenance as cp, section
 
 SKILL = ROOT / "skills/production-handoff"
 DOC = SKILL / "SKILL.md"
@@ -482,6 +482,109 @@ class RecheckSampleSize(unittest.TestCase):
             self.assertIn("판정별 묶음 수", line)
         self.assertIn("가설마다", show)   # 틀림 쪽 가설만 알리지 않는다
         self.assertNotIn("신호", "\n".join(steps))
+
+
+class RuleChangeAfterRecheck(unittest.TestCase):
+    """387: 다시 확인에서 틀림이 확정된 뒤 규칙을 바꾸면 길(시험판부터 / 본 게임만)을 사용자가 고르고, 순서는 references/rule-change.md 한 곳에."""
+    REF = SKILL / "references/rule-change.md"
+
+    def ref(self):
+        return read(self.REF)
+
+    def part(self, title):
+        return self.ref().split(f"## {title}", 1)[1].split("\n## ", 1)[0]
+
+    def test_skill_points_to_the_reference(self):
+        self.assertTrue(self.REF.is_file())
+        self.assertIn("(references/rule-change.md", read(DOC).split("## 흐름", 1)[0])   # 이럴 때 표
+        step7 = read(DOC).split("### 7.")[1].split("### 8.")[0]
+        para = [l for l in step7.splitlines() if "다시 확인에서 틀림이 나오면" in l][0]
+        self.assertIn("references/rule-change.md", para)
+        self.assertNotIn("시험판부터", step7)   # 두 길의 설명은 참고 문서에만
+
+    def test_retest_procedure_sends_the_production_stage_here(self):
+        part = changes_section("다시 시험할 때")
+        self.assertIn("production-handoff/references/rule-change.md", part)
+
+    def test_two_paths_are_shown_and_the_user_chooses(self):
+        paths = self.part("길을 고른다")
+        for word in ("시험판부터 다시", "본 게임만 다시", "사용자가 고른다", "[결정: 사용자"):
+            self.assertIn(word, paths, word)
+        self.assertIn("이식", paths)   # 본 게임만 다시는 이식 탓과 규칙 탓을 가르지 못한다
+
+    def test_main_sample_needs_new_rule_prototype_runs(self):
+        # 리뷰 1·3: 새 규칙으로 다시 판정해 버틴 원래 가설만 그 판을 묶어 작게 한다. 나머지는 원래 표본
+        part = self.part("`_main` 표본")
+        self.assertIn("원래 표본", part)
+        self.assertIn("recheck-sample.md#시험판-판을-묶어-보기", part)
+        self.assertIn("다시 판정하지 않은", part)   # 시험판부터 다시에서 빠진 가설도
+        self.assertIn("4번 대신", part)   # 7단계 4번과 부딪히지 않게
+        self.assertNotIn("1~4번대로", self.ref())
+
+    def test_shared_data_moves_every_hypothesis_on_that_build(self):
+        part = self.part("함께 바뀌는 가설")
+        self.assertIn("builds", part)
+        self.assertIn("_main", part)
+        self.assertIn("버틴", part)   # 버틴 _main 판정도 옛 빌드의 근거다
+
+    def test_rejudged_hypotheses_count_only_the_new_build(self):
+        # 리뷰 2: builds가 없으면 옛 규칙의 판과 새 규칙의 판이 한 판정에 섞인다
+        line = [l for l in self.part("함께 바뀌는 가설").splitlines() if l.startswith("- 시험판부터 다시")][0]
+        self.assertIn("`builds`에 새 시험판 빌드", line)
+        self.assertIn("changes.md#다른-시스템이-바뀌어-지난-기록과-합치지-않을-때", line)
+
+    def test_old_main_verdicts_are_cut_by_the_shared_rule(self):
+        part = self.part("지난 `_main` 판정")
+        self.assertIn("`cut`", part)
+        self.assertIn("버팀", part)
+        self.assertIn("7단계", part)   # builds와 test는 다시 확인을 시작할 때 고친다
+        # 리뷰 4: cut·next_needs·이력의 규칙은 changes.md 한 곳에. 여기는 링크만
+        self.assertIn("changes.md#다시-시험할-때", part)
+        self.assertIn("changes.md#판정한-가설의-문장을-고칠-때", part)
+        for word in ("needs_resolved", "after_results", "criteria_history"):
+            self.assertNotIn(word, part, word)
+
+    def test_kept_prototype_is_rebuilt_only_from_data(self):
+        part = self.part("보관한 시험판")
+        self.assertIn("코드는 고치지 않", part)
+        self.assertIn("`build`", part)   # 지난 판정의 근거는 세션의 커밋에 남는다
+        self.assertIn("격리 확인", part)
+
+    def test_record_says_which_path(self):
+        part = self.part("기록")
+        self.assertIn("되돌아가기", part)
+        self.assertIn("되돌아간 횟수", part)
+        self.assertIn("되돌아간 길", read(RECORD))
+        row = [l for l in read(RECORD).splitlines() if l.startswith("| 되돌아간 길 |")][0]
+        self.assertIn("rule-change.md", row)
+
+    def test_old_rule_verdicts_are_named_in_the_record(self):
+        # 리뷰 5: 본 게임만 다시면 원래 가설의 버팀이 옛 규칙의 것이라고 기록에 남는다. 규칙은 '기록' 한 곳에
+        part = self.part("기록")
+        self.assertIn("옛 규칙의 판정으로 남는 원래 가설", part)
+        self.assertIn("본 게임만 다시면 모두", part)
+        self.assertNotIn("기록에 적는다", self.part("함께 바뀌는 가설"))
+
+    def test_each_go_back_keeps_its_own_line(self):
+        # 리뷰 6: 두 번째 되돌아가기가 첫 길을 덮어쓰지 않는다
+        row = [l for l in read(RECORD).splitlines() if l.startswith("| 되돌아간 길 |")][0]
+        self.assertIn("한 줄을 더하고", row)
+        self.assertIn("지우지 않는다", row)
+        self.assertNotIn("새로 적는다", row)
+
+    def test_step8_and_dont_use_list_route_main_refutations(self):
+        # 리뷰 7: 8단계나 '쓰지 않을 때'에서 들어와도 이 문서로 간다
+        text = read(DOC)
+        go_back = [l for l in text.split("### 8.", 1)[1].splitlines() if l.startswith("- **되돌아가기:**")][0]
+        self.assertIn("references/rule-change.md", go_back)
+        dont = section(DOC, "쓰지 않을 때")
+        refuted = [l for l in dont.splitlines() if "틀렸으면-되돌아간다" in l][0]
+        self.assertIn("시험판 가설", refuted)   # 본 게임의 _main 틀림은 이 스킬에 남는다
+
+    def test_reference_has_no_provenance_errors(self):
+        report = cp.check_paths_cli([str(self.REF)])
+        errors = [f"{r.path}:{f.line}: {f.message}" for r in report for f in r.findings if f.level == "error"]
+        self.assertEqual(errors, [])
 
 
 if __name__ == "__main__":
