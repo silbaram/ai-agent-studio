@@ -1,6 +1,6 @@
 # AI Agent Studio
 
-AI 에이전트(Claude Code, Codex)와 게임을 기획할 때 쓰는 스킬 열네 개와 도구 묶음이다.
+AI 에이전트(Claude Code, Codex)와 게임을 기획할 때 쓰는 스킬 열다섯 개와 도구 묶음이다.
 
 에이전트는 그럴듯한 숫자를 지어내고, 해 보지도 않고 "재미있을 겁니다"라고 말하고, 만들다 보면 처음 정한 범위를 넘긴다. 이 스킬들은 아이디어, 숫자, 레벨, 플레이 결과를 파일로 적게 하고, 그 파일을 계산기와 검사기로 확인해서 이런 일을 막는다.
 
@@ -77,7 +77,7 @@ python3 .claude/skills/studio-data/scripts/studio.py view .
 
 - **갱신은 같은 설치 명령을 다시 실행한다.** `--copy`는 독립 사본이라 이 저장소가 바뀌어도 설치본은 저절로 바뀌지 않는다. 다시 설치하면 덮어쓰므로 설치본을 직접 고치지 않는다.
 - 받아 둔 이 저장소(작업 중인 브랜치 등)로 설치하려면 `silbaram/ai-agent-studio` 대신 그 폴더 경로를 쓴다.
-- Node.js 없이 설치하려면 `skills/` 안의 열네 폴더를 위 표의 설치 위치로 그대로 복사한다.
+- Node.js 없이 설치하려면 `skills/` 안의 열다섯 폴더를 위 표의 설치 위치로 그대로 복사한다.
 - Codex에는 판정 에이전트와 훅이 없다. 검사(`check`)와 범위 검사(`scope`)를 직접 돌리고, 판정도 같은 절차를 에이전트가 따른다. 이때는 만드는 쪽과 판정하는 쪽이 나뉘지 않는다.
 
 ### Windows에서 쓸 때 (PowerShell과 WSL)
@@ -175,7 +175,7 @@ $progression-economy로 2구역에 나올 정예 적을 하나 추가해줘.
 
 </details>
 
-## 스킬 14개
+## 스킬 15개
 
 | 이럴 때 | 스킬 | 하는 일 |
 | --- | --- | --- |
@@ -192,6 +192,7 @@ $progression-economy로 2구역에 나올 정예 적을 하나 추가해줘.
 | 돈이 언제 모이고 무엇을 언제 살 수 있는지 보고 싶다 | [economy-flow](skills/economy-flow/SKILL.md) | 단계별 수입과 구매 계획을 이어 구매 시점과 판 끝에 남는 돈을 계산한다 |
 | 방, 웨이브, 쉬는 곳을 배치하고 싶다 | [level-design](skills/level-design/SKILL.md) | 조우의 세기를 예산과 견주고, 쉬는 곳 사이의 부담을 보고, 그림 없이 확인할 항목을 플레이 기록과 잇는다 |
 | 가설이 버텨서 엔진을 정하고 본 게임으로 넘어가고 싶다 | [production-handoff](skills/production-handoff/SKILL.md) | 넘어갈 준비를 확인하고, 엔진을 필수 조건과 작은 시험으로 고르게 하고, 시험판을 버릴지 키울지 정하고, 본 게임 빌드에서 가설을 작은 표본으로 다시 확인한다. 절차 문서만 있고 검사기는 없다 |
+| 본 게임 화면을 만들기 전에 그림 쪽에 넘길 것을 정리하고 싶다 | [art-handoff](skills/art-handoff/SKILL.md) | 플레이어가 화면에서 구분해야 하는 것을 가설의 말과 규칙에서 모아 기대는 가설과 잇고, 그릴 것을 데이터 id에서 옮긴다. 그림 방향을 다시 확인 전에 정할지 뒤에 정할지 사용자가 정한다. 그림체와 색은 정하지 않는다. 절차 문서만 있다 |
 | (모든 스킬이 함께 쓴다) | [studio-data](skills/studio-data/SKILL.md) | 공용 도구 `studio.py`: 검사(`check`), 뷰어(`view`), 시뮬레이션(`simulate`), 기록 보정(`calibrate`), 출처 검사(`provenance`), 범위 검사(`scope`), Claude Code 연결(`setup`) |
 
 ## 견본 프로젝트로 도구 해 보기
@@ -218,9 +219,9 @@ python3 skills/studio-data/scripts/studio.py provenance docs/guide.md
 | --- | --- |
 | 개발 작업 관리 (기획 → 설계 → 작업 → 구현 → 검증) | [OpenSpec](https://github.com/Fission-AI/OpenSpec) (따로 설치). `scope-guard`로 이 저장소에 잇는다 |
 | 게임 설계 (아이디어·시스템·레벨·아이템·경제·밸런스·재미 검증) | **이 저장소** |
-| 그래픽 (도트·메시·VFX) | [game-art-skills](https://github.com/silbaram/game-art-skills). 연결은 보류 중 |
+| 그래픽 (도트·메시·VFX) | [game-art-skills](https://github.com/silbaram/game-art-skills). 이 저장소의 `art-handoff`가 넘길 것을 정리하고, 그쪽 `art-direction`이 그림 방향을 정한다 |
 
-- [설계 문서](docs/architecture.md)의 로드맵 0~5단계를 1차로 마쳤다. 6단계(그래픽 넘기기)는 보류 중이다.
+- [설계 문서](docs/architecture.md)의 로드맵 0~6단계를 1차로 마쳤다. 6단계(그래픽 넘기기)는 절차 문서만 있고 현장 시험은 아직이다.
 - 세 시험 게임에서 확인했다: 실시간 액션 로그라이크(새 게임), 턴제 택틱스(이미 만든 게임), 덱빌딩 카드 게임(새 게임).
 - Claude Code + 리눅스(WSL)에서 실제 세션으로 확인했다. Codex와 Windows PowerShell은 아직 실제로 돌려 보지 않았다.
 - 엔진 고르기와 본 게임으로 넘어가기는 절차 문서(`production-handoff`)만 있고, 검사기와 현장 시험은 아직이다.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "그림에 넘길 것"
+  short_description: "읽혀야 하는 것과 그릴 것을 가설·데이터에서 뽑아 그림 쪽에 넘긴다"
+  default_prompt: "$art-handoff로 본 게임 화면을 만들기 전에 그림 쪽에 넘길 것을 정리해줘."
