@@ -21,7 +21,7 @@ description: "Guides the step after a concept's hypotheses hold: checks that the
 ## 쓰지 않을 때
 
 - 가설이 아직 판정되지 않았다: [playtest-verdict](../playtest-verdict/SKILL.md)로 먼저 판정한다.
-- 가설이 틀렸다: [playtest-verdict](../playtest-verdict/SKILL.md#6-틀렸으면-되돌아간다)의 되돌아가기를 따른다.
+- 시험판 가설이 틀렸다: [playtest-verdict](../playtest-verdict/SKILL.md#6-틀렸으면-되돌아간다)의 되돌아가기를 따른다.
 - 시험판 안의 규칙을 바꿔 다시 시험한다: [다시 시험할 때](../playtest-verdict/references/changes.md#다시-시험할-때).
 
 ## 이럴 때 읽을 곳
@@ -31,6 +31,7 @@ description: "Guides the step after a concept's hypotheses hold: checks that the
 | 엔진 시험의 과제를 정하거나 지식 위험을 매길 때 | [references/engine-trial.md](references/engine-trial.md) |
 | 사용자가 시험판을 키워 가기로 했을 때 | [references/grow-prototype.md](references/grow-prototype.md) |
 | `_main` 가설의 표본을 정하거나, 다시 확인에서 틀림이 나왔을 때 | [references/recheck-sample.md](references/recheck-sample.md) |
+| 다시 확인에서 틀린 뒤 규칙을 바꿀 때 | [references/rule-change.md](references/rule-change.md) |
 | `design/production.md`를 쓸 때 | [references/production-record.md](references/production-record.md) |
 
 ## 흐름
@@ -125,14 +126,14 @@ git grep -n "<찾을 경로>" -- <본 게임 코드 폴더>
 
 키워 간 직후의 빌드는 화면과 조작이 시험판과 같아 다시 확인의 세션으로 세지 않는다(시험판 시험을 되풀이한다). 사용자가 시험판의 화면과 조작을 그대로 본 게임에 쓰기로 했으면 다시 확인할 변화 없음이다. `_main` 가설을 더하지 않고 기록의 '본 게임 빌드에서 다시 확인'에 그 까닭과 `[결정: 사용자 날짜]`를 적는다. 플레이어에게 보이는 정보를 더하면(예: 고를 카드의 효과 미리 보기) 가설 결과가 달라질 수 있으므로 본 게임에 넣을 정보는 다시 확인 전에 넣는다. 규칙이나 숫자를 바꾸면 빌드가 바뀌므로 `test`의 기준선과 `builds`를 다시 맞춘다.
 
-이 가설들이 판정될 때까지 1단계의 gate 줄에 남으므로, 다시 확인하지 않고 넘어가면 게이트가 알린다. 다시 확인에서 틀림이 나오면 이식에서 무엇이 달라졌는지 먼저 본다(조작감, 화면, 시간). 4번의 묶음 결과도 본다. 같은 크기 묶음에서도 틀림이 나왔으면 [틀림이 표본 크기 탓일 수 있을 때](references/recheck-sample.md#틀림이-표본-크기-탓일-수-있을-때)를 따른다. 바로 컨셉을 의심하지 않는다.
+이 가설들이 판정될 때까지 1단계의 gate 줄에 남으므로, 다시 확인하지 않고 넘어가면 게이트가 알린다. 다시 확인에서 틀림이 나오면 이식에서 무엇이 달라졌는지 먼저 본다(조작감, 화면, 시간). 4번의 묶음 결과도 본다. 같은 크기 묶음에서도 틀림이 나왔으면 [틀림이 표본 크기 탓일 수 있을 때](references/recheck-sample.md#틀림이-표본-크기-탓일-수-있을-때)를 따른다. 바로 컨셉을 의심하지 않는다. 틀린 뒤 규칙을 바꾸면 [그 순서](references/rule-change.md)를 따른다.
 
 ### 8. 넘어가기 판정을 적는다
 
 결과는 셋 중 하나이고 사용자가 정한다.
 
 - **진행:** 본 게임을 만들기 시작한다. 개발 작업은 [scope-guard](../scope-guard/SKILL.md)로 시스템에 잇는다.
-- **되돌아가기:** 확인에서 막힌 것을 풀러 앞 단계(엔진 시험, 시험판, 가설)로 돌아간다. 되돌아간 횟수를 센다. 되돌아가기가 되풀이되면 그 자체를 사용자에게 알린다.
+- **되돌아가기:** 확인에서 막힌 것을 풀러 앞 단계(엔진 시험, 시험판, 가설)로 돌아간다. 되돌아간 횟수를 센다. 되돌아가기가 되풀이되면 그 자체를 사용자에게 알린다. 다시 확인에서 틀려 규칙을 바꾸면 [그 순서](references/rule-change.md)를 따른다.
 - **그만두기:** 이 컨셉으로 본 게임을 만들지 않는다. [컨셉을 되돌릴 때](../playtest-verdict/references/changes.md#컨셉을-되돌릴-때)를 따른다.
 
 ## 보고
