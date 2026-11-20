@@ -187,5 +187,21 @@ class RepositoryDocs(unittest.TestCase):
         self.assertEqual(problems, [])
 
 
+class RecordTemplates(unittest.TestCase):
+    """스킬 문서의 ```markdown 틀은 design/ 아래 기록으로 복사되어 편집 훅의 검사를 받는다.
+    검사기는 코드 블록 안을 건너뛰므로 문서 검사로는 틀이 검사되지 않는다(388번)."""
+
+    def test_markdown_templates_pass_the_checker_when_filled(self):
+        import re
+        seen = []
+        for path in sorted((ROOT / "skills").glob("*/**/*.md")):
+            for m in re.finditer(r"^```markdown\n(.*?)\n```", path.read_text(encoding="utf-8"), re.S | re.M):
+                seen.append(path.relative_to(ROOT).as_posix())
+                report = cp.check_text(m.group(1).replace("YYYY-MM-DD", "2026-11-20"), str(path))   # 날짜 자리만 채운다
+                self.assertEqual([f"{f.line}: {f.message}" for f in report.findings], [], path)
+        for record in ("skills/art-handoff/references/handoff-record.md", "skills/production-handoff/references/production-record.md"):
+            self.assertIn(record, seen)   # 틀을 찾는 정규식이 깨져 아무것도 보지 않으면 실패한다
+
+
 if __name__ == "__main__":
     unittest.main()
