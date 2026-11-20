@@ -94,6 +94,31 @@ class Flow(unittest.TestCase):
         for field in ("`id`", "`what`", "`group`", "`on`", "`cue`", "`source`"):
             self.assertIn(field, text, field)
 
+    def test_draw_list_maps_to_asset_sourcing_wanted(self):
+        step5 = section(read(DOC), "### 5. 넘긴다")
+        self.assertIn("`asset-sourcing`", step5)
+        for field in ("`wanted`", "`file`", "`list`", "`key`", "`skip`", "`asset_class`", "`meanings`"):
+            self.assertIn(field, step5, field)
+        self.assertIn("그릴 것: <asset-sourcing", read(RECORD))
+
+    def test_asset_sourcing_handoff_is_conditional_ordered_and_covers_edge_rows(self):
+        step5 = section(read(DOC), "### 5. 넘긴다")
+        bullet = next(line for line in step5.splitlines() if "`asset-sourcing`" in line)
+        self.assertTrue(bullet.startswith("- game-art-skills를 쓰면"), bullet)   # 사람에게 맡기는 길도 있다
+        self.assertIn("그림 방향(`art/direction.json`)을 정한 뒤", bullet)   # 장부 검사가 예산을 그 파일에서 읽는다
+        self.assertIn("다시 확인 뒤 길이면", bullet)
+        self.assertIn("예산 이름 중 맞는 것을 사용자와 골라", bullet)   # 종류는 자유 글자, asset_class는 예산 이름
+        self.assertIn("`art-direction`에서 예산을 더한다", bullet)
+        self.assertIn("함께 쓰는 그림", bullet)
+        self.assertIn("`covers`를 여럿", bullet)
+        self.assertIn("배열 안의 배열", bullet)   # list는 객체의 점 경로만 따라간다
+        self.assertIn("빠진 id를 검사기가 보지 않는다", bullet)
+
+    def test_graphics_docs_name_asset_sourcing(self):
+        self.assertIn("`asset-sourcing`", read(ROOT / "README.md"))
+        roadmap = re.search(r"\| 6 \|[^\n]*", read(ROOT / "docs/architecture.md")).group(0)
+        self.assertIn("`asset-sourcing`", roadmap)
+
     def test_decided_colors_have_a_place_without_art_skills(self):
         self.assertIn("## 정한 색과 단서", read(RECORD))
         step4 = section(read(DOC), "### 4. 그림 방향을 언제 정할지 사용자가 정한다")
