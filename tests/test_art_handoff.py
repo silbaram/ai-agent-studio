@@ -164,6 +164,13 @@ class Record(unittest.TestCase):
         errors = [f"{r.path}:{f.line}: {f.message}" for r in report for f in r.findings if f.level == "error"]
         self.assertEqual(errors, [])
 
+    def test_source_column_is_not_named_like_a_provenance_column(self):
+        # 머리글이 정확히 '출처'인 표는 수치 표로 보여 행마다 태그를 요구받는다(388번). 틀 전체의 검사는 test_check_provenance
+        self.assertIn("| 나온 곳 |", read(RECORD))
+        step1 = section(read(DOC), "### 1. 읽혀야 하는 것을 모은다")
+        self.assertIn("나온 곳", step1)
+        self.assertIn("나온 곳과 기대는 가설 → `source`", section(read(DOC), "### 5. 넘긴다"))
+
 
 class Links(unittest.TestCase):
     def test_production_handoff_sends_step7_here_and_stays_under_the_cap(self):
