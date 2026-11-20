@@ -26,7 +26,7 @@
 
 다시 확인 전 | 다시 확인 뒤 [결정: 사용자 YYYY-MM-DD]
 까닭: <내용>
-넘긴 곳: <game-art-skills art-direction / 사람 / 아직>
+넘긴 곳: 읽혀야 하는 것: <art-direction / 사람 / 아직>, 그릴 것: <asset-sourcing / 사람 / 아직>
 
 ## 정한 색과 단서
 

@@ -60,6 +60,7 @@ production-handoff 7단계의 다시 확인 화면과 그림 방향의 순서다
 ### 5. 넘긴다
 
 - game-art-skills를 쓰면 `art-direction`에 이 파일을 준다. 1단계 항목은 그쪽의 의미(`meanings`)가 된다: id → `id`, 뜻 → `what`, 묶음 → `group`, 놓이는 곳 → `on`(그쪽에서 배경 색 이름으로 고른다), 지금 단서 → `cue`의 출발점, 출처와 기대는 가설 → `source`.
+- game-art-skills를 쓰면 그릴 것은 `asset-sourcing`에 준다. 그쪽 장부는 예산을 그림 방향 파일에서 읽으므로 그림 방향(`art/direction.json`)을 정한 뒤에 넘긴다. 다시 확인 뒤 길이면 그때까지 기록의 '넘긴 곳'에 아직으로 둔다. 표의 데이터 행마다 그쪽 장부의 `wanted` 하나가 된다: 데이터 파일 → `file`, 배열 경로(`items[].id`, `content.enemies[].id`) → `list`(`items`, `content.enemies`)와 `key`(`id`), 안 쓰는 항목 표시와 그 값 → `skip`. 종류는 자유 글자이므로 그림 방향의 예산 이름 중 맞는 것을 사용자와 골라 `asset_class`에 적고, 맞는 예산이 없으면 `art-direction`에서 예산을 더한다. 함께 쓰는 그림이 항목의 그림 자체이면(적 둘이 같은 그림) 에셋 하나에 `covers`를 여럿 적고, 항목마다의 그림에 겹치는 것이면(계열마다 같은 테두리) `wanted` 없이 따로 에셋으로 적는다. 배열 안의 배열(`zones[].enemies[].id`)은 `list`로 적을 수 없다. 그 행은 `wanted` 없이 id마다 에셋으로 적고, 빠진 id를 검사기가 보지 않는다고 사용자에게 알린다. 데이터 밖의 것은 `wanted` 없이 에셋으로 적고, 1단계 항목을 나르는 그림이면 그 id를 `meanings`에 적는다.
 - 사람에게 맡기면 이 파일을 그대로 준다.
 
 ## 보고
