@@ -20,6 +20,7 @@ description: "Shared tooling for the game-design skills: one entry script (studi
 - 어느 경우든 이 SKILL.md가 있는 폴더의 `scripts/studio.py`다. 다른 스킬 문서 기준으로는 `../studio-data/scripts/studio.py`.
 - 모든 스킬 문서의 명령은 Claude Code 설치 기준(`.claude/skills/…`)으로 적는다. Codex는 `.agents/skills/…`로 바꾼다.
 - Python 명령은 `python3`로 적는다. Windows PowerShell에서는 `py`를 쓴다. `python`만 있는 환경이면 `python`.
+- 확인 범위: Claude Code와 Codex(codex-cli 0.171.0)를 WSL(Linux)에서 실제 세션으로 확인했다. Claude Code와 Codex 모두 스킬 이름 없이 게임을 만들고 싶다는 말만 듣고 컨셉 탐색을 골랐다. Codex는 명령을 `.agents/skills/…`로 바꿔 실행했다. 기본 읽기 전용 샌드박스에서도 파일을 쓰지 않는 명령(`check`, `provenance`, `hypothesis`)이 돈다. Windows PowerShell은 아직 실제 세션으로 확인하지 않았다.
 
 | 명령 | 하는 일 |
 |---|---|
