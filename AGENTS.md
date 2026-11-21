@@ -8,6 +8,7 @@
 
 - 스킬은 `skills/<skill-name>/SKILL.md`를 진입점으로 둔다. 이름은 소문자·숫자·하이픈.
 - frontmatter의 `description`은 영어로, "무엇을 하는지 + 언제 쓰는지"를 함께 쓴다. 본문은 한국어.
+- 스킬 폴더마다 루트 `LICENSE`의 사본을 두고 frontmatter에 `license: MIT`를 적는다. 설치는 스킬 폴더만 옮기므로 사본에 고지가 따라가야 한다.
 - 긴 예시·체크리스트는 스킬 안 `references/`로 분리한다. Codex 표시 정보는 `agents/openai.yaml`.
 - **파이썬 코드는 `skills/studio-data/scripts/studio_data/` 한 곳에만 둔다.** 실행은 `skills/studio-data/scripts/studio.py`의 하위 명령으로 한다. 다른 스킬에는 `scripts/`를 만들지 않고 절차 문서만 둔다.
 - 새 데이터 종류는 `common.DATASET_KINDS`, `datasets.VALIDATORS`, `assets/viewer.html`의 `KINDS`에 함께 등록하고, 예시는 `skills/studio-data/assets/sample-project/`에 둔다.

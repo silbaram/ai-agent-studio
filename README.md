@@ -245,3 +245,7 @@ python3 -m unittest discover -s tests
 - [엔진 고르기와 본 게임으로 넘어가기 조사 (2026-11)](docs/research/engine-and-production-2026-11.md)
 
 참고한 외부 프로젝트와 고지는 [THIRD_PARTY.md](THIRD_PARTY.md)에 있다.
+
+## 라이선스
+
+[MIT 라이선스](LICENSE). 저작권 표시와 라이선스 문장을 남기면 쓰고, 고치고, 다시 배포할 수 있다.

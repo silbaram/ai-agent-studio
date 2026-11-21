@@ -1,6 +1,7 @@
 ---
 name: run-growth
 description: "Models in-run growth: level-up choices with stat gains and pick limits, choices offered at random each level, and build policies (priority or spread) that decide what a player takes. Runs a seeded simulation to get each build's expected stats at each combat stage, adds them to the combat calculation, and compares builds by hits to kill and to survive, warning when one build is at least as good everywhere. Use when designing level-up perks, stat-granting cards, or upgrade choices, checking that builds are distinct, or seeing how in-run growth changes difficulty, in any genre and engine."
+license: MIT
 ---
 
 # 판 안 성장: 레벨업 선택과 빌드

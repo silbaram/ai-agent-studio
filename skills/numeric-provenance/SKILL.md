@@ -1,6 +1,7 @@
 ---
 name: numeric-provenance
 description: "Tags every tunable number in game design documents as assumed, computed, or measured, and checks the tags with a deterministic script before any balance or difficulty verdict. Use when writing or reviewing design numbers such as prices, drop rates, damage, HP, timers, level pacing, or economy values, and before declaring balance final."
+license: MIT
 ---
 
 # 수치 출처 태그

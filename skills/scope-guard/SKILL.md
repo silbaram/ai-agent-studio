@@ -1,6 +1,7 @@
 ---
 name: scope-guard
 description: "Connects OpenSpec changes to the game's brief and system design, and blocks work that leaves the MVP: each change names the systems it covers, stale specs and out-of-scope items are errors, and a hook stops building and archiving until they are fixed and asks the user before scope widens. Use when setting up OpenSpec in a game project, starting a change, or when studio.py scope or the scope hook reports a problem."
+license: MIT
 ---
 
 # 범위 이탈 차단
