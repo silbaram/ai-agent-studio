@@ -1,6 +1,7 @@
 ---
 name: concept-exploration
 description: "Explores game concepts as testable mechanic hypotheses instead of ranked pitches: gathers constraints, generates structurally varied concepts, removes only demonstrated dead ends and structural duplicates, attacks survivors with simple-play strategies, keeps every concept in one concepts.json record, and turns the user's chosen concept into a falsifiable brief with pillars, anti-pillars, a core loop, hypotheses, and the smallest prototype. Use when the user has only a vague genre or feeling, wants concept ideas, needs to compare or choose concepts, or wants a chosen concept sharpened before prototyping. Also use when an existing, already playable game needs a brief before system design or playtests."
+license: MIT
 ---
 
 # 컨셉 탐색

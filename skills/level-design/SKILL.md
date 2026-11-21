@@ -1,6 +1,7 @@
 ---
 name: level-design
 description: "Lays out each level as an ordered list of encounters (rooms, waves, packs, time spans), scores every encounter's threat from the same enemy stats used by combat and stat budgets, compares it with a threat budget curve per stage and role, shows single-target kill time against stage length, and cross-checks placed enemies against combat stages and kill counts against the economy. Also lays out pacing: enemy-less stretches, encounter times against economy stage lengths and purchases, accumulated load between rest points and rewards, and runs of strong encounters, and keeps a per-level greybox checklist tied to play records. Use when composing levels, waves or rooms, sizing encounters, placing rests and rewards, planning a greybox test, or checking that a level agrees with combat and economy assumptions, in any genre and engine."
+license: MIT
 ---
 
 # 레벨 구성

@@ -1,6 +1,7 @@
 ---
 name: studio-data
 description: "Shared tooling for the game-design skills: one entry script (studio.py) and one Python package that validate concept records, items, permanent upgrades, enemies, combat calculations, in-run growth builds, stat budgets, enhancement and crafting, currency flow, level encounters, and playtest records, draft items and enemies from budget curves, simulate roguelike meta-progression, check numeric provenance tags in design docs, serve a read-only browser viewer that shows all of a project's design data with validation results, and install a read-only judge agent and data-check hooks for Claude Code. Use when viewing, checking, or simulating game design data, when setting up Claude Code hooks for a game project, or when another skill in this repository tells you to run a check."
+license: MIT
 ---
 
 # 게임 설계 데이터 공용 도구

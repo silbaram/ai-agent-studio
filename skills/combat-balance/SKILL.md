@@ -1,6 +1,7 @@
 ---
 name: combat-balance
 description: "Connects player, item, upgrade, and enemy data through one stat model and a chosen defense formula (flat, ratio, level-scaled ratio, or capped percent), computes hits and seconds to kill and to die for each stage and enemy, and flags results outside designer target ranges. Use when setting or reviewing combat stats, choosing a defense formula, or checking difficulty per zone, level, or wave in any genre and engine."
+license: MIT
 ---
 
 # 전투 계산: 하나의 스탯 모델로 잇기

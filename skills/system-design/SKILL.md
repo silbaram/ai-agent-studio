@@ -1,6 +1,7 @@
 ---
 name: system-design
 description: "Lists the systems a game needs with their rules and dependencies, ties each one to the brief's pillars, MVP items and out-of-scope list, and reports what nothing serves, which MVP systems no hypothesis tests, what drifts out of scope, circular dependencies, and the order to build in. Use after a concept has a brief and before implementation, when deciding what systems a game has, what each one does, or what to build first, in any genre and engine."
+license: MIT
 ---
 
 # 시스템 설계

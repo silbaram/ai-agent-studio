@@ -1,6 +1,7 @@
 ---
 name: production-handoff
 description: "Guides the step after a concept's hypotheses hold: checks that the playtest gate really passed, has the user choose the engine from must-have conditions tied to the brief and the hypothesis tests plus a small identical engine trial (exact version, recorded as a user decision), decides whether the greybox prototype is thrown away or grown (growing keeps the original and compares the same bot run on both builds), lists what carries over to the real game and what is dropped, keeps run logs and bots in a dev build, and re-checks each held hypothesis on the real build with a small sample. Records everything in design/production.md. Use when the user asks which engine to use, wants to start the real game after playtests, or wants to turn the prototype into the product."
+license: MIT
 ---
 
 # 본 게임으로 넘어가기

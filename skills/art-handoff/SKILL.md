@@ -1,6 +1,7 @@
 ---
 name: art-handoff
 description: "Collects what the design layer knows that the art side needs: what players must tell apart on screen (from the hypothesis word table, play questions and the information the rules show before a choice), which hypotheses lean on each item, and the list of things to draw copied from data ids. Writes design/art-handoff.md and has the user decide whether art direction comes before or after the main-build recheck. Use after the engine is chosen and before building the main-game screen for the recheck (production-handoff step 7), or when a rule or data change adds, removes or renames something players must read. It does not choose style, palette or colors."
+license: MIT
 ---
 
 # 그림에 넘길 것

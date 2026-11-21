@@ -1,6 +1,7 @@
 ---
 name: playtest-verdict
 description: "Records prototype playtest sessions as data, has a read-only judge propose a verdict (holds, refuted, unknown) for each concept hypothesis from those records, promotes measured numbers from assumed to measured with a checkable source, and calibrates assumptions from recorded stage statistics: compares assumed levels, durations, kills, and income with the records, compares simulated stage clear rates with measured ones, and suggests survival curve values. Use after playing a prototype, when deciding whether a concept's hypotheses survived, before turning an assumed number into a measured one, or when checking balance assumptions against real runs."
+license: MIT
 ---
 
 # 플레이 기록과 가설 판정
@@ -131,6 +132,6 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 - 절차 이탈은 적은 것만 센다. 이탈이 판정을 바꾸는지는 판정 에이전트와 사용자가 본다.
 - 관찰값과 결과 파일은 수만 맞춰 본다. 수가 있어도 다른 설정이나 다른 칸의 수일 수 있다.
 - 보정 값은 기록한 빌드와 플레이어에서 나온 값이다. 보정해도 시뮬레이션 결과로 재미나 실제 난이도를 판정하지 않는다.
-- 판정 에이전트와 훅은 Claude Code 전용이다. 훅 입력의 에이전트 이름(`agent_type`)으로 판정 에이전트를 구분한다(확인한 범위는 [studio-data](../studio-data/SKILL.md#claude-code-연결)).
+- 판정 에이전트와 훅은 Claude Code 전용이다. 훅 입력의 에이전트 이름(`agent_type`)으로 판정 에이전트를 구분한다([확인 범위](../studio-data/SKILL.md#claude-code-연결)).
 
 예시: `studio-data/assets/sample-project/data/playtests.json` (실제 플레이 기록이 아니다).
