@@ -2,6 +2,8 @@
 import json
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -142,6 +144,15 @@ class HookOutput(unittest.TestCase):
         self.hook()
         self.assertEqual(claude.STATE_DIR.stat().st_mode & 0o077, 0)
 
+    def test_no_temp_folder_shows_everything_every_time(self):
+        def broken():
+            raise FileNotFoundError("No usable temporary directory found")
+        with mock.patch.object(claude, "STATE_DIR", None), mock.patch.object(claude.tempfile, "gettempdir", broken):
+            for _ in range(2):
+                code, text, _ = self.hook()
+                self.assertEqual(code, 0)
+                self.assertEqual(text.count("[next_test_missing]"), 2)
+
     def test_old_state_files_are_removed(self):
         claude.STATE_DIR.mkdir(parents=True)
         old = claude.STATE_DIR / "old.json"
@@ -150,6 +161,40 @@ class HookOutput(unittest.TestCase):
         os.utime(old, (stamp, stamp))
         self.hook()
         self.assertFalse(old.exists())
+
+
+class NoTempDir(unittest.TestCase):
+    """임시 폴더를 쓸 수 없는 곳(Codex 읽기 전용 샌드박스, 392번)에서도 명령이 돈다. 세션 기록은 훅이 쓸 때만 찾는다."""
+    BROKEN = (
+        "import runpy, sys, tempfile\n"
+        "def broken():\n"
+        "    raise FileNotFoundError('No usable temporary directory found')\n"
+        "tempfile.gettempdir = broken\n"
+        "script = sys.argv[1]\n"
+        "sys.path.insert(0, script.rsplit('/', 1)[0])\n"
+        "sys.argv = [script] + sys.argv[2:]\n"
+        "runpy.run_path(script, run_name='__main__')\n"
+    )
+
+    def run_without_temp(self, *args):
+        script = (ROOT / "skills/studio-data/scripts/studio.py").as_posix()
+        return subprocess.run([sys.executable, "-I", "-B", "-c", self.BROKEN, script, *map(str, args)],
+                              capture_output=True, text=True, encoding="utf-8")
+
+    def test_read_only_commands_run_without_a_temp_folder(self):
+        for args in (("check", SAMPLE), ("provenance", ROOT / "skills/art-handoff/SKILL.md"), ("hypothesis", "parry_tempo.learn_timing", SAMPLE)):
+            with self.subTest(args[0]):
+                done = self.run_without_temp(*args)
+                self.assertNotIn("Traceback", done.stderr)
+                self.assertIn(done.returncode, (0, 1), done.stderr)
+                self.assertTrue(done.stdout.strip())
+
+    def test_hooks_fall_back_to_everything_without_a_temp_folder(self):
+        def broken():
+            raise FileNotFoundError("No usable temporary directory found")
+        with mock.patch.object(claude, "STATE_DIR", None), mock.patch.object(claude.tempfile, "gettempdir", broken):
+            self.assertIsNone(claude._state_dir())
+            self.assertEqual(claude.session_start(json.dumps({"session_id": "s1", "source": "compact"})), (0, "", ""))
 
 
 class Diff(unittest.TestCase):

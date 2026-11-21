@@ -109,7 +109,7 @@ python3 .claude/skills/studio-data/scripts/studio.py view . --no-browser
 
 ## 이렇게 말하면 된다
 
-에이전트는 설치된 스킬의 설명을 보고 맞는 것을 스스로 고를 수 있다(Claude Code에서 확인했고 Codex에서는 아직 확인하지 않았다). 늘 고른다는 보장은 없으니, 특정 스킬을 쓰게 하려면 문장에 `$스킬이름`을 넣는다.
+에이전트는 설치된 스킬의 설명을 보고 맞는 것을 스스로 고를 수 있다(Claude Code와 Codex에서 확인했다. [확인 범위](skills/studio-data/SKILL.md#실행)). 늘 고른다는 보장은 없으니, 특정 스킬을 쓰게 하려면 문장에 `$스킬이름`을 넣는다.
 
 아이디어를 찾을 때:
 
@@ -221,10 +221,10 @@ python3 skills/studio-data/scripts/studio.py provenance docs/guide.md
 | 게임 설계 (아이디어·시스템·레벨·아이템·경제·밸런스·재미 검증) | **이 저장소** |
 | 그래픽 (도트·메시·VFX) | [game-art-skills](https://github.com/silbaram/game-art-skills). 이 저장소의 `art-handoff`가 넘길 것을 정리하고, 그쪽 `art-direction`이 그림 방향을, `asset-sourcing`이 그릴 것의 출처와 권리를 맡는다 |
 
-- [설계 문서](docs/architecture.md)의 로드맵 0~6단계를 1차로 마쳤다. 6단계(그래픽 넘기기)는 절차 문서만 있고 현장 시험은 아직이다.
+- [설계 문서](docs/architecture.md)의 로드맵 0~6단계를 1차로 마쳤다. 6단계(그래픽 넘기기)는 절차 문서만 있고 검사기는 없다. 덱빌딩 시험 게임의 사본과 실제 프로젝트에서 현장 시험을 했다.
 - 세 시험 게임에서 확인했다: 실시간 액션 로그라이크(새 게임), 턴제 택틱스(이미 만든 게임), 덱빌딩 카드 게임(새 게임).
-- Claude Code + 리눅스(WSL)에서 실제 세션으로 확인했다. Codex와 Windows PowerShell은 아직 실제로 돌려 보지 않았다.
-- 엔진 고르기와 본 게임으로 넘어가기는 절차 문서(`production-handoff`)만 있고, 검사기와 현장 시험은 아직이다.
+- Claude Code와 Codex를 리눅스(WSL)에서 실제 세션으로 확인했다. Windows PowerShell은 아직 실제로 돌려 보지 않았다([확인 범위](skills/studio-data/SKILL.md#실행)).
+- 엔진 고르기와 본 게임으로 넘어가기는 절차 문서(`production-handoff`)만 있고 검사기는 없다. 덱빌딩 시험 게임에서 본 게임 빌드의 다시 확인과 규칙을 바꿔 되돌아가는 길까지 현장 시험을 했다.
 - 아직 하지 않는 것: 엔진별 절차(프로젝트 만들기, 빌드), 그래픽과 사운드.
 
 ## 개발

@@ -46,7 +46,7 @@ MOVERS = {"mv", "move", "move-item"}
 SYSTEM_ID = re.compile(r"^[a-z0-9_]+$")
 GUARDED = "|".join(WRITE_TOOLS + ("Bash",))
 SELF = (".claude/settings.json", ".claude/settings.local.json", ".claude/skills/studio-data", ".claude/skills/scope-guard")  # 고치면 범위 훅이 꺼진다
-STATE_DIR = Path(tempfile.gettempdir()) / "studio-data-hook"   # 세션마다 이미 보인 경고. 게임 프로젝트에는 쓰지 않는다
+STATE_DIR: Path | None = None   # 세션마다 이미 보인 경고. 게임 프로젝트에는 쓰지 않는다. 비면 훅이 쓸 때 임시 폴더 아래로 정한다(_state_root)
 HOOKS = (("PostToolUse", "Write|Edit|MultiEdit", "post-edit"), ("PreToolUse", GUARDED, "judge-guard"), ("PreToolUse", GUARDED, "scope-guard"),
          ("SessionStart", "compact|clear|resume", "session-start"))   # 압축·지움·이어 열기 뒤에는 경고를 다시 모두 보인다
 
@@ -507,19 +507,32 @@ def _session_key(project: Path, session: str) -> str:
     return hashlib.sha256(f"{project.resolve()}\n{session}".encode("utf-8")).hexdigest()[:16]
 
 
-def _state_dir() -> Path | None:
-    """세션 기록 폴더. 남이 만든 폴더면 쓰지 않는다(None: 경고를 모두 보인다). 내 폴더인데 남이 읽을 수 있으면 막는다."""
+def _state_root() -> Path | None:
+    """세션 기록을 둘 곳. 쓸 수 있는 임시 폴더가 없으면(읽기 전용 샌드박스) None. 불러올 때 찾으면 모든 명령이 멈춘다."""
+    if STATE_DIR is not None:
+        return STATE_DIR
     try:
-        STATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+        return Path(tempfile.gettempdir()) / "studio-data-hook"
+    except OSError:
+        return None
+
+
+def _state_dir() -> Path | None:
+    """세션 기록 폴더. 없거나 남이 만든 폴더면 쓰지 않는다(None: 경고를 모두 보인다). 내 폴더인데 남이 읽을 수 있으면 막는다."""
+    folder = _state_root()
+    if folder is None:
+        return None
+    try:
+        folder.mkdir(mode=0o700, parents=True, exist_ok=True)
         if hasattr(os, "getuid"):
-            st = STATE_DIR.stat()
+            st = folder.stat()
             if st.st_uid != os.getuid():
                 return None
             if st.st_mode & 0o077:
-                os.chmod(STATE_DIR, 0o700)
+                os.chmod(folder, 0o700)
     except OSError:
         return None
-    return STATE_DIR
+    return folder
 
 
 def _prune(folder: Path) -> None:
@@ -619,7 +632,10 @@ def session_start(payload_text: str, project: Path | None = None) -> tuple[int, 
     session = payload.get("session_id") if payload else None
     if not (isinstance(session, str) and session):
         return 0, "", ""
-    for f in STATE_DIR.glob(f"{_session_key(_project(payload, project), session)}-*.json"):
+    folder = _state_root()
+    if folder is None:
+        return 0, "", ""
+    for f in folder.glob(f"{_session_key(_project(payload, project), session)}-*.json"):
         try:
             f.unlink()
         except OSError:
