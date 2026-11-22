@@ -119,6 +119,13 @@ class Flow(unittest.TestCase):
         roadmap = re.search(r"\| 6 \|[^\n]*", read(ROOT / "docs/architecture.md")).group(0)
         self.assertIn("`asset-sourcing`", roadmap)
 
+    def test_after_art_change_reads_the_integration_record(self):
+        step1 = read(CHANGE).split("2. **")[0]
+        self.assertIn("`art-integration`", step1)
+        self.assertIn("art/integration.md", step1)
+        self.assertIn("못 봄", step1)   # 그쪽에서 확인하지 못한 뜻은 여기서도 확인하지 못한 것이다
+        self.assertIn("`art-integration`", read(ROOT / "README.md"))
+
     def test_decided_colors_have_a_place_without_art_skills(self):
         self.assertIn("## 정한 색과 단서", read(RECORD))
         step4 = section(read(DOC), "### 4. 그림 방향을 언제 정할지 사용자가 정한다")

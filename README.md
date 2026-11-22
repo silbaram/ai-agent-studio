@@ -220,7 +220,7 @@ python3 skills/studio-data/scripts/studio.py provenance docs/guide.md
 | --- | --- |
 | 개발 작업 관리 (기획 → 설계 → 작업 → 구현 → 검증) | [OpenSpec](https://github.com/Fission-AI/OpenSpec) (따로 설치). `scope-guard`로 이 저장소에 잇는다 |
 | 게임 설계 (아이디어·시스템·레벨·아이템·경제·밸런스·재미 검증) | **이 저장소** |
-| 그래픽 (도트·메시·VFX) | [game-art-skills](https://github.com/silbaram/game-art-skills). 이 저장소의 `art-handoff`가 넘길 것을 정리하고, 그쪽 `art-direction`이 그림 방향을, `asset-sourcing`이 그릴 것의 출처와 권리를 맡는다 |
+| 그래픽 (도트·메시·VFX) | [game-art-skills](https://github.com/silbaram/game-art-skills). 이 저장소의 `art-handoff`가 넘길 것을 정리하고, 그쪽 `art-direction`이 그림 방향과 움직임을, `asset-sourcing`이 그릴 것의 출처와 권리를, `art-integration`이 그것을 게임 화면에 넣고 규칙 그대로인지와 뜻마다 화면을 확인하는 일을 맡는다 |
 
 - [설계 문서](docs/architecture.md)의 로드맵 0~6단계를 1차로 마쳤다. 6단계(그래픽 넘기기)는 절차 문서만 있고 검사기는 없다. 덱빌딩 시험 게임의 사본과 실제 프로젝트에서 현장 시험을 했다.
 - 세 시험 게임에서 확인했다: 실시간 액션 로그라이크(새 게임), 턴제 택틱스(이미 만든 게임), 덱빌딩 카드 게임(새 게임).
