@@ -6,7 +6,9 @@
 """
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 import posixpath
 import re
@@ -14,7 +16,7 @@ import unicodedata
 from pathlib import Path
 
 from . import provenance
-from .common import DATASET_KINDS, ID_PATTERN, STATUSES, check_identity, instant, is_active, is_int, josa, load_dataset, valid_date
+from .common import DATASET_KINDS, ID_PATTERN, STATUSES, check_identity, detect_kind, instant, is_active, is_int, josa, load_dataset, valid_date
 from .common import did_you_mean as _did_you_mean
 from .common import table_cell as _cell
 
@@ -227,6 +229,128 @@ def criteria_stamp(h: dict, form: str = "tagless") -> str:
         fields["builds"] = _norm(h["builds"], form)
     body = json.dumps(fields, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(body.encode("utf-8")).hexdigest()[:8]
+
+
+DATA_SKIP = ("provenance", "acknowledged", "note")   # 게임 데이터 지문에 넣지 않는 칸(값이 아니다). '_'로 시작하는 키도 뺀다
+DATA_SUFFIXES = (".json", ".csv")
+
+
+STUDIO_KINDS = ("concepts", "systems", "playtests")   # data/에 두어도 게임 데이터가 아닌 이 도구의 파일
+
+
+def norm_rel(rel: str) -> str:
+    """depends_on의 경로를 프로젝트 폴더 기준 슬래시 경로로(역슬래시, ./, 겹친 /). 검사와 지문이 같은 파일을 본다."""
+    return posixpath.normpath(rel.replace("\\", "/"))
+
+
+def _studio_file(path: Path) -> bool:
+    """data/에 둔 컨셉·시스템 설계·플레이 기록. 이름이 아니라 내용으로 가린다(엔진의 systems.json은 게임 데이터다)."""
+    if path.suffix.lower() != ".json":
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return path.name.lower() == "playtests.json"
+    return detect_kind(data, path) in STUDIO_KINDS
+
+
+def data_files(root: Path, depends_on=None) -> list[str]:
+    """판정이 기대는 게임 데이터 파일(프로젝트 폴더 기준 경로). 가설에 depends_on이 없으면 data/ 바로 아래의 JSON·CSV 전부(이 도구의 파일은 뺀다)."""
+    if depends_on is not None:
+        return sorted(dict.fromkeys(norm_rel(x) for x in depends_on))
+    folder = Path(root) / "data"
+    if not folder.is_dir():
+        return []
+    return sorted(f"data/{p.name}" for p in folder.iterdir()
+                  if p.is_file() and p.suffix.lower() in DATA_SUFFIXES and not _studio_file(p))
+
+
+def default_file(rel: str) -> bool:
+    """depends_on이 없는 가설이 보는 꼴의 경로(data/ 바로 아래의 JSON·CSV). 세션에 적힌 지문에서 그 가설의 파일을 고를 때 쓴다."""
+    parts = rel.split("/")
+    return len(parts) == 2 and parts[0] == "data" and posixpath.splitext(parts[1])[1].lower() in DATA_SUFFIXES
+
+
+def _values(v):
+    if isinstance(v, dict):
+        return {k: _values(x) for k, x in v.items() if not (k.startswith("_") or k in DATA_SKIP)}
+    if isinstance(v, list):
+        return [_values(x) for x in v]
+    return v
+
+
+def _file_body(path: Path) -> str:
+    """파일의 값만 글로. JSON은 키 순서·띄어쓰기·메모·출처를 빼고, CSV는 출처 열을 빼고 본다. 그 밖의 파일(규칙 코드)은 바이트 그대로."""
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return "\0없음"
+    suffix = path.suffix.lower()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.hex()
+    if suffix == ".json":
+        try:
+            return json.dumps(_values(json.loads(text)), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        except ValueError:
+            return text
+    if suffix == ".csv":
+        try:
+            rows = [{k.strip(): (x or "").strip() for k, x in row.items()
+                     if k is not None and not k.strip().startswith("provenance_") and k.strip() not in DATA_SKIP}
+                    for row in csv.DictReader(io.StringIO(text))]
+        except csv.Error:
+            return text
+        return json.dumps(rows, ensure_ascii=False, sort_keys=True)
+    return text.replace("\r\n", "\n")
+
+
+def data_digests(root: Path | None, extra=()) -> dict:
+    """파일마다의 지문 {경로: 소문자 16진수 8자}. data/의 게임 데이터 파일과 extra(가설의 depends_on)에서 있는 파일. 세션의 data에 적는다."""
+    if root is None:
+        return {}
+    files = dict.fromkeys(data_files(root) + [norm_rel(x) for x in extra])
+    return {rel: hashlib.sha256(_file_body(Path(root) / rel).encode("utf-8")).hexdigest()[:8]
+            for rel in sorted(files) if (Path(root) / rel).is_file()}
+
+
+def stamp_from_digests(digests: dict, depends_on=None) -> str | None:
+    """파일 지문에서 가설의 데이터 지문을 낸다. depends_on이 없으면 data/ 바로 아래 꼴의 파일 전부.
+    가설이 기대는 파일이 없으면 None(그 파일을 볼 수 없었다)."""
+    if depends_on is None:
+        files = sorted(rel for rel in digests if default_file(rel))
+    else:
+        files = sorted(dict.fromkeys(norm_rel(x) for x in depends_on))
+        if any(rel not in digests for rel in files):
+            return None
+    if not files:
+        return None
+    body = json.dumps([[rel, digests[rel]] for rel in files], ensure_ascii=False)
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:8]
+
+
+def data_stamp(root: Path | None, depends_on=None) -> str | None:
+    """가설의 지금 게임 데이터 지문(소문자 16진수 8자). 버팀 판정의 data에 남기면 판정 뒤에 데이터가 바뀐 것을 안다. 볼 파일이 없으면 None.
+    depends_on의 파일이 없으면 그 자리를 '없음'으로 넣어 낸다(지운 것도 바뀐 것이다)."""
+    if root is None:
+        return None
+    files = data_files(root, depends_on)
+    have = data_digests(root, files if depends_on is not None else ())
+    return stamp_from_digests({**{rel: "없음" for rel in files}, **have}, depends_on)
+
+
+def depends_on_problem(v, root: Path | None) -> str | None:
+    """가설의 depends_on(판정이 기대는 파일 목록)이 틀렸으면 까닭."""
+    if not (isinstance(v, list) and v and all(isinstance(x, str) and x.strip() for x in v)):
+        return "판정이 기대는 파일(프로젝트 폴더 기준 경로) 문자열 배열입니다"
+    for rel in v:
+        norm = norm_rel(rel)
+        if norm.startswith("../") or norm == ".." or posixpath.isabs(norm) or re.match(r"^[A-Za-z]:", norm):
+            return f"프로젝트 폴더 안의 경로를 적습니다: {rel!r}"
+        if root is not None and not (Path(root) / norm).is_file():
+            return f"없는 파일입니다: {rel!r}"
+    return None
 
 
 HISTORY_KEYS = CRITERIA_KEYS + ("builds",)   # 이력에 고치기 전 값을 남길 수 있는 칸(지문에 드는 칸)
@@ -625,9 +749,26 @@ def _approved_criteria(valid: list) -> dict:
     return out
 
 
+def _approved_data(valid: list, root: Path | None) -> dict:
+    """선택한 컨셉의 가설별 게임 데이터 지문 {컨셉.가설: 지문}. 볼 데이터가 없거나 depends_on이 틀린 가설은 뺀다."""
+    out = {}
+    for c in valid:
+        hyps = (c.get("brief") or {}).get("hypotheses") if c.get("status") == "approved" and isinstance(c.get("brief"), dict) else None
+        for h in hyps if isinstance(hyps, list) else []:
+            if isinstance(h, dict) and isinstance(h.get("id"), str) and not ("depends_on" in h and depends_on_problem(h["depends_on"], root)):
+                got = data_stamp(root, h.get("depends_on"))
+                if got:
+                    out[f"{c['id']}.{h['id']}"] = got
+    return out
+
+
 def print_extra(report: dict) -> None:
     if report.get("criteria"):
         print("판정 기준 지문: " + " · ".join(f"{k} {v}" for k, v in report["criteria"].items()))
+    if report.get("data_stamps"):   # 버팀 판정의 data에 담는다. 판정 뒤에 게임 데이터가 바뀌면 플레이 기록 검사가 알린다
+        print("판정 데이터 지문: " + " · ".join(f"{k} {v}" for k, v in report["data_stamps"].items()))
+    if report.get("data_stamps") and report.get("session_data"):   # 플레이를 기록할 때 세션의 data에 그대로 옮긴다
+        print("세션에 적을 게임 데이터 지문: " + json.dumps(report["session_data"], ensure_ascii=False, sort_keys=True))
     if report.get("criteria_history"):   # 판정 에이전트가 고치기 전 기준을 찾을 곳
         print("기준 이력: " + " · ".join(f"{k} {x['count']}번({'마지막 ' if x['count'] > 1 else ''}{x['date']} {', '.join(x['fields'])})"
                                        for k, x in report["criteria_history"].items()))
@@ -666,6 +807,9 @@ def validate(data: dict, root: Path | None = None) -> dict:
         for n, h in enumerate(hyps if isinstance(hyps, list) else []):
             if isinstance(h, dict):
                 check_criteria_history(h, n, c["id"], errors)
+                problem = depends_on_problem(h["depends_on"], root) if "depends_on" in h else None
+                if problem:
+                    errors.append({"code": "schema", "where": c["id"], "message": f"brief.hypotheses[{n}].depends_on: {problem}: {h['depends_on']!r}"})
     unverified: list = []
     gate_notes: list = []
     ack_notes: list = []   # apply_acknowledged가 이어 붙인다
@@ -685,6 +829,11 @@ def validate(data: dict, root: Path | None = None) -> dict:
         "status_counts": status_counts,
         "approved": sorted(c["id"] for c in valid if c.get("status") == "approved"),
         "criteria": _approved_criteria(valid),
+        "data_stamps": _approved_data(valid, root),
+        "session_data": data_digests(root, [x for c in valid if c.get("status") == "approved" and isinstance(c.get("brief"), dict)
+                                            for h in (c["brief"].get("hypotheses") if isinstance(c["brief"].get("hypotheses"), list) else [])
+                                            if isinstance(h, dict) and "depends_on" in h and not depends_on_problem(h["depends_on"], root)
+                                            for x in h["depends_on"]]),
         "criteria_history": {f"{c['id']}.{h['id']}": x for c in valid if c.get("status") == "approved" and isinstance(c.get("brief"), dict)
                              for h in (c["brief"].get("hypotheses") if isinstance(c["brief"].get("hypotheses"), list) else [])
                              if isinstance(h, dict) and isinstance(h.get("id"), str) and (x := _history_summary(h))},
@@ -698,8 +847,9 @@ def validate(data: dict, root: Path | None = None) -> dict:
     }
 
 
-def hypothesis_index(data: dict) -> dict:
-    """플레이 기록 검사용: {컨셉 id: {approved, hypotheses: [가설 id 또는 None, ...], samples, criteria(가설별 기준 지문), legacy_criteria(예전 계산의 지문)}}. 형식이 틀린 항목은 건너뛴다.
+def hypothesis_index(data: dict, root: Path | None = None) -> dict:
+    """플레이 기록 검사용: {컨셉 id: {approved, hypotheses: [가설 id 또는 None, ...], samples, criteria(가설별 기준 지문), legacy_criteria(예전 계산의 지문),
+    data(가설별 게임 데이터 지문, root가 없거나 볼 데이터가 없으면 비거나 None)}}. 형식이 틀린 항목은 건너뛴다.
     concepts 배열 자체가 없으면 None(읽지 못함)을 돌려준다. 빈 결과로 돌려주면 모든 참조가 '없는 컨셉'으로 연쇄 보고된다."""
     if not isinstance(data.get("concepts"), list):
         return None
@@ -719,7 +869,11 @@ def hypothesis_index(data: dict) -> dict:
         history = {h["id"]: [{"stamp": e["stamp"], "date": e["date"], "fields": list(e["before"]), "after_results": e.get("after_results") is True}
                              for e in h["criteria_history"]]
                    for h in named if _history_summary(h)}   # 형식이 맞는 이력만. 틀린 이력은 컨셉 검사가 오류로 알린다
-        out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids, "samples": samples, "criteria": criteria,
+        data_now = {h["id"]: (None if "depends_on" in h and depends_on_problem(h["depends_on"], root) else data_stamp(root, h.get("depends_on")))
+                    for h in named} if root is not None else {}
+        depends = {h["id"]: list(h["depends_on"]) for h in named if "depends_on" in h and not depends_on_problem(h["depends_on"], None)}
+        out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids, "samples": samples, "criteria": criteria, "data": data_now,
+                        "depends_on": depends,
                         "legacy_criteria": {k: v for k, v in legacy.items() if v}, "builds": builds, "history": history}
     return out
 

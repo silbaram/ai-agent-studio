@@ -7,7 +7,7 @@ import unittest
 from contextlib import redirect_stdout
 from unittest import mock
 
-from _studio import ROOT, STUDIO, claude, common, economy as ec, levels as lv, meta_sim as sm, level_guide, level_format
+from _studio import ROOT, STUDIO, claude, common, concepts as cc, economy as ec, levels as lv, meta_sim as sm, level_guide, level_format
 from test_economy import CRAFTING, ITEMS, base, buy, validate
 from test_levels import both, enc, level, run
 from test_levels_field import ECONOMY, TIMES, notes, printed, stage
@@ -441,6 +441,8 @@ class HookDetails(Project):
     def test_the_note_is_not_counted_as_a_warning_and_uses_a_project_path(self):
         self.write("data/levels.json", '{"level": []}')
         self.edit("data/playtests.json", lambda d: d["playtests"][-1].pop("greybox"))   # 레벨 구성을 못 읽으면 그레이박스 기록은 미확인이다
+        now, files = cc.data_stamp(self.root), cc.data_digests(self.root)   # 데이터를 고쳤으니 판정과 세션의 데이터 지문도 맞춘다(이 시험은 건너뜀 안내만 본다)
+        self.edit("data/playtests.json", lambda d: [x.update(data=now if x in d["verdicts"] else files) for x in d["verdicts"] + d["playtests"] if "data" in x])
         code, text = self.hook("data/levels.json")
         self.assertEqual(code, 0)
         self.assertIn("경고 0개", text)

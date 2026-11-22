@@ -14,11 +14,14 @@ from pathlib import Path
 from .common import ID_PATTERN, STATUSES, YARDSTICK_TAG, ack_reason, check_identity, did_you_mean, instant, is_int, is_number, unknown_keys_text, josa, valid_range
 from .common import valid_date as common_valid_date
 from .common import add_issue as _err
+from .concepts import stamp_from_digests
 
 RESULTS = ("holds", "refuted", "unknown")
 RESULT_LABEL = {"holds": "버팀", "refuted": "틀림", "unknown": "모름"}
 DECIDED = ("holds", "refuted")
 CRITERIA_GATE_REASON = {"missing": "지문 없음", "changed": "기준 바뀜"}
+DATA_GATE_REASON = {"missing": "데이터 지문 없음", "changed": "데이터 바뀜", "unplayed": "플레이 때 지문 없음", "not_played": "플레이한 데이터와 다름"}
+CONTENT_GROWTH = "production-milestones references/content-growth.md '낡은 판정 풀기'"
 NOT_CHOSEN_GATE = "이 컨셉은 지금 선택(approved)한 컨셉이 아니라 게이트에 들지 않습니다. 다시 고르면 확정해도 게이트를 넘지 못합니다. "
 NOTE_KINDS = ("observation", "preference", "deviation")  # deviation: 가설 test의 시험 절차를 어긴 일(순서, 중간 결과를 본 뒤 플레이 등)
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -31,7 +34,7 @@ SOURCE_READ_LIMIT = 5_000_000
 STAGE_FIELDS = {"stage", "entered", "cleared", "level", "level_end", "duration", "timed", "kills", "kill_rate", "played_length", "income", "source", "note"}
 GROUP_FIELDS = {"upgrades", "growth_build", "variant", "runs", "players", "stage_stats"}
 GREYBOX_FIELDS = {"check", "value", "passed", "n", "source", "note", "expect"}
-SESSION_FIELDS = {"id", "date", "concept", "build", "game_build", "players", "runs", "events", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note", "simulated", "excluded_runs", "started_at"}
+SESSION_FIELDS = {"id", "date", "concept", "build", "game_build", "data", "players", "runs", "events", "observations", "notes", "logs", "stage_stats", "upgrades", "growth_build", "groups", "greybox", "acknowledged", "note", "simulated", "excluded_runs", "started_at"}
 TOP_FIELDS = {"playtests", "verdicts", "note"}
 REF_LABEL = {"stages": "전투 단계", "upgrades": "영구 강화", "enemies": "적", "builds": "판 안 성장 빌드", "currencies": "재화", "greybox": "그레이박스 확인"}
 UNCHECKED_REASON = {
@@ -283,6 +286,10 @@ def check_session(s: dict, errors: list, warnings: list) -> bool:
     if "game_build" in s and not _text(s["game_build"]):
         _err(errors, "schema", where, f"game_build는 프로토타입이 판 로그에 남긴 빌드 지문입니다(예: cfg721feeb5): {s['game_build']!r}")
         ok = False
+    if "data" in s and not (isinstance(s["data"], dict) and s["data"] and all(_text(k) and isinstance(x, str) and CRITERIA.match(x) for k, x in s["data"].items())):
+        _err(errors, "schema", where, "data는 기록할 때의 게임 데이터 파일 지문 {경로: 소문자 16진수 8자}입니다. "
+             f"check의 '세션에 적을 게임 데이터 지문' 줄을 그대로 옮깁니다: {s['data']!r}")
+        ok = False
     if "simulated" in s and not isinstance(s["simulated"], bool):
         _err(errors, "schema", where, f"simulated는 true(사람이 아니라 봇·스크립트가 한 플레이)나 false입니다: {s['simulated']!r}")
         ok = False
@@ -370,6 +377,16 @@ def check_verdict(v, n: int, errors: list) -> str | None:
     if "criteria" in v and not (isinstance(v["criteria"], str) and CRITERIA.match(v["criteria"])):
         _err(errors, "schema", where, f"criteria(판정 기준 지문)는 소문자 16진수 8자입니다. 지금 지문은 check가 알려 줍니다: {v['criteria']!r}")
         ok = False
+    if "data" in v and not (isinstance(v["data"], str) and CRITERIA.match(v["data"])):
+        _err(errors, "schema", where, f"data(판정할 때의 게임 데이터 지문)는 소문자 16진수 8자입니다. 지금 지문은 check의 '판정 데이터 지문' 줄에 있습니다: {v['data']!r}")
+        ok = False
+    if "carried" in v:
+        c = v["carried"]
+        if not (isinstance(c, dict) and set(c) <= {"from", "regression"} and isinstance(c.get("from"), str) and CRITERIA.match(c["from"])
+                and _text(c.get("regression")) and v.get("result") == "holds"):
+            _err(errors, "schema", where, "carried는 봇 회귀를 보고 사용자가 이어 가기로 한 버팀 판정에 적는 "
+                 "{from: 사람이 마지막으로 플레이한 판정의 data 지문, regression: 회귀 결과 파일 경로}입니다: " + repr(c))
+            ok = False
     if "cut_reason" in v and not (_text(v["cut_reason"]) and v.get("status") == "cut"):
         _err(errors, "schema", where, "cut_reason은 지난 판정(status cut)에 지운 날짜와 까닭을 적는 글입니다. 기준을 고쳐 지웠으면 바뀐 기준 문장도 적습니다.")
         ok = False
@@ -428,6 +445,78 @@ def _check_criteria(v: dict, where: str, concepts: dict | None, warnings: list, 
                                 "다시 시험하려고 기준을 바꿨으면 묻지 않고, 새 기록을 기다리지 말고 지금 cut으로 둡니다(지우지 않습니다). "
                                 + _history_note(info, v)})
     return "changed"
+
+
+def _check_data(v: dict, where: str, concepts: dict | None, warnings: list, errors: list, seen: list) -> list:
+    """버팀 판정의 게임 데이터 지문(data)을 근거 세션을 플레이한 때의 데이터, 지금 데이터와 견준다. 걸린 까닭의 목록(비면 통과):
+    missing(판정에 지문 없음) / unplayed(마지막 근거 세션에 지문 없음) / not_played(플레이한 데이터와 다름) / changed(판정 뒤 바뀜).
+    선택하지 않은 컨셉, 볼 데이터가 없는 프로젝트, 본 게임 다시 확인 가설(<id>_main)이 있는 원래 가설은 보지 않는다."""
+    info = concepts[v["concept"]] if concepts is not None else {}
+    current = info.get("data", {}).get(v["hypothesis"])
+    rechecked = f"{v['hypothesis']}_main" in info.get("hypotheses", ())
+    if v["result"] != "holds" or not info.get("approved", True) or not current or rechecked:
+        return []
+    if "data" not in v:
+        warnings.append({"code": "verdict_data_missing", "where": where,
+                         "message": "버팀 판정에 게임 데이터 지문(data)이 없어 판정 뒤에 카드·적·수치가 바뀌어도 알 수 없습니다. 확정해도 게이트(--fail-on-assumed)를 넘지 못합니다. "
+                                    f"근거 세션을 플레이한 뒤 데이터를 바꾸지 않았을 때만 지금 지문을 적습니다: \"data\": \"{current}\". "
+                                    "바꾸지 않았는지는 가장 이른 근거 세션의 build 커밋과 지금을 git diff <커밋> -- data/(가설에 depends_on이 있으면 그 파일)로 봅니다. "
+                                    f"근거 세션의 data도 함께 적습니다. 바꿨으면 데이터가 바뀐 판정과 같이 다룹니다({CONTENT_GROWTH}, '지문 없는 판정')."})
+        return ["missing"]
+    found: list = []
+    carried = v.get("carried") if isinstance(v.get("carried"), dict) else None
+    played_on = carried["from"] if carried else v["data"]   # 이어 간 판정의 세션은 사람이 플레이한 판정의 데이터에서 했다
+    order = sorted(seen, key=lambda x: (x["date"], x.get("started_at") or "", x["id"]))
+    last = order[-1] if order else None
+    if last is not None and "data" not in last:
+        warnings.append({"code": "session_data_missing", "where": where,
+                         "message": f"마지막 근거 세션 {last['id']}에 기록할 때의 게임 데이터 지문(data)이 없어, 판정의 지문이 사람이 플레이한 데이터인지 알 수 없습니다. "
+                                    "확정해도 게이트를 넘지 못합니다. 플레이한 뒤 데이터를 바꾸지 않았을 때만 check의 '세션에 적을 게임 데이터 지문' 줄을 그 세션에 적습니다. "
+                                    f"바꾸지 않았는지는 판정에 지문이 없을 때와 같이 git diff로 봅니다({CONTENT_GROWTH}, '지문 없는 판정')."})
+        found.append("unplayed")
+    elif last is not None:
+        deps = info.get("depends_on", {}).get(v["hypothesis"])
+        got = stamp_from_digests(last["data"], deps)
+        if got != played_on:
+            _err(errors, "verdict_data_not_played", where,
+                 f"{'이어 간 판정의 carried.from' if carried else '판정의 data'}({played_on})이 마지막 근거 세션 {last['id']}을 플레이한 때의 데이터 지문"
+                 f"({got or '그 세션의 data에 가설이 기대는 파일이 없음'})과 다릅니다. 플레이한 뒤 데이터를 고치고 판정했으면 사람이 그 데이터를 해 보지 않았습니다. "
+                 "판정의 지문을 세션의 것으로 고치고(그러면 판정 뒤 바뀐 것으로 보입니다) 낡은 판정처럼 다룹니다.")
+            found.append("not_played")
+    if v["data"] == current:
+        return found
+    warnings.append({"code": "verdict_data_changed", "where": where,
+                     "message": f"판정 뒤에 이 가설이 기대는 게임 데이터가 바뀌었습니다(판정 {v['data']}, 지금 {current}). 확정 판정이어도 게이트를 넘지 못합니다. "
+                                "같은 시드·같은 봇으로 기준선을 다시 돌려 사람이 마지막으로 플레이한 빌드의 값과 견주고, 사람이 다시 플레이하거나 "
+                                f"사용자가 이어 가기로 정합니다({CONTENT_GROWTH})."})
+    return found + ["changed"]
+
+
+def _origins(raw_verdicts: list) -> dict:
+    """사람이 플레이한 지난 판정 {컨셉.가설: {data 지문: [근거 세션, ...]}}. 이어 간 판정(carried)은 기준이 되지 못한다.
+    같은 데이터에서 다시 판정한 것(세션을 더함)이 여럿이면 모두 남긴다."""
+    out: dict = {}
+    for v in raw_verdicts:
+        if (isinstance(v, dict) and v.get("status") == "cut" and v.get("result") == "holds" and "carried" not in v
+                and isinstance(v.get("data"), str) and isinstance(v.get("sessions"), list) and all(isinstance(x, str) for x in v["sessions"])):
+            out.setdefault(f"{v.get('concept')}.{v.get('hypothesis')}", {}).setdefault(v["data"], []).append(sorted(v["sessions"]))
+    return out
+
+
+def _check_carried(v: dict, where: str, origins: dict, root: Path | None, errors: list) -> None:
+    c = v["carried"]
+    played = origins.get(c["from"])
+    if played is None:
+        _err(errors, "carried_from_unknown", where,
+             f"carried.from({c['from']})이 이 가설의 사람이 플레이한 지난 판정(cut, carried 없음, 버팀)의 data가 아닙니다. "
+             "이어 감은 늘 사람이 마지막으로 플레이한 판정의 지문에서 잽니다. 그 판정을 cut으로 남기고 그 data를 적습니다.")
+    elif sorted(v.get("sessions", [])) not in played:
+        _err(errors, "carried_evidence_differs", where,
+             f"이어 간 판정의 근거 세션({', '.join(v.get('sessions', []))})이 사람이 플레이한 판정의 근거({' / '.join(', '.join(x) for x in played)})와 다릅니다. "
+             "봇 회귀는 근거가 아니므로 근거 세션은 그대로 옮깁니다. 새 세션이 있으면 이어 가지 않고 다시 판정합니다.")
+    if root is not None and not (root / _norm_path(c["regression"])).is_file():
+        _err(errors, "carried_regression_missing", where,
+             f"회귀 결과 파일이 없습니다: {c['regression']}. 같은 시드·같은 봇으로 낸 결과(앞 빌드 값과 지금 값)를 파일로 남기고 그 경로를 적습니다.")
 
 
 def _history_note(info: dict, v: dict) -> str:
@@ -723,6 +812,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
     verdicts: dict = {}
     left: dict = {}   # 지난 판정이 남긴 '다음 시험 전에 풀 것' {가설: {text, resolved}}. 버팀·틀림 판정이 나오기 전까지 보인다
     restamp: dict = {}   # 예전 꼴 지문으로 기록한 판정 {판정: {from, to}}
+    origins = _origins(raw_verdicts)
     status_counts = {st: 0 for st in STATUSES + ("unspecified",)}
     for n, v in enumerate(raw_verdicts):
         where = check_verdict(v, n, errors)
@@ -744,6 +834,8 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         elif not _hypothesis_ref(v["concept"], v["hypothesis"], where, concepts, errors):
             continue
         criteria = _check_criteria(v, where, concepts, warnings, restamp)
+        if "carried" in v:
+            _check_carried(v, where, origins.get(where, {}), root, errors)
         _check_override(v, where, errors)
         cited = v.get("sessions", [])
         if v["result"] in DECIDED and not cited:
@@ -771,6 +863,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                  "사람의 플레이만 버팀·틀림의 근거가 됩니다. 근거에서 빼거나 unknown(모름)으로 둡니다.")
         seen = [s for s in found if any(o["hypothesis"] == v["hypothesis"] for o in s.get("observations", []))]
         human = [s for s in seen if s.get("simulated") is not True]   # 표본은 사람의 플레이만 센다
+        data_state = _check_data(v, where, concepts, warnings, errors, human)
         have = _sample(human, v["hypothesis"])   # 그 가설을 관찰한 근거 세션만 센다. 출력과 게이트가 같은 값을 쓴다
         need = concepts[v["concept"]].get("samples", {}).get(v["hypothesis"]) if concepts is not None else None
         if need and "events" in need:
@@ -811,7 +904,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         deviations = sum(1 for s in found for x in s.get("notes") or []   # 가설을 적은 절차 이탈은 그 가설에만 센다
                          if x.get("kind") == "deviation" and v["hypothesis"] in (x.get("hypotheses") or [v["hypothesis"]]))
         verdicts[where] = {"result": v["result"], "status": status, "reason": v["reason"], "sample": have, "need": need,
-                           "deviations": deviations, "criteria": criteria, "proposed_result": v.get("proposed_result"), "next_needs": v.get("next_needs"),
+                           "deviations": deviations, "criteria": criteria, "data": data_state, "carried": v.get("carried"), "proposed_result": v.get("proposed_result"), "next_needs": v.get("next_needs"),
                            "needs_resolved": v.get("needs_resolved"), "keep_unknown": v.get("keep_unknown"),
                            "sample_text": _sample_line(have, need, deviations, _builds(seen))
                            + (f" · 자동 플레이 세션 {len(seen) - len(human)}개 뺌" if len(seen) > len(human) else "")
@@ -828,10 +921,11 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                 key = f"{cid}.{h}" if h else f"{cid}.brief.hypotheses[{i}]"
                 got = verdicts.get(key)
                 decided = bool(got) and got["result"] in DECIDED and got["status"] == "approved"
-                if not decided or got["criteria"] != "ok":   # 지문이 없거나 기준이 바뀐 확정 판정은 지금 기준의 판정인지 모른다
+                if not decided or got["criteria"] != "ok" or got["data"]:   # 지문이 없거나 기준·데이터가 바뀐 확정 판정은 지금의 판정인지 모른다
                     unverified.append(key)
-                    if decided and got["criteria"] in CRITERIA_GATE_REASON:   # 판정 줄은 '확정'인데 게이트에 걸린 까닭
-                        unverified_reasons[key] = CRITERIA_GATE_REASON[got["criteria"]]
+                    why = [CRITERIA_GATE_REASON.get(got["criteria"])] + [DATA_GATE_REASON[x] for x in got["data"]] if decided else []
+                    if any(why):   # 판정 줄은 '확정'인데 게이트에 걸린 까닭
+                        unverified_reasons[key] = ", ".join(x for x in why if x)
                 if decided and got["result"] == "refuted" and got["criteria"] != "changed":   # 기준을 고쳤으면 다시 시험하는 중이다
                     refuted.append(key)
                     warnings.append({"code": "approved_concept_refuted", "where": key,
@@ -896,7 +990,8 @@ def verdict_line(where: str, v: dict) -> str:
     state = "확정" if v["status"] == "approved" else "제안"
     if v.get("proposed_result") not in (None, v["result"]):
         state += f", 판정 에이전트는 {RESULT_LABEL[v['proposed_result']]}"   # 사용자가 제안을 모름으로 낮춰 확정했다
-    return f"{where}: {RESULT_LABEL[v['result']]} ({state}) · 관찰한 근거 {v['sample_text']}"
+    carried = f" · 이어 감(사람이 플레이한 데이터 {v['carried']['from']}, 봇 회귀 {v['carried']['regression']})" if v.get("carried") else ""
+    return f"{where}: {RESULT_LABEL[v['result']]} ({state}) · 관찰한 근거 {v['sample_text']}{carried}"
 
 
 def next_needs_line(where: str, x: dict) -> str:
@@ -920,18 +1015,19 @@ def print_counts(result: dict) -> None:
 
 # ---------- hypothesis: 가설 하나의 판정 자료 ----------
 SESSION_HEAD = ("id", "date", "started_at", "build", "game_build", "players", "runs", "events", "logs", "simulated", "note")
-CUT_KEEP = ("result", "status", "criteria", "sessions", "cut_reason", "next_needs", "needs_resolved", "keep_unknown", "proposed_result")
+CUT_KEEP = ("result", "status", "criteria", "data", "carried", "sessions", "cut_reason", "next_needs", "needs_resolved", "keep_unknown", "proposed_result")
 
 
 def _mine(x, cid: str, hid: str) -> bool:
     return isinstance(x, dict) and x.get("concept") == cid and x.get("hypothesis") == hid
 
 
-def context(where: str, concepts_data: dict, data: dict, report: dict, stamp, everything: bool = False) -> dict | None:
+def context(where: str, concepts_data: dict, data: dict, report: dict, stamp, everything: bool = False, data_now=None) -> dict | None:
     """판정 에이전트가 기록 전체를 여러 번 읽지 않도록 가설 하나에 필요한 것만 모은다(362번). 없는 가설이면 None.
     가설 문장과 기준 이력, 그 가설의 판정(지난 판정은 이유 글을 빼고), 그 가설의 관찰값·메모가 있거나 판정이 근거로 든 세션.
     세션의 관찰값·메모는 지금 판정(cut이 아닌 것)과 파일의 마지막 판정이 근거로 든 세션, 아직 어느 판정에도 들지 않은 세션만 보인다.
-    그 밖의 지난 판정만 근거로 든 세션은 머리줄만 둔다(earlier). everything이면 모두 보인다. stamp: 가설의 기준 지문을 내는 함수."""
+    그 밖의 지난 판정만 근거로 든 세션은 머리줄만 둔다(earlier). everything이면 모두 보인다. stamp: 가설의 기준 지문을 내는 함수.
+    data_now: 가설을 받아 (게임 데이터 지문, 본 파일, 낼 수 없는 까닭)을 내는 함수(없으면 보이지 않는다)."""
     cid, _, hid = where.partition(".")
     concept = next((c for c in concepts_data.get("concepts") or [] if isinstance(c, dict) and c.get("id") == cid), None)
     brief = (concept or {}).get("brief")
@@ -960,8 +1056,9 @@ def context(where: str, concepts_data: dict, data: dict, report: dict, stamp, ev
             sessions.append({**head, "earlier": True})
     sessions.sort(key=lambda s: (str(s.get("date")), str(s.get("id"))))
     return {"where": where, "approved": concept.get("status") == "approved",
-            "hypothesis": {k: hyp[k] for k in ("claim", "failure_signal", "test", "sample", "builds", "criteria_history") if k in hyp},
+            "hypothesis": {k: hyp[k] for k in ("claim", "failure_signal", "test", "sample", "builds", "depends_on", "criteria_history") if k in hyp},
             "criteria": stamp(hyp),
+            "data": dict(zip(("stamp", "files", "problem"), data_now(hyp))) if data_now else None,
             "check": {"verdict": (report.get("verdicts") or {}).get(where), "next_needs": (report.get("next_needs") or {}).get(where),
                       "event_notes": [x for x in report.get("event_notes") or [] if x["where"] == where]},
             "verdicts": verdicts, "sessions": sessions}
@@ -974,10 +1071,16 @@ def _flat(v) -> str:
 def print_context(got: dict) -> None:
     where, h = got["where"], got["hypothesis"]
     print(f"# 가설 {where}" + ("" if got["approved"] else " (선택하지 않은 컨셉)") + ". 읽기 전용. 원본은 design/concepts.json, data/playtests.json")
-    for key, label in (("claim", "주장"), ("failure_signal", "틀렸다는 신호"), ("test", "시험"), ("sample", "표본"), ("builds", "세는 빌드")):
+    for key, label in (("claim", "주장"), ("failure_signal", "틀렸다는 신호"), ("test", "시험"), ("sample", "표본"), ("builds", "세는 빌드"), ("depends_on", "기대는 파일")):
         if key in h:
             print(f"{label}({key}): {_flat(h[key])}")
     print(f"판정 기준 지문(지금): {got['criteria'] or '없음'}")
+    if got.get("data"):
+        d = got["data"]
+        if d.get("problem"):
+            print(f"데이터 지문(지금): 없음 — {d['problem']}. check의 오류를 먼저 고칩니다")
+        else:
+            print(f"데이터 지문(지금): {d['stamp'] or '없음(볼 게임 데이터 없음)'} ({', '.join(d['files']) or '파일 없음'})")
     for e in h.get("criteria_history") or []:   # 형식이 틀린 이력은 check가 오류로 알린다. 여기서는 있는 그대로 보인다
         if not isinstance(e, dict):
             continue

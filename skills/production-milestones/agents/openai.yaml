@@ -1,0 +1,4 @@
+interface:
+  display_name: "본 게임 완성까지"
+  short_description: "알파·베타·출시 후보로 나눠 콘텐츠를 늘리고 판정을 지금 데이터에 맞추고 출시를 확인한다"
+  default_prompt: "$production-milestones로 본 게임이 지금 어느 이정표에 있고 다음에 무엇을 확인할지 정리해줘."

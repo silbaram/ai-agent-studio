@@ -193,6 +193,7 @@ $progression-economy로 2구역에 나올 정예 적을 하나 추가해줘.
 | 방, 웨이브, 쉬는 곳을 배치하고 싶다 | [level-design](skills/level-design/SKILL.md) | 조우의 세기를 예산과 견주고, 쉬는 곳 사이의 부담을 보고, 그림 없이 확인할 항목을 플레이 기록과 잇는다 |
 | 가설이 버텨서 엔진을 정하고 본 게임으로 넘어가고 싶다 | [production-handoff](skills/production-handoff/SKILL.md) | 넘어갈 준비를 확인하고, 엔진을 필수 조건과 작은 시험으로 고르게 하고, 시험판을 버릴지 키울지 정하고, 본 게임 빌드에서 가설을 작은 표본으로 다시 확인한다. 절차 문서만 있고 검사기는 없다 |
 | 본 게임 화면을 만들기 전에 그림 쪽에 넘길 것을 정리하고 싶다 | [art-handoff](skills/art-handoff/SKILL.md) | 플레이어가 화면에서 구분해야 하는 것을 가설의 말과 규칙에서 모아 기대는 가설과 잇고, 그릴 것을 데이터 id에서 옮긴다. 그림 방향을 다시 확인 전에 정할지 뒤에 정할지 사용자가 정한다. 그림체와 색은 정하지 않는다. 절차 문서만 있다 |
+| 본 게임을 출시까지 만들고 싶다 | [production-milestones](skills/production-milestones/SKILL.md) | 알파(기능 완료), 콘텐츠 늘리기, 베타(콘텐츠 동결과 숫자 다듬기), 출시 후보 게이트로 나눈다. 버팀 판정에 게임 데이터 지문을 남겨 데이터가 바뀌면 게이트가 막고, 같은 시드 봇 회귀를 보고 사람이 다시 플레이할지 이어 갈지 사용자가 정한다 |
 | (모든 스킬이 함께 쓴다) | [studio-data](skills/studio-data/SKILL.md) | 공용 도구 `studio.py`: 검사(`check`), 뷰어(`view`), 시뮬레이션(`simulate`), 기록 보정(`calibrate`), 출처 검사(`provenance`), 범위 검사(`scope`), Claude Code 연결(`setup`) |
 
 ## 견본 프로젝트로 도구 해 보기
@@ -225,6 +226,7 @@ python3 skills/studio-data/scripts/studio.py provenance docs/guide.md
 - 세 시험 게임에서 확인했다: 실시간 액션 로그라이크(새 게임), 턴제 택틱스(이미 만든 게임), 덱빌딩 카드 게임(새 게임).
 - Claude Code와 Codex를 리눅스(WSL)에서 실제 세션으로 확인했다. Windows PowerShell은 아직 실제로 돌려 보지 않았다([확인 범위](skills/studio-data/SKILL.md#실행)).
 - 엔진 고르기와 본 게임으로 넘어가기는 절차 문서(`production-handoff`)만 있고 검사기는 없다. 덱빌딩 시험 게임에서 본 게임 빌드의 다시 확인과 규칙을 바꿔 되돌아가는 길까지 현장 시험을 했다.
+- 본 게임 완성까지(`production-milestones`)는 절차 문서와 판정의 데이터 지문 검사만 있고, 아직 시험 게임으로 돌려 보지 않았다.
 - 아직 하지 않는 것: 엔진별 절차(프로젝트 만들기, 빌드), 그래픽과 사운드.
 
 ## 개발

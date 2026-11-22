@@ -441,7 +441,7 @@ def validate_all(entries: list[dict]) -> list[dict]:
     broken_concepts = [d for d in entries if not d["ok"] and d.get("kind") == "concepts"]
     hypotheses = None
     for d in loaded_concepts:
-        index = concepts.hypothesis_index(d["data"])
+        index = concepts.hypothesis_index(d["data"], root=_project_root(Path(d["path"])))   # 판정 뒤 게임 데이터가 바뀌었는지는 이 폴더의 data/로 본다
         if index is None:
             broken_concepts.append(d)
             continue
