@@ -20,6 +20,7 @@ RESULTS = ("holds", "refuted", "unknown")
 RESULT_LABEL = {"holds": "버팀", "refuted": "틀림", "unknown": "모름"}
 DECIDED = ("holds", "refuted")
 CRITERIA_GATE_REASON = {"missing": "지문 없음", "changed": "기준 바뀜"}
+CARRY_PROPOSALS = {"carry": "이어 감", "replay": "다시 플레이"}   # 이어 간 판정에 남기는 판정 에이전트의 제안. 사용자는 다시 플레이 제안에도 이어 갈 수 있다(395)
 DATA_GATE_REASON = {"missing": "데이터 지문 없음", "changed": "데이터 바뀜", "unplayed": "플레이 때 지문 없음", "not_played": "플레이한 데이터와 다름"}
 CONTENT_GROWTH = "production-milestones references/content-growth.md '낡은 판정 풀기'"
 NOT_CHOSEN_GATE = "이 컨셉은 지금 선택(approved)한 컨셉이 아니라 게이트에 들지 않습니다. 다시 고르면 확정해도 게이트를 넘지 못합니다. "
@@ -382,10 +383,13 @@ def check_verdict(v, n: int, errors: list) -> str | None:
         ok = False
     if "carried" in v:
         c = v["carried"]
-        if not (isinstance(c, dict) and set(c) <= {"from", "regression"} and isinstance(c.get("from"), str) and CRITERIA.match(c["from"])
-                and _text(c.get("regression")) and v.get("result") == "holds"):
+        if not (isinstance(c, dict) and set(c) <= {"from", "regression", "proposed"} and isinstance(c.get("from"), str) and CRITERIA.match(c["from"])
+                and _text(c.get("regression")) and c.get("proposed") in CARRY_PROPOSALS and v.get("result") == "holds"):
             _err(errors, "schema", where, "carried는 봇 회귀를 보고 사용자가 이어 가기로 한 버팀 판정에 적는 "
-                 "{from: 사람이 마지막으로 플레이한 판정의 data 지문, regression: 회귀 결과 파일 경로}입니다: " + repr(c))
+                 "{from: 사람이 마지막으로 플레이한 판정의 data 지문, regression: 회귀 결과 파일 경로, "
+                 "proposed: 판정 에이전트의 제안(carry 이어 감 / replay 다시 플레이)}입니다. "
+                 "proposed가 없는 예전 기록이면 그때 판정 에이전트의 보고나 판정 reason에서 제안을 찾아 적고, 찾지 못하면 replay로 적습니다"
+                 "(사용자가 제안과 다르게 이어 갔을 수 있다): " + repr(c))
             ok = False
     if "cut_reason" in v and not (_text(v["cut_reason"]) and v.get("status") == "cut"):
         _err(errors, "schema", where, "cut_reason은 지난 판정(status cut)에 지운 날짜와 까닭을 적는 글입니다. 기준을 고쳐 지웠으면 바뀐 기준 문장도 적습니다.")
@@ -990,7 +994,9 @@ def verdict_line(where: str, v: dict) -> str:
     state = "확정" if v["status"] == "approved" else "제안"
     if v.get("proposed_result") not in (None, v["result"]):
         state += f", 판정 에이전트는 {RESULT_LABEL[v['proposed_result']]}"   # 사용자가 제안을 모름으로 낮춰 확정했다
-    carried = f" · 이어 감(사람이 플레이한 데이터 {v['carried']['from']}, 봇 회귀 {v['carried']['regression']})" if v.get("carried") else ""
+    c = v.get("carried")
+    against = f", 판정 에이전트 제안: {CARRY_PROPOSALS[c['proposed']]}" if c and c.get("proposed") != "carry" else ""   # 사용자가 제안과 다르게 이어 갔다
+    carried = f" · 이어 감(사람이 플레이한 데이터 {c['from']}, 봇 회귀 {c['regression']}{against})" if c else ""
     return f"{where}: {RESULT_LABEL[v['result']]} ({state}) · 관찰한 근거 {v['sample_text']}{carried}"
 
 

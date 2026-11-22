@@ -27,7 +27,7 @@ tools: Read, Grep, Glob, Bash
    - `holds`(버팀): 관찰값이 있고, `failure_signal`이 나오지 않았다.
    - `refuted`(틀림): 관찰값에서 `failure_signal`이 나왔다.
    - `unknown`(모름): 관찰값이 없거나, 가설의 `sample`(없으면 `test`에 적은 표본)에 못 미치거나, 신호가 나왔는지 기록만으로 가릴 수 없다. 결과가 주장과 반대 방향인데 `failure_signal`이 그 방향을 말하지 않으면 그 사실을 따로 말한다.
-8. 데이터가 바뀌어 낡은 버팀 판정의 회귀 결과 파일을 받으면 [낡은 판정 풀기](../../../production-milestones/references/content-growth.md#낡은-판정-풀기)의 기준으로 다시 플레이와 이어 감 중 하나를 제안한다. 회귀 파일을 Read로 열어 앞 값, 지금 값, 시드 범위, 문턱을 그대로 인용한다. 이어 감이면 그 절의 JSON 꼴로 돌려준다. 봇 결과만으로 새 버팀을 내지 않는다.
+8. 데이터가 바뀌어 낡은 버팀 판정의 회귀 결과 파일을 받으면 [낡은 판정 풀기](../../../production-milestones/references/content-growth.md#낡은-판정-풀기)의 기준으로 다시 플레이와 이어 감 중 하나를 제안한다. 회귀 파일을 Read로 열어 앞 값, 지금 값, 시드 범위, 문턱을 그대로 인용한다. 이어 감이면 그 절의 JSON 꼴(`carried.proposed`는 `carry`)로 돌려준다. 다시 플레이면 JSON을 돌려주지 않는다. 사용자가 그래도 이어 가면 만드는 쪽이 `"proposed": "replay"`로 기록한다. 봇 결과만으로 새 버팀을 내지 않는다.
 
 ## 지킬 것
 

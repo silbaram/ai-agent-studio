@@ -235,7 +235,7 @@ class DependsOn(unittest.TestCase):
 def carried_pair(g, origin_data, **over):
     """사람이 플레이한 판정(cut)과, 봇 회귀 뒤 이어 간 판정."""
     origin = verdict("holds", criteria=stamp(), status="cut", data=origin_data, cut_reason="2026-11-30 콘텐츠를 더해 이어 감")
-    carry = {"from": origin_data, "regression": "playtests/regression_1/result.json"}
+    carry = {"from": origin_data, "regression": "playtests/regression_1/result.json", "proposed": "carry"}
     carry.update(over.pop("carried", {}))
     return [origin, holds(data=g.stamp(), carried=carry, **over)]
 
@@ -271,9 +271,9 @@ class Carried(unittest.TestCase):
         """두 번째 이어 감도 사람이 플레이한 판정의 지문에서 잰다(회귀가 조금씩 쌓여 멀어지지 않게)."""
         pair = carried_pair(self.game, self.origin_data)
         middle = dict(pair[1], status="cut", cut_reason="2026-12-02 콘텐츠를 더 더함", data="1111abcd")
-        r = self.report([pair[0], middle, holds(data=self.game.stamp(), carried={"from": "1111abcd", "regression": "playtests/regression_1/result.json"})])
+        r = self.report([pair[0], middle, holds(data=self.game.stamp(), carried={"from": "1111abcd", "regression": "playtests/regression_1/result.json", "proposed": "carry"})])
         self.assertIn("carried_from_unknown", codes(r["errors"]))
-        r = self.report([pair[0], middle, holds(data=self.game.stamp(), carried={"from": self.origin_data, "regression": "playtests/regression_1/result.json"})])
+        r = self.report([pair[0], middle, holds(data=self.game.stamp(), carried={"from": self.origin_data, "regression": "playtests/regression_1/result.json", "proposed": "carry"})])
         self.assertEqual(r["errors"], [])
 
     def test_the_regression_file_must_exist(self):
@@ -291,12 +291,30 @@ class Carried(unittest.TestCase):
         self.assertTrue(any("carried" in e["message"] for e in r["errors"] if e["code"] == "schema"), r["errors"])
 
     def test_the_carried_shape_is_checked(self):
-        for bad in ("abc", {"from": "zz"}, {"from": self.origin_data}, {"from": self.origin_data, "regression": ""}):
+        for bad in ("abc", {"from": "zz"}, {"from": self.origin_data}, {"from": self.origin_data, "regression": ""},
+                    {"from": self.origin_data, "regression": "playtests/regression_1/result.json"},   # 395: 판정 에이전트의 제안이 없다
+                    {"from": self.origin_data, "regression": "playtests/regression_1/result.json", "proposed": "maybe"}):
             with self.subTest(bad=bad):
                 pair = carried_pair(self.game, self.origin_data)
                 pair[1]["carried"] = bad
                 r = self.report(pair)
                 self.assertIn("schema", codes(r["errors"]))
+
+    def test_an_old_record_without_the_proposal_says_what_to_write(self):
+        """395 검토: 제안 칸이 생기기 전의 이어 감 기록은 무엇을 적을지 안내를 받는다(모르면 replay)."""
+        pair = carried_pair(self.game, self.origin_data)
+        del pair[1]["carried"]["proposed"]
+        msg = next(e["message"] for e in self.report(pair)["errors"] if e["code"] == "schema" and "carried" in e["message"])
+        self.assertIn("찾지 못하면", msg)
+        self.assertIn("replay", msg.split("찾지 못하면")[1])
+
+    def test_a_user_can_carry_against_a_replay_proposal(self):
+        """395: 판정 에이전트가 다시 플레이를 제안해도 사용자는 이어 갈 수 있다. 제안은 carried.proposed에 남고 판정 줄에 보인다."""
+        r = self.report(carried_pair(self.game, self.origin_data, carried={"proposed": "replay"}))
+        self.assertEqual(r["errors"], [])
+        self.assertNotIn(WHERE, r["unverified"])
+        self.assertIn("판정 에이전트 제안: 다시 플레이", printed(r))
+        self.assertNotIn("판정 에이전트 제안", printed(self.report(carried_pair(self.game, self.origin_data))))
 
     def test_two_played_verdicts_on_the_same_data(self):
         """검토 6: 같은 데이터에서 사람이 판정한 것이 둘이면 어느 쪽에서든 이어 갈 수 있다."""
@@ -544,6 +562,24 @@ class Docs(unittest.TestCase):
         self.assertIn("| `session_data_missing` |", text)
         session_rows = text[text.index("## 세션 (`playtests`)"):text.index("## 판정 (`verdicts`)")]
         self.assertIn("| `data` |", session_rows)
+
+    def test_carry_against_the_proposal_is_documented(self):
+        """395: 기록 형식, 콘텐츠 늘리기, 판정 에이전트가 carried.proposed를 말한다."""
+        row = next(l for l in read(RECORD).splitlines() if l.startswith("| `carried` |"))
+        self.assertIn("`proposed`", row)
+        growth = read(SKILL / "references/content-growth.md")
+        part = growth[growth.index("## 낡은 판정 풀기"):growth.index("## 항목별로 세기")]
+        self.assertIn('"proposed": "replay"', part)
+        self.assertIn('"proposed": "carry"', part)
+        self.assertIn("proposed", read(ROOT / "skills/studio-data/assets/claude/studio-judge.md"))
+
+    def test_replay_points_to_the_build_update(self):
+        """396: 다시 플레이는 가설의 builds와 기준선을 새 빌드로 바꾸는 곳을 가리킨다."""
+        growth = read(SKILL / "references/content-growth.md")
+        part = growth[growth.index("## 낡은 판정 풀기"):growth.index("## 항목별로 세기")]
+        replay = next(l for l in part.splitlines() if "**다시 플레이:**" in l)
+        self.assertIn("production-handoff/SKILL.md#7-본-게임-빌드에서-가설을-다시-확인한다", replay)
+        self.assertIn("`builds`", replay)
 
     def test_backfill_starts_from_the_earliest_session(self):
         """검토 4: 지문을 나중에 적을 때는 가장 이른 근거 세션의 커밋부터 본다."""
