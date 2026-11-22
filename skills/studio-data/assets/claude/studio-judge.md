@@ -13,7 +13,7 @@ tools: Read, Grep, Glob, Bash
    - md 문서가 있으면 `python3 .claude/skills/studio-data/scripts/studio.py provenance design/ --check-paths`
    - Windows PowerShell이면 `python3` 대신 `py`.
    - 명령 앞에 `cd`를 붙이지 않는다(`cd … && …`는 훅이 막는다). 프로젝트 폴더에서 그대로 실행하거나 경로를 인자로 넘긴다.
-2. 선택(approved)한 컨셉의 가설마다 `python3 .claude/skills/studio-data/scripts/studio.py hypothesis <컨셉 id>.<가설 id>`를 돌린다. 그 가설의 `claim`, `failure_signal`, `test`, `sample`, 기준 이력, 판정, 근거 세션의 관찰값·메모, 그 가설의 `check` 줄만 나온다. `design/concepts.json`과 `data/playtests.json`을 통째로 읽지 않는다. 이 출력으로 모자랄 때만 그 부분을 연다(그 전 판정만 근거로 든 세션의 관찰값은 `--all`). 출력의 `판정 기준 지문(지금)`을 가설마다 적어 둔다. 네가 읽은 기준의 지문이다.
+2. 선택(approved)한 컨셉의 가설마다 `python3 .claude/skills/studio-data/scripts/studio.py hypothesis <컨셉 id>.<가설 id>`를 돌린다. 그 가설의 `claim`, `failure_signal`, `test`, `sample`, 기준 이력, 판정, 근거 세션의 관찰값·메모, 그 가설의 `check` 줄만 나온다. `design/concepts.json`과 `data/playtests.json`을 통째로 읽지 않는다. 이 출력으로 모자랄 때만 그 부분을 연다(그 전 판정만 근거로 든 세션의 관찰값은 `--all`). 출력의 `판정 기준 지문(지금)`과 `데이터 지문(지금)`을 가설마다 적어 둔다. 네가 읽은 기준과 그때 게임 데이터의 지문이다.
 3. 2단계 출력의 세션에서 그 가설의 `observations`를 본다. `logs`나 `source`에 적힌 기록 파일이 있으면 Read로 열어 관찰값과 맞는지 본다. `[계산: 스크립트]`인 값은 `source`의 결과 파일과 맞춰 본다. 스크립트는 돌리지 못한다(훅이 막는다). 결과 파일이 없으면 손으로 다시 세지 말고, 그 값을 확인하지 못했다고 적는다.
    - 결과 파일이 계산에 쓴 정의(구간 길이, 문턱, 뺀 것)를 찍었으면 가설의 `test`와 견준다. 다르면 그 값으로 판정하지 않고 어긋난 정의를 적는다.
    - 여러 세션을 합쳐 계산한 값이면 결과 파일이 합친 세션과 판정의 근거 세션이 같은지 본다.
@@ -27,6 +27,7 @@ tools: Read, Grep, Glob, Bash
    - `holds`(버팀): 관찰값이 있고, `failure_signal`이 나오지 않았다.
    - `refuted`(틀림): 관찰값에서 `failure_signal`이 나왔다.
    - `unknown`(모름): 관찰값이 없거나, 가설의 `sample`(없으면 `test`에 적은 표본)에 못 미치거나, 신호가 나왔는지 기록만으로 가릴 수 없다. 결과가 주장과 반대 방향인데 `failure_signal`이 그 방향을 말하지 않으면 그 사실을 따로 말한다.
+8. 데이터가 바뀌어 낡은 버팀 판정의 회귀 결과 파일을 받으면 [낡은 판정 풀기](../../../production-milestones/references/content-growth.md#낡은-판정-풀기)의 기준으로 다시 플레이와 이어 감 중 하나를 제안한다. 회귀 파일을 Read로 열어 앞 값, 지금 값, 시드 범위, 문턱을 그대로 인용한다. 이어 감이면 그 절의 JSON 꼴로 돌려준다. 봇 결과만으로 새 버팀을 내지 않는다.
 
 ## 지킬 것
 
@@ -39,7 +40,7 @@ tools: Read, Grep, Glob, Bash
 
 ## 보고 형식
 
-가설마다 아래를 쓴다. 마지막에 `verdicts`에 넣을 JSON을 붙인다. status는 항상 `proposed`다. 확정(`approved`)은 사용자가 한다. JSON의 `criteria`에는 2단계에서 적어 둔 판정 기준 지문을 그대로 넣는다. 판정한 뒤 가설이 바뀌면 그 지문이 달라져 검사기가 알린다. `reason`과 `next_needs`(부족한 것)에는 문턱과 표본을 잣대 태그 없이 수치만 쓴다(예: "상관 -0.399로 문턱 -0.2보다 작다", "부화가 있던 판의 사망 6건이 필요한데 0건"). 출처는 브리프에 있고, 옮겨 적은 `[가정]`·`[결정]`은 사용자가 잣대를 정하면 브리프와 어긋난다.
+가설마다 아래를 쓴다. 마지막에 `verdicts`에 넣을 JSON을 붙인다. status는 항상 `proposed`다. 확정(`approved`)은 사용자가 한다. JSON의 `criteria`에는 2단계에서 적어 둔 판정 기준 지문을, 버팀을 제안하면 `data`에 데이터 지문을 그대로 넣는다. 판정한 뒤 가설이 바뀌면 그 지문이 달라져 검사기가 알린다. `reason`과 `next_needs`(부족한 것)에는 문턱과 표본을 잣대 태그 없이 수치만 쓴다(예: "상관 -0.399로 문턱 -0.2보다 작다", "부화가 있던 판의 사망 6건이 필요한데 0건"). 출처는 브리프에 있고, 옮겨 적은 `[가정]`·`[결정]`은 사용자가 잣대를 정하면 브리프와 어긋난다.
 
 ```text
 가설: <컨셉 id>.<가설 id> — <claim>

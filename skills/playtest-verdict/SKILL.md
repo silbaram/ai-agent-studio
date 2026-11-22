@@ -60,6 +60,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 한 번 모여 플레이할 때마다 `data/playtests.json`의 `playtests`에 세션 하나를 넣는다. 형식은 [references/playtest-record.md](references/playtest-record.md).
 
 - 날짜, 플레이한 사람, 빌드(커밋 해시), 판 수, 원본 로그 파일 경로(`logs`), 판 로그에 있으면 첫 판 시작 시각(`started_at`)
+- 데이터를 고치기 전 `세션에 적을 게임 데이터 지문`(`data`)
 - 가설별 관찰값(`observations`): 가설의 `failure_signal`을 판단하는 데 필요한 값. 로그에서 읽었으면 `source`에 파일을 적는다. 스크립트로 계산한 값(비율, 상관)은 그 출력을 세션 폴더에 결과 파일로 남기고(예: `python3 game/summarize.py playtests/pt_20261107_1 > playtests/pt_20261107_1/summary.txt`) `source`를 그 결과 파일로 둔다. 판정 에이전트는 스크립트를 돌리지 못하므로 결과 파일이 없으면 값을 확인할 수 없다
 - 레벨의 그레이박스 확인 기록(`greybox`): `levels.json`의 항목 id마다 잰 값이나 판정과 그때 `expect`. 항목은 `… check . --table levels`의 그레이박스 확인 표에 있다
 - 가설의 `sample.events`에 적은 사건을 이 세션에서 센 건수(`events`)
@@ -77,7 +78,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 받은 제안을 `verdicts`에 `"status": "proposed"`로 넣고 사용자에게 보여 준다. 사용자가 확인하면 `approved`로 바꾼다. 사용자는 버팀·틀림 제안을 모름으로 낮춰 확정할 수 있다(에이전트의 결과는 `proposed_result`에 남긴다). 모름을 버팀·틀림으로 올리거나 버팀과 틀림을 바꾸려면 사용자의 까닭을 판정 에이전트에게 주고 다시 판정한다. 다시 판정할 때는 지난 판정을 지우지 않는다. 지난 판정을 먼저 `cut`으로 바꾸고 같은 편집에서 새 판정을 넣는다. 이때 cut_reason에 그때 상태(확정·제안)를 적는다. 사용자가 새 제안을 받아들이지 않으면 새 제안을 지우고, 지난 판정의 `status`를 `cut_reason`에 적힌 상태로 되돌리고 `cut_reason`을 지운다.
 
-판정 에이전트가 돌려준 기준 지문(`criteria`)을 그대로 기록한다. 판정 뒤에 가설 기준이 바뀌면 `verdict_criteria_changed`, 지문이 없으면 `verdict_criteria_missing`이고, 둘 다 확정해도 게이트를 넘지 못한다. 기준을 고친 것이면 [판정한 가설의 문장을 고칠 때](references/changes.md#판정한-가설의-문장을-고칠-때)를 따른다. 출처 태그만 바꾼 것은 바뀐 것이 아니다. `check`가 "예전 꼴" 참고 줄을 내면 그 줄의 지문으로 `criteria`를 바꿔 둔다. 지문이 없는 판정에는 판정한 뒤 가설을 고치지 않은 것이 확실할 때만 지금 지문을 적는다.
+판정 에이전트가 돌려준 기준 지문(`criteria`)과 버팀의 데이터 지문(`data`)을 그대로 기록한다. 없거나 판정 뒤에 바뀌면 게이트를 넘지 못한다. 기준을 고친 것이면 [판정한 가설의 문장을 고칠 때](references/changes.md#판정한-가설의-문장을-고칠-때)를 따른다. 출처 태그만 바꾼 것은 바뀐 것이 아니다. `check`가 "예전 꼴" 참고 줄을 내면 그 줄의 지문으로 `criteria`를 바꿔 둔다. 지문이 없는 판정에는 판정한 뒤 가설을 고치지 않은 것이 확실할 때만 지금 지문을 적는다.
 
 ### 4. 측정값을 올린다
 

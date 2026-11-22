@@ -395,8 +395,15 @@ def cmd_hypothesis(args) -> int:
               else "컨셉 데이터(design/concepts.json)를 찾지 못했습니다.", file=sys.stderr)
         return 2
     rec = found["playtests"]
+    root = datasets._project_root(Path(found["concepts"]["path"]))   # 판정이 기대는 게임 데이터는 이 폴더의 data/다
+
+    def data_now(h):
+        problem = concepts.depends_on_problem(h["depends_on"], root) if "depends_on" in h else None
+        if problem:   # check가 같은 까닭을 오류로 낸다. 틀린 목록의 지문을 옮겨 적지 않게 보이지 않는다
+            return None, [], f"depends_on이 틀려 낼 수 없음({problem})"
+        return concepts.data_stamp(root, h.get("depends_on")), concepts.data_files(root, h.get("depends_on")), None
     got = playtests.context(args.target, found["concepts"]["data"], rec["data"] if rec else {}, rec["report"] if rec else {},
-                            concepts.criteria_stamp, everything=args.all)
+                            concepts.criteria_stamp, everything=args.all, data_now=data_now)
     if got is None:
         index = concepts.hypothesis_index(found["concepts"]["data"]) or {}
         ids = [f"{cid}.{h}" for cid, info in index.items() for h in info["hypotheses"] if h]

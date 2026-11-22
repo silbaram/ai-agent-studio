@@ -664,6 +664,7 @@ class FieldProject(base.Workspace):
         self.write("data/notes.json", "")
         code, out = self.check()
         self.assertEqual(code, 0)
+        out = "\n".join(l for l in out.splitlines() if not l.startswith("세션에 적을 게임 데이터 지문:"))   # 게임 데이터 파일 목록에는 든다
         self.assertNotIn("notes.json", out)
 
     def test_file_given_directly_is_not_reported_as_skipped(self):
