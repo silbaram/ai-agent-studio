@@ -340,6 +340,12 @@ def data_stamp(root: Path | None, depends_on=None) -> str | None:
     return stamp_from_digests({**{rel: "없음" for rel in files}, **have}, depends_on)
 
 
+def rechecked(ids, hid) -> bool:
+    """본 게임 다시 확인 가설(<hid>_main)이 같은 브리프에 있는가. 있으면 원래 가설의 판정은 시험판 빌드의 기록이라 데이터 지문을 보지 않는다.
+    지문 줄(check), 게이트(플레이 기록 검사), hypothesis 출력이 모두 이것으로 가른다."""
+    return isinstance(hid, str) and f"{hid}_main" in ids
+
+
 def depends_on_problem(v, root: Path | None) -> str | None:
     """가설의 depends_on(판정이 기대는 파일 목록)이 틀렸으면 까닭."""
     if not (isinstance(v, list) and v and all(isinstance(x, str) and x.strip() for x in v)):
@@ -750,12 +756,14 @@ def _approved_criteria(valid: list) -> dict:
 
 
 def _approved_data(valid: list, root: Path | None) -> dict:
-    """선택한 컨셉의 가설별 게임 데이터 지문 {컨셉.가설: 지문}. 볼 데이터가 없거나 depends_on이 틀린 가설은 뺀다."""
+    """선택한 컨셉의 가설별 게임 데이터 지문 {컨셉.가설: 지문}. 볼 데이터가 없거나 depends_on이 틀린 가설, <id>_main이 있는 원래 가설은 뺀다."""
     out = {}
     for c in valid:
         hyps = (c.get("brief") or {}).get("hypotheses") if c.get("status") == "approved" and isinstance(c.get("brief"), dict) else None
+        ids = {h.get("id") for h in hyps if isinstance(h, dict)} if isinstance(hyps, list) else set()
         for h in hyps if isinstance(hyps, list) else []:
-            if isinstance(h, dict) and isinstance(h.get("id"), str) and not ("depends_on" in h and depends_on_problem(h["depends_on"], root)):
+            if (isinstance(h, dict) and isinstance(h.get("id"), str) and not rechecked(ids, h["id"])   # 지금 데이터는 다시 확인 가설의 판정이 본다
+                    and not ("depends_on" in h and depends_on_problem(h["depends_on"], root))):
                 got = data_stamp(root, h.get("depends_on"))
                 if got:
                     out[f"{c['id']}.{h['id']}"] = got
@@ -766,7 +774,7 @@ def print_extra(report: dict) -> None:
     if report.get("criteria"):
         print("판정 기준 지문: " + " · ".join(f"{k} {v}" for k, v in report["criteria"].items()))
     if report.get("data_stamps"):   # 버팀 판정의 data에 담는다. 판정 뒤에 게임 데이터가 바뀌면 플레이 기록 검사가 알린다
-        print("판정 데이터 지문: " + " · ".join(f"{k} {v}" for k, v in report["data_stamps"].items()))
+        print("버팀으로 판정할 때 적을 데이터 지문: " + " · ".join(f"{k} {v}" for k, v in report["data_stamps"].items()))
     if report.get("data_stamps") and report.get("session_data"):   # 플레이를 기록할 때 세션의 data에 그대로 옮긴다
         print("세션에 적을 게임 데이터 지문: " + json.dumps(report["session_data"], ensure_ascii=False, sort_keys=True))
     if report.get("criteria_history"):   # 판정 에이전트가 고치기 전 기준을 찾을 곳

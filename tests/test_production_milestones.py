@@ -427,10 +427,61 @@ class Outputs(unittest.TestCase):
         with Game() as g:
             code, out = run_cli("check", g.root)
             now = g.stamp()
-        self.assertIn(f"판정 데이터 지문: {WHERE} {now}", out)
+        self.assertIn(f"버팀으로 판정할 때 적을 데이터 지문: {WHERE} {now}", out)
+
+
+class StampLineShowsCheckedHypotheses(unittest.TestCase):
+    """394: 지문 줄은 지문을 보는 가설만 보인다. <id>_main이 있는 원래 가설은 지금 데이터를 _main 판정이 본다."""
+
+    def setUp(self):
+        self.game = Game()
+        main = copy.deepcopy(hyp(self.game.concepts))
+        main["id"] = "learn_timing_main"
+        approved(self.game.concepts)["brief"]["hypotheses"].append(main)
+        self.game.write_concepts()
+
+    def tearDown(self):
+        self.game.dir.cleanup()
+
+    def test_check_leaves_out_the_original(self):
+        code, out = run_cli("check", self.game.root)
+        line = next(l for l in out.splitlines() if l.startswith("버팀으로 판정할 때 적을 데이터 지문:"))
+        self.assertIn("parry_tempo.learn_timing_main", line)
+        self.assertNotIn("parry_tempo.learn_timing ", line + " ")
+        self.assertIn("parry_tempo.tempo_choice", line)
+
+    def test_hypothesis_says_the_original_is_not_stamped(self):
+        code, out = run_cli("hypothesis", WHERE, self.game.root)
+        line = next(l for l in out.splitlines() if l.startswith("데이터 지문(지금)"))
+        self.assertNotRegex(line, r"[0-9a-f]{8}")
+        self.assertIn("learn_timing_main", line)
+
+
+    def test_one_rule_decides_all_three(self):
+        """394 검토 2: 지문 줄, 게이트, hypothesis가 같은 함수(concepts.rechecked)로 원래 가설을 뺀다."""
+        from unittest import mock
+        self.game.record([holds(data="0000abcd")], self.game.played())
+        with mock.patch.object(cc, "rechecked", return_value=False):
+            code, out = run_cli("check", self.game.root)
+            r = self.game.report()
+            hcode, hout = run_cli("hypothesis", WHERE, self.game.root)
+        line = next(l for l in out.splitlines() if l.startswith("버팀으로 판정할 때 적을 데이터 지문:"))
+        self.assertIn("parry_tempo.learn_timing ", line + " ")
+        self.assertIn("verdict_data_changed", codes(r["warnings"]))
+        self.assertRegex(next(l for l in hout.splitlines() if l.startswith("데이터 지문(지금)")), r"[0-9a-f]{8}")
+
+    def test_rechecked(self):
+        self.assertTrue(cc.rechecked({"a", "a_main"}, "a"))
+        self.assertFalse(cc.rechecked({"a"}, "a"))
+        self.assertFalse(cc.rechecked({"a_main"}, "a_main"))
 
 
 class Docs(unittest.TestCase):
+    def test_the_judge_leaves_data_out_when_not_stamped(self):
+        """394 검토 1: hypothesis가 '보지 않음'이면 판정 에이전트는 data를 넣지 않는다."""
+        text = read(ROOT / "skills/studio-data/assets/claude/studio-judge.md")
+        self.assertIn("보지 않음", text)
+
     def test_the_skill_is_installed_like_the_others(self):
         text = read(SKILL / "SKILL.md")
         head = text.split("---")[1]
