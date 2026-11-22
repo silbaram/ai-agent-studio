@@ -14,7 +14,7 @@ from pathlib import Path
 from .common import ID_PATTERN, STATUSES, YARDSTICK_TAG, ack_reason, check_identity, did_you_mean, instant, is_int, is_number, unknown_keys_text, josa, valid_range
 from .common import valid_date as common_valid_date
 from .common import add_issue as _err
-from .concepts import stamp_from_digests
+from . import concepts as _concepts   # 지문 계산과 다시 확인 가설 판별(rechecked)은 컨셉 쪽 한 곳에 있다
 
 RESULTS = ("holds", "refuted", "unknown")
 RESULT_LABEL = {"holds": "버팀", "refuted": "틀림", "unknown": "모름"}
@@ -378,7 +378,7 @@ def check_verdict(v, n: int, errors: list) -> str | None:
         _err(errors, "schema", where, f"criteria(판정 기준 지문)는 소문자 16진수 8자입니다. 지금 지문은 check가 알려 줍니다: {v['criteria']!r}")
         ok = False
     if "data" in v and not (isinstance(v["data"], str) and CRITERIA.match(v["data"])):
-        _err(errors, "schema", where, f"data(판정할 때의 게임 데이터 지문)는 소문자 16진수 8자입니다. 지금 지문은 check의 '판정 데이터 지문' 줄에 있습니다: {v['data']!r}")
+        _err(errors, "schema", where, f"data(판정할 때의 게임 데이터 지문)는 소문자 16진수 8자입니다. 지금 지문은 check의 '버팀으로 판정할 때 적을 데이터 지문' 줄에 있습니다: {v['data']!r}")
         ok = False
     if "carried" in v:
         c = v["carried"]
@@ -453,7 +453,7 @@ def _check_data(v: dict, where: str, concepts: dict | None, warnings: list, erro
     선택하지 않은 컨셉, 볼 데이터가 없는 프로젝트, 본 게임 다시 확인 가설(<id>_main)이 있는 원래 가설은 보지 않는다."""
     info = concepts[v["concept"]] if concepts is not None else {}
     current = info.get("data", {}).get(v["hypothesis"])
-    rechecked = f"{v['hypothesis']}_main" in info.get("hypotheses", ())
+    rechecked = _concepts.rechecked(set(info.get("hypotheses", ())), v["hypothesis"])
     if v["result"] != "holds" or not info.get("approved", True) or not current or rechecked:
         return []
     if "data" not in v:
@@ -476,7 +476,7 @@ def _check_data(v: dict, where: str, concepts: dict | None, warnings: list, erro
         found.append("unplayed")
     elif last is not None:
         deps = info.get("depends_on", {}).get(v["hypothesis"])
-        got = stamp_from_digests(last["data"], deps)
+        got = _concepts.stamp_from_digests(last["data"], deps)
         if got != played_on:
             _err(errors, "verdict_data_not_played", where,
                  f"{'이어 간 판정의 carried.from' if carried else '판정의 data'}({played_on})이 마지막 근거 세션 {last['id']}을 플레이한 때의 데이터 지문"
@@ -1058,7 +1058,9 @@ def context(where: str, concepts_data: dict, data: dict, report: dict, stamp, ev
     return {"where": where, "approved": concept.get("status") == "approved",
             "hypothesis": {k: hyp[k] for k in ("claim", "failure_signal", "test", "sample", "builds", "depends_on", "criteria_history") if k in hyp},
             "criteria": stamp(hyp),
-            "data": dict(zip(("stamp", "files", "problem"), data_now(hyp))) if data_now else None,
+            "data": ({"stamp": None, "files": [], "skipped": f"{hid}_main(본 게임 다시 확인)의 판정이 지금 데이터를 본다"}
+                     if _concepts.rechecked({h.get("id") for h in brief.get("hypotheses") or [] if isinstance(h, dict)}, hid)
+                     else dict(zip(("stamp", "files", "problem"), data_now(hyp)))) if data_now else None,
             "check": {"verdict": (report.get("verdicts") or {}).get(where), "next_needs": (report.get("next_needs") or {}).get(where),
                       "event_notes": [x for x in report.get("event_notes") or [] if x["where"] == where]},
             "verdicts": verdicts, "sessions": sessions}
@@ -1077,7 +1079,9 @@ def print_context(got: dict) -> None:
     print(f"판정 기준 지문(지금): {got['criteria'] or '없음'}")
     if got.get("data"):
         d = got["data"]
-        if d.get("problem"):
+        if d.get("skipped"):
+            print(f"데이터 지문(지금): 보지 않음 — {d['skipped']}")
+        elif d.get("problem"):
             print(f"데이터 지문(지금): 없음 — {d['problem']}. check의 오류를 먼저 고칩니다")
         else:
             print(f"데이터 지문(지금): {d['stamp'] or '없음(볼 게임 데이터 없음)'} ({', '.join(d['files']) or '파일 없음'})")
