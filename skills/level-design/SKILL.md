@@ -125,6 +125,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table levels
 
 ## 보고
 
+- 첫 줄은 지금 위치, 정할 것도 [이 모양](../studio-data/references/telling-the-user.md)대로
 - 곡선의 근거: 무엇에서 가져왔는가. 출처가 가정이면 "예산 안"을 근거로 쓰지 않는다
 - 단계 표: 처치 시간 ÷ 길이, 평범한 조우의 적 수, 유독 빡빡하거나 줄어드는 단계
 - 레벨별 조우 표: 역할, 횟수, 구성, 위협도, 앞 조우 대비, 예산 범위

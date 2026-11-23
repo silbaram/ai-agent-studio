@@ -90,6 +90,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table combat
 
 ## 보고
 
+- 첫 줄은 지금 위치, 정할 것도 [이 모양](../studio-data/references/telling-the-user.md)대로
 - 고른 공식 형태와 상수, 그 이유 (가정임을 함께)
 - 계산표(`--table`) 또는 목표를 벗어난 행만
 - 오류·경고 수, `INCOMPLETE` 여부(함께 검사하지 못한 데이터)

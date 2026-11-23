@@ -76,6 +76,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table systems
 
 ## 보고
 
+- 첫 줄은 지금 위치, 정할 것도 [이 모양](../studio-data/references/telling-the-user.md)대로
 - 만드는 순서 표
 - 맡는 시스템이 없는 필러와 MVP 항목
 - 가설 없이 만드는 MVP 시스템과 그 까닭(`check`의 '가설 없이 만드는 MVP 시스템' 줄)

@@ -76,6 +76,7 @@ license: MIT
 
 ## 보고
 
+- 첫 줄은 지금 위치, 정할 것도 [이 모양](../studio-data/references/telling-the-user.md)대로
 - 실행한 명령, seed, trials, 설정 파일 해시(`config_sha256`)와 강화 파일 해시(`upgrades_file.sha256`)
 - 오류·경고 개수와 의도된 예외의 근거
 - 마일스톤과 강화별 도달률, p10 / 중앙값 / p90 런
