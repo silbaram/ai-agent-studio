@@ -1,6 +1,6 @@
 ---
 name: concept-exploration
-description: "Explores game concepts as testable mechanic hypotheses instead of ranked pitches: gathers constraints, generates structurally varied concepts, removes only demonstrated dead ends and structural duplicates, attacks survivors with simple-play strategies, keeps every concept in one concepts.json record, and turns the user's chosen concept into a falsifiable brief with pillars, anti-pillars, a core loop, hypotheses, and the smallest prototype. Use when the user has only a vague genre or feeling, wants concept ideas, needs to compare or choose concepts, or wants a chosen concept sharpened before prototyping. Also use when an existing, already playable game needs a brief before system design or playtests."
+description: "Explores game concepts as testable mechanic hypotheses instead of ranked pitches: gathers constraints, generates structurally varied concepts, removes only demonstrated dead ends and structural duplicates, attacks survivors with simple-play strategies, keeps every concept in one concepts.json record, and turns the user's chosen concept into a falsifiable brief with pillars, anti-pillars, a core loop, hypotheses, and the smallest prototype. Use when the user has only a vague genre or feeling, wants concept ideas, needs to compare or choose concepts, or wants a chosen concept sharpened before prototyping. Also use when the user brings an already chosen concept or planning document, or when an existing, already playable game needs a brief before system design or playtests."
 license: MIT
 ---
 
@@ -26,6 +26,8 @@ license: MIT
 ## 흐름
 
 이미 만들고 있는 게임이면 후보를 만들지 않는다. 1~7단계를 건너뛰고 [references/existing-game.md](references/existing-game.md)로 8단계의 브리프만 적는다.
+
+사용자가 이미 고른 컨셉의 기획서를 가져왔으면 후보를 새로 만들지 않는다. 기획서에서 제약(1단계, 기획서에 없는 것만 묻는다)을 옮기고, 3단계의 칸(피치, 반복 결정, 읽는 정보, 숙련 표현, 구조 축)을 채운 컨셉 하나로 적는다. 4단계의 단순 전략 공격을 한 뒤 8단계로 간다. 2단계와 5~7단계는 건너뛴다.
 
 ### 1. 제약 모으기
 
@@ -64,6 +66,7 @@ license: MIT
 
 - 핵심 루프가 성립하지 않는다는 **증명된 결함**이 있을 때만 `hard_reject`로 제외한다(유형·이유·증거 필수).
 - 단순 전략이 이기지만 규칙 하나로 고칠 수 있으면 제외하지 말고 다음 단계에서 변이한다.
+- 이 단계를 위해 시험판을 만들지 않는다. 규칙에서 따라 나오는 추론으로 가를 수 없으면 `unknown`으로 둔다. 시험판의 봇 기준선이 나오면 그 결과 파일을 근거로 결과를 고친다.
 
 ### 5. 겹치는 후보 정리
 
@@ -114,6 +117,8 @@ python3 .claude/skills/studio-data/scripts/studio.py check design/concepts.json 
 판정 기준 문장(가설의 `claim`, `failure_signal`, `test`와 `success_criteria`)의 수치에는 출처 태그를 붙인다. 예: `5판 [가정] 동안`. 규칙은 [numeric-provenance](../numeric-provenance/SKILL.md)와 같고, 검사기가 태그 없는 수치를 경고하며 게이트가 막는다.
 
 검사기는 `approved` 컨셉의 브리프가 빠짐없는지 확인한다. 통과하지 못하면 프로토타입 단계로 넘기지 않는다. 검사기는 **구조**(빠진 항목, 개수, 틀렸다는 신호의 유무, 가설의 id와 최소 표본)만 본다. 필러 테스트가 실제로 무언가를 걸러내는지, 가설이 정말 반증 가능한지는 사람이 본다. 검사 통과를 브리프 품질 보증으로 보고하지 않는다.
+
+**브리프에서 멈춘다.** 이 스킬은 시험판 코드를 쓰지 않는다. 가설 카드를 보이고 남은 기준을 정하게 한 뒤 멈춘다. 사용자가 게임을 만들자고 해도 [system-design](../system-design/SKILL.md)으로 시스템과 규칙을 먼저 적은 뒤 시험판을 만든다. 수치를 처음부터 데이터 파일에 두는 규칙도 그 스킬의 '다음 단계'에 있다.
 
 ## 보고
 

@@ -11,7 +11,8 @@ from _studio import ROOT
 
 SKILLS = ROOT / "skills"
 PAGE = SKILLS / "studio-data/references/telling-the-user.md"
-LINK = "studio-data/references/telling-the-user.md#새-대화로-이어-가기"
+NOTE = SKILLS / "studio-data/references/continue-note.md"   # 403: 긴 공용 문서 끝에 두면 부분 읽기에 빠진다
+LINK = "studio-data/references/continue-note.md"
 
 
 def read(path):
@@ -33,13 +34,13 @@ def template(part):
 
 class ContinueNote(unittest.TestCase):
     def test_page_has_the_note_and_its_lines(self):
-        part = section(read(PAGE), "## 새 대화로 이어 가기")
+        part = read(NOTE)
         self.assertIn("`continue.md`", part)
         for line in ("하던 일", "정할 것", "정한 뒤 할 일", "이미 한 것", "먼저 읽을 것", "일하던 파일"):
             self.assertIn(line, part, line)
 
     def test_note_says_when_where_and_when_to_remove(self):
-        part = section(read(PAGE), "## 새 대화로 이어 가기")
+        part = read(NOTE)
         self.assertIn("프로젝트 맨 위", part)        # design/ 아래면 숫자 출처 검사가 경고한다
         self.assertIn("임시 폴더", part)             # 대화의 임시 폴더는 다음 대화가 못 찾거나 지워진다
         self.assertIn("지운다", part)                # 다 하면 지워 낡은 노트가 남지 않는다
@@ -48,30 +49,31 @@ class ContinueNote(unittest.TestCase):
 
     def test_note_carries_its_own_pickup_steps(self):
         # 사용자는 'continue.md 이어서'만 보낸다. 새 대화가 스킬 문서를 못 읽어도 노트만으로 이어 받는다
-        block = template(section(read(PAGE), "## 새 대화로 이어 가기"))
+        block = template(read(NOTE))
         pickup = block[1]
         for word in ("이어 받는 법", "<스킬>", "먼저 읽을 것", "바뀌었으면", "지운다", "고쳐 쓴다"):
             self.assertIn(word, pickup, word)
 
     def test_note_header_has_time_and_zone(self):
         # 같은 날 사이에 바뀐 파일을 가리려면 날짜만으로는 모자란다
-        header = template(section(read(PAGE), "## 새 대화로 이어 가기"))[0]
+        header = template(read(NOTE))[0]
         self.assertIn("시각", header)
         self.assertIn("시간대", header)
 
     def test_work_files_have_a_fixed_folder_and_fate(self):
-        part = section(read(PAGE), "## 새 대화로 이어 가기")
+        part = read(NOTE)
         self.assertIn("`reports/work/`", part)      # 계획 폴더라 범위 훅이 막지 않고 게임 코드와 섞이지 않는다
         work = next(line for line in template(part) if line.startswith("- 일하던 파일"))
         self.assertIn("지울지", work)
 
     def test_report_tells_the_user_what_to_send(self):
-        part = section(read(PAGE), "## 새 대화로 이어 가기")
+        part = read(NOTE)
         self.assertIn("continue.md 이어서", part)
 
     def test_decision_section_points_at_the_note(self):
         decisions = section(read(PAGE), "## 정할 것")
-        self.assertIn("새 대화로 이어 가기", decisions)
+        self.assertIn("(continue-note.md)", decisions)
+        self.assertNotIn("이어 갈 일 (", read(PAGE))   # 틀은 노트 문서 한 곳에만
 
     def test_user_guide_mentions_the_cheaper_way(self):
         guide = read(ROOT / "docs/guide.md")
