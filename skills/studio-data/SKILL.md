@@ -8,6 +8,8 @@ license: MIT
 
 다른 스킬([concept-exploration](../concept-exploration/SKILL.md), [progression-economy](../progression-economy/SKILL.md), [numeric-provenance](../numeric-provenance/SKILL.md), [combat-balance](../combat-balance/SKILL.md), [run-growth](../run-growth/SKILL.md), [stat-budget](../stat-budget/SKILL.md), [crafting-balance](../crafting-balance/SKILL.md), [economy-flow](../economy-flow/SKILL.md), [level-design](../level-design/SKILL.md), [playtest-verdict](../playtest-verdict/SKILL.md))은 절차만 담고, 실행하는 도구는 모두 이 스킬에 있다. 이 스킬을 다른 스킬과 같은 부모 폴더에 함께 설치한다.
 
+설계 스킬들의 보고가 함께 따르는 모양(첫 줄의 지금 위치, 가설 카드, 정할 것)은 [references/telling-the-user.md](references/telling-the-user.md)에 있다.
+
 ## 실행
 
 실행 파일은 `scripts/studio.py` 하나다. Python 3.9 이상, 추가 설치는 필요 없다. **게임 프로젝트 폴더에서** 설치 위치의 경로로 실행한다.

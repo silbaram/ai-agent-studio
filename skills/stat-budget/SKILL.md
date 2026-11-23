@@ -75,6 +75,7 @@ python3 .claude/skills/studio-data/scripts/studio.py draft . --archetype tank --
 
 ## 보고
 
+- 첫 줄은 지금 위치, 정할 것도 [이 모양](../studio-data/references/telling-the-user.md)대로
 - 곡선(기준, 형태, 값)과 원가, 그 출처 (가정임을 함께)
 - 벗어난 항목 목록과 비율, 원가 제안과 기획 원가의 큰 차이
 - 초안을 만들었다면 그 행과 기대 예산

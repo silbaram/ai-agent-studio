@@ -61,6 +61,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table growth
 
 ## 보고
 
+- 첫 줄은 지금 위치, 정할 것도 [이 모양](../studio-data/references/telling-the-user.md)대로
 - 빌드별 단계마다 얻는 스탯, 성장 없음 대비 처치·버팀 변화
 - 밀리는 빌드와 이기는 빌드, 아무도 고르지 않는 선택지
 - 오류·경고 수, `INCOMPLETE` 여부, 시행 수와 seed

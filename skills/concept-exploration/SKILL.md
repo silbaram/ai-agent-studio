@@ -117,9 +117,10 @@ python3 .claude/skills/studio-data/scripts/studio.py check design/concepts.json 
 
 ## 보고
 
+- 첫 줄은 지금 위치, 정할 것도 [이 모양](../studio-data/references/telling-the-user.md)대로
 - `--table` 비교표와 검사 결과(오류·경고 수)
 - 사용자가 결정해야 할 것 한 가지
-- 선택한 뒤: 다음 시험 하나와 그 시험이 어떤 결과면 무엇을 바꿀지
+- 선택한 뒤: 브리프를 쓰면 가설마다 가설 카드(약속서, 모양은 [가설 카드](../studio-data/references/telling-the-user.md#가설-카드))를 보이고 남은 기준을 정하게 한다. 다음 시험 하나와 그 시험이 어떤 결과면 무엇을 바꿀지
 - 선택 전(추천 요청 없음): 후보별 다음 시험은 비교표의 '다음 시험' 열로 대신한다. 하나를 골라 내세우면 추천처럼 읽히므로 하지 않는다
 - 생략한 단계(예: 6개 모드에서 변이 생략)
 

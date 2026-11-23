@@ -49,6 +49,7 @@ python3 .claude/skills/studio-data/scripts/studio.py provenance design/
 
 수치를 다룬 작업이 끝나면 다음을 함께 보고한다.
 
+- 첫 줄은 지금 위치, 정할 것도 [이 모양](../studio-data/references/telling-the-user.md)대로
 - 가정 / 계산 / 측정 개수와 오류 수 (스크립트 출력 그대로)
 - 남은 `[가정]` 중 결과에 가장 큰 영향을 주는 것과, 그것을 `[계산]`이나 `[측정]`으로 바꿀 가장 싼 방법
 - 검사를 실행하지 못했다면 그 사실. 실행하지 않은 검사를 통과했다고 쓰지 않는다.

@@ -72,6 +72,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table economy
 
 ## 보고
 
+- 첫 줄은 지금 위치, 정할 것도 [이 모양](../studio-data/references/telling-the-user.md)대로
 - 단계별 수입과 출처(처치·드랍 판매·기타), 한 판 총수입
 - 구매별 시점이나 판 수, 목표 이탈과 살 수 없는 구매
 - 판 끝에 남는 재화와 그 비율

@@ -87,6 +87,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --fail-on-assumed
 
 ## 보고
 
+- 첫 줄은 지금 위치, 정할 것도 [이 모양](../studio-data/references/telling-the-user.md)대로
 - 지금 이정표와 끝내는 조건마다 결과(`[?]`는 그렇다고)
 - 낡은 판정마다 회귀 결과와 제안(다시 플레이 / 이어 감)
 - 사용자가 정할 것 한 가지(흐름 표의 '사용자가 정하는 것' 중 지금 차례인 것)

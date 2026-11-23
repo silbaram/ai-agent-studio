@@ -34,6 +34,8 @@ AI에게 게임 기획을 맡기면 흔히 이런 일이 생긴다.
 
 개발 작업은 OpenSpec 변경으로 나누고, 그 변경이 브리프의 범위 안에 있는지 `scope-guard`가 본다. [OpenSpec](https://github.com/Fission-AI/OpenSpec)은 이 저장소에 들어 있지 않은 외부 도구라 따로 설치하고 게임 폴더에서 `openspec init`을 한 번 해야 한다. 쓰지 않으면 이 부분만 빠지고 나머지 스킬은 그대로 쓴다. 수치와 레벨(⑦)은 시험판을 만들 때부터 함께 다듬어도 된다.
 
+에이전트의 보고는 첫 줄에 지금 위치를 적고, 가설은 쉬운 말의 카드로 보인다([사용자에게 말하기](../skills/studio-data/references/telling-the-user.md)).
+
 ## 스킬 15개를 쉬운 말로
 
 | 이럴 때 | 스킬 | 얻는 것 |
