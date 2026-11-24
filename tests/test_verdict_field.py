@@ -413,7 +413,7 @@ class Docs(unittest.TestCase):
         self.assertIn("닿을", text)
 
     def test_cut_first_when_judging_again_260(self):
-        text = self.read("skills/playtest-verdict/SKILL.md")
+        text = self.read("skills/playtest-verdict/references/changes.md")   # 405 검토: 드문 순서라 SKILL.md에서 옮겼다
         self.assertRegex(text, r"지난 판정을 먼저 `cut`")
 
     def test_pooled_values_have_a_home_262(self):
