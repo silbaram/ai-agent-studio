@@ -48,7 +48,7 @@ GUARDED = "|".join(WRITE_TOOLS + ("Bash",))
 SELF = (".claude/settings.json", ".claude/settings.local.json", ".claude/skills/studio-data", ".claude/skills/scope-guard")  # 고치면 범위 훅이 꺼진다
 STATE_DIR: Path | None = None   # 세션마다 이미 보인 경고. 게임 프로젝트에는 쓰지 않는다. 비면 훅이 쓸 때 임시 폴더 아래로 정한다(_state_root)
 HOOKS = (("PostToolUse", "Write|Edit|MultiEdit", "post-edit"), ("PreToolUse", GUARDED, "judge-guard"), ("PreToolUse", GUARDED, "scope-guard"),
-         ("SessionStart", "compact|clear|resume", "session-start"))   # 압축·지움·이어 열기 뒤에는 경고를 다시 모두 보인다
+         ("SessionStart", "startup|compact|clear|resume", "session-start"))   # 시작마다 배운 것 자리를 알리고, 압축·지움·이어 열기 뒤에는 경고를 다시 모두 보인다
 
 
 # ---------- setup ----------
@@ -104,7 +104,7 @@ def setup(project: Path, python: str) -> tuple[int, list[str]]:
     agent_path.write_text(template.rstrip("\n") + "\n\n" + MARKER + "\n", encoding="utf-8")
     settings_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return 0, [f"판정 에이전트: {agent_path}",
-               f"훅: {settings_path} (PostToolUse 데이터 검사, PreToolUse 판정 에이전트 쓰기 차단과 범위 이탈 차단, SessionStart 경고 다시 보이기)",
+               f"훅: {settings_path} (PostToolUse 데이터 검사, PreToolUse 판정 에이전트 쓰기 차단과 범위 이탈 차단, SessionStart 배운 것 알림과 경고 다시 보이기)",
                f"훅 명령: {python} {script_ref} hook …",
                "Claude Code를 다시 시작하거나 /hooks에서 확인하면 적용됩니다. 스킬을 다시 설치한 뒤에는 setup도 다시 실행합니다."]
 
@@ -626,21 +626,29 @@ def _warning_lines(warnings: list[str], seen: tuple[list[str], list[str], list[s
     return out
 
 
+def lessons_reference(script: Path = SCRIPT) -> str:
+    """세션 시작 알림에 넣을 lessons.md 절대 경로. Read는 절대 경로만 받고, Windows에서는 셸이 프로젝트 밖에서 시작한다."""
+    return (script.resolve().parents[1] / "references/lessons.md").as_posix()
+
+
 def session_start(payload_text: str, project: Path | None = None) -> tuple[int, str, str]:
-    """대화를 압축하거나 지우거나 이어 열면 앞서 보인 경고가 맥락에 없을 수 있다. 그 세션의 기록을 지워 다음 편집에 모두 보인다."""
+    """세션을 시작할 때마다 배운 것을 어디에 남기는지 한 줄로 알린다. 보고 쪽 연결만으로는 그 문서를 열지 않으면 닿지 않는다.
+    대화를 압축하거나 지우거나 이어 열면 앞서 보인 경고가 맥락에 없을 수 있어, 그 세션의 기록을 지워 다음 편집에 모두 보인다."""
     payload = _payload(payload_text)
+    root = _project(payload or {}, project)
+    # 뒤 문장은 lessons.md '자리'의 자체 메모리 문장을 옮긴 것이다. 그 문서를 열기 전에 자체 메모리에 적어 버려서 여기도 둔다. 고치면 함께 고친다
+    line = (f"같은 실수가 두 번째로 났거나 사용자가 전에도 그랬다고 하면 `{lessons_reference()}`(배운 것 한 줄)를 읽고 그대로 한다. "
+            "에이전트 자체 메모리에 적는 것으로 대신하지 않는다.")
+    out = json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": line}})   # Windows 콘솔 인코딩에 걸리지 않게 ASCII로 낸다
     session = payload.get("session_id") if payload else None
-    if not (isinstance(session, str) and session):
-        return 0, "", ""
-    folder = _state_root()
-    if folder is None:
-        return 0, "", ""
-    for f in folder.glob(f"{_session_key(_project(payload, project), session)}-*.json"):
-        try:
-            f.unlink()
-        except OSError:
-            pass
-    return 0, "", ""
+    folder = _state_root() if isinstance(session, str) and session else None
+    if folder is not None:
+        for f in folder.glob(f"{_session_key(root, session)}-*.json"):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+    return 0, out, ""
 
 
 def post_edit(payload_text: str, project: Path | None = None) -> tuple[int, str, str]:

@@ -125,7 +125,7 @@ class HookOutput(unittest.TestCase):
             with self.subTest(source):
                 self.hook()
                 self.hook(agent_id="a1")
-                self.assertEqual(claude.session_start(json.dumps({"session_id": "s1", "source": source}), self.root), (0, "", ""))
+                self.assertEqual(claude.session_start(json.dumps({"session_id": "s1", "source": source}), self.root)[0::2], (0, ""))
                 self.assertEqual(self.hook()[1].count("[next_test_missing]"), 2)
                 self.assertEqual(self.hook(agent_id="a1")[1].count("[next_test_missing]"), 2)
 
@@ -194,7 +194,7 @@ class NoTempDir(unittest.TestCase):
             raise FileNotFoundError("No usable temporary directory found")
         with mock.patch.object(claude, "STATE_DIR", None), mock.patch.object(claude.tempfile, "gettempdir", broken):
             self.assertIsNone(claude._state_dir())
-            self.assertEqual(claude.session_start(json.dumps({"session_id": "s1", "source": "compact"})), (0, "", ""))
+            self.assertEqual(claude.session_start(json.dumps({"session_id": "s1", "source": "compact"}))[0::2], (0, ""))
 
 
 class Diff(unittest.TestCase):
@@ -227,12 +227,12 @@ class SessionStartHook(unittest.TestCase):
             run_cli("setup", "claude", root)
             groups = json.loads((root / ".claude/settings.json").read_text(encoding="utf-8"))["hooks"]["SessionStart"]
         self.assertEqual(len(groups), 1)
-        self.assertEqual(groups[0]["matcher"], "compact|clear|resume")
+        self.assertEqual(groups[0]["matcher"], "startup|compact|clear|resume")
         self.assertIn("hook session-start", groups[0]["hooks"][0]["command"])
 
     def test_bad_input_is_ignored(self):
-        self.assertEqual(claude.session_start("not json"), (0, "", ""))
-        self.assertEqual(claude.session_start(json.dumps({"source": "compact"})), (0, "", ""))
+        self.assertEqual(claude.session_start("not json")[0::2], (0, ""))
+        self.assertEqual(claude.session_start(json.dumps({"source": "compact"}))[0::2], (0, ""))
 
 
 class Docs(unittest.TestCase):
