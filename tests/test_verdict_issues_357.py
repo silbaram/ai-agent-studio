@@ -270,8 +270,9 @@ class ReviewFixes(unittest.TestCase):
         self.assertIn("after_results", read(BRIEF))   # 칸 이름과 링크만 둔다
 
     def test_the_status_to_restore_is_in_the_cut_reason_5(self):
-        text = read(VERDICT / "SKILL.md")
+        text = read(VERDICT / "references/changes.md")   # 405 검토: 드문 순서라 SKILL.md에서 옮겼다
         self.assertNotIn("`cut` 전 값", text)
+        self.assertNotIn("`cut` 전 값", read(VERDICT / "SKILL.md"))
         self.assertIn("cut_reason에 그때 상태", text)
 
     def test_keep_unknown_drops_yardstick_tags_6(self):
