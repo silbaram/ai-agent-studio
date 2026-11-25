@@ -35,13 +35,13 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 ### 1. 플레이 전: 가설에 id와 최소 표본을 단다
 
-`design/concepts.json`에서 시험할 컨셉의 `brief.hypotheses`마다 `id`를 넣는다(소문자·숫자·밑줄, 예: `density_timing`). 기록과 판정은 이 id로 가설을 가리킨다. 문장을 바꿔도 id는 그대로 둔다.
+`design/concepts.json`에서 시험할 컨셉의 `brief.hypotheses`마다 `id`를 넣는다(소문자·숫자·밑줄, 예: `density_timing`). 문장을 바꿔도 id는 그대로 둔다.
 
-시험 전에 가설마다 최소 표본(`"sample": {"players": 3, "runs": 15}`)과 기록할 값을 사용자와 정한다. 사람 수는 실제로 플레이할 수 있는 사람 수로 정한다([브리프 작성법](../concept-exploration/references/brief.md#가설-hypotheses-1개-이상)). 근거 세션을 합쳐 이보다 적으면 버팀·틀림 판정이 오류다(`verdict_sample_short`). 신호가 드문 사건(사망, 부화)의 건수에 기대면 그 최소 건수를 `sample.events`(`{"death_with_hatch": 6}`)에 적는다. 프로토타입이 기록할 값을 로그로 남기게 하면 옮겨 적는 실수가 줄어든다. 계산 스크립트는 쓴 정의를 결과 파일에 찍게 한다([형식](references/playtest-record.md#세션-playtests)). 시험 조건(설정)이 여러 가지면 로그에 그 열을 두고 `runlog --group-by`로 나눠 모은다.
+시험 전에 가설마다 최소 표본(`"sample": {"players": 3, "runs": 15}`)과 기록할 값을 사용자와 정한다. 사람 수는 실제로 플레이할 수 있는 사람 수로 정한다([브리프 작성법](../concept-exploration/references/brief.md#가설-hypotheses-1개-이상)). 근거 세션을 합쳐 이보다 적으면 버팀·틀림 판정이 오류다(`verdict_sample_short`). 신호가 드문 사건(사망, 부화)의 건수에 기대면 그 최소 건수를 `sample.events`(`{"death_with_hatch": 6}`)에 적는다. 계산 스크립트는 쓴 정의를 결과 파일에 찍게 한다([형식](references/playtest-record.md#세션-playtests)). 시험 조건(설정)이 여러 가지면 로그에 그 열을 두고 `runlog --group-by`로 나눠 모은다.
 
 표본은 결과를 보기 전에 정한 값이다. 플레이 도중이나 뒤에 표본을 줄이자는 말이 나오면 바로 고치지 않는다. 가설마다 사용자에게 묻고, 결과 파일을 열기 전에 [표본을 줄이자는 말이 나올 때](references/changes.md#표본을-줄이자는-말이-나올-때)를 따른다.
 
-판정 기준 문장에 남은 `[가정]` 잣대(문턱, 구간)와 지난 판정이 남긴 "다음 시험 전에 풀 것"도 플레이 전에 정한다. 결과를 본 뒤 정하면 표본을 줄일 때와 같은 문제가 생긴다. 잣대는 `check . --fail-on-assumed`의 컨셉 gate 줄이 남은 칸(`brief.hypotheses[…]`, `brief.prototype.success_criteria`)을 가리킨다. 그 줄은 값을 줄여 보이므로(`외 N개`), 사용자에게는 가설 카드(플레이 전)에 `hypothesis <컨셉>.<가설>`의 가설 문장과 브리프의 `success_criteria` 문장을 통째로 인용해 정하게 한다. 데이터 파일의 gate 줄(적 체력, 카드 피해)은 플레이로 맞출 값이라 여기서 정하지 않는다. 사용자가 정한 잣대만 바꾸는 법은 [4단계](#4-측정값을-올린다), 푼 할 일은 그 판정의 `needs_resolved`에 적는다([형식](references/playtest-record.md#판정)). 정하지 않고 플레이했는지는 2단계가 본다.
+판정 기준 문장에 남은 `[가정]` 잣대(문턱, 구간)와 지난 판정이 남긴 "다음 시험 전에 풀 것"도 플레이 전에 정한다. 잣대는 `check . --fail-on-assumed`의 컨셉 gate 줄이 남은 칸(`brief.hypotheses[…]`, `brief.prototype.success_criteria`)을 가리킨다. 그 줄은 값을 줄여 보이므로(`외 N개`), 사용자에게는 가설 카드(플레이 전)에 `hypothesis <컨셉>.<가설>`의 가설 문장과 브리프의 `success_criteria` 문장을 통째로 인용해 정하게 한다. 데이터 파일의 gate 줄(적 체력, 카드 피해)은 플레이로 맞출 값이라 여기서 정하지 않는다. 사용자가 정한 잣대만 바꾸는 법은 [4단계](#4-측정값을-올린다), 푼 할 일은 그 판정의 `needs_resolved`에 적는다([형식](references/playtest-record.md#판정)). 정하지 않고 플레이했는지는 2단계가 본다. 봇이 있으면 `test`에 문턱 양쪽 값이 있는지 본다([문턱을 기준선과 견준다](../concept-exploration/references/brief.md#가설-hypotheses-1개-이상)). 판정한 가설에 더하는 것은 문장 고침이다.
 
 **넘기기 전에 한 판을 끝까지 돌린다.** 플레이 전에 사용자가 할 빌드를 직접 띄워 끝까지 하며 켜짐, 가설이 보는 입력, 판 끝 질문, `test`가 쓰는 판 로그를 본다. 테스트와 봇 기준선은 규칙만 돌려 이것을 대신하지 못한다. 이 판의 로그는 사용자의 로그에 섞이지 않게 하고 세션 `logs`에도 넣지 않는다. 막히면 아래 '어긋나면 플레이 전에 고친다'대로 고친 뒤 넘긴다. 그 판의 화면에서 가설마다 아래도 본다. 띄울 수 없으면 돌려 보지 못했다고 알리고 화면 문구를 만드는 코드를 읽는다. 그것도 못 하면 확인하지 못했다고 사용자에게 알리고 직접 보게 한다.
 - **질문 문장:** 플레이 중 묻는 질문이 가설 `test`에 적힌 문장과 같은지.
