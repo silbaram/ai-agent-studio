@@ -29,6 +29,7 @@ license: MIT
 | 이럴 때 | 읽을 곳 |
 |---|---|
 | 콘텐츠를 더할 때, `check`가 `verdict_data_changed`나 `verdict_data_missing`을 낼 때 | [references/content-growth.md](references/content-growth.md) |
+| 새 종류의 내용(새 직업, 새 카드 계열)을 넣거나, 무엇을 더할지 정한다 | [content-ideas](../content-ideas/SKILL.md). 숫자와 묶음은 위 줄. 동결 뒤면 [베타](#3-베타-콘텐츠-동결과-다듬기)대로 먼저 정한다 |
 | 출시 후보 게이트를 볼 때 | [references/release-gate.md](references/release-gate.md) |
 | `design/production.md`에 이정표를 적을 때 | [references/milestone-record.md](references/milestone-record.md) |
 

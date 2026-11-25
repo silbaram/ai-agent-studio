@@ -22,6 +22,7 @@ license: MIT
 
 - 이미 브리프가 있고 수치·데이터를 다룰 때: [progression-economy](../progression-economy/SKILL.md)
 - 기획 문서 수치의 출처 표시: [numeric-provenance](../numeric-provenance/SKILL.md)
+- 브리프가 있는 게임에 넣을 내용(직업, 스킬, 카드 계열)을 짜거나 사용자가 새 내용의 씨앗을 던졌다: 브리프를 고치기 전에 [content-ideas](../content-ideas/SKILL.md)를 권한다
 
 ## 흐름
 

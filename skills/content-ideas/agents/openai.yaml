@@ -1,0 +1,4 @@
+interface:
+  display_name: "내용 제안"
+  short_description: "직업·스킬·카드 같은 내용을 조사해 법칙부터 제안하고, 법칙을 따르는 안을 사용자와 다듬어 가설·규칙·데이터로 나눠 넘김"
+  default_prompt: "Use $content-ideas to research what classes, skills or cards this game should have: propose design laws with sources first, then sets that follow them, refine them with me, and split the result into hypotheses, rules and data."

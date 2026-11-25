@@ -16,6 +16,7 @@
 | 설계 | 아이디어 | `concept-exploration` 1~7단계(후보 만들기와 고르기) |
 | 설계 | 약속서 | `concept-exploration` 8단계(브리프와 가설) |
 | 설계 | 시스템 | `system-design` |
+| 설계 | 내용 제안 | `content-ideas`(직업, 스킬, 카드 같은 내용) |
 | 설계 | 시험판 | 그림 없는 시험판을 만든다. 개발 작업의 범위는 `scope-guard`, 숫자의 출처는 `numeric-provenance` |
 | 설계 | 수치 다듬기 | 시험판을 만들 때부터 판정 뒤까지 언제든: `progression-economy`, `combat-balance`, `run-growth`, `stat-budget`, `crafting-balance`, `economy-flow`, `level-design` |
 | 설계 | 플레이 | `playtest-verdict` 1·2단계(플레이 전 준비와 기록) |
