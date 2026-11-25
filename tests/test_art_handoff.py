@@ -193,11 +193,9 @@ class Links(unittest.TestCase):
         self.assertIn("(skills/art-handoff/SKILL.md)", read(ROOT / "README.md"))
         self.assertIn("`art-handoff`", read(ROOT / "docs/guide.md"))
 
-    def test_counts_say_fifteen(self):
+    def test_counts_no_longer_say_fourteen(self):   # 지금 수는 test_content_ideas가 본다
         for rel in ("README.md", "docs/guide.md", "docs/walkthrough.html"):
-            text = read(ROOT / rel)
-            self.assertNotRegex(text, r"스킬 14개|열네 (개|폴더)", rel)
-            self.assertRegex(text, r"스킬 15개|열다섯", rel)
+            self.assertNotRegex(read(ROOT / rel), r"스킬 14개|열네 (개|폴더)", rel)
 
     def test_graphics_link_is_no_longer_called_on_hold(self):
         for rel in ("README.md", "docs/guide.md", "docs/walkthrough.html"):

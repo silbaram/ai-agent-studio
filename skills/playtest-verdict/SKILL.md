@@ -80,7 +80,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 ### 4. 측정값을 올린다
 
-관찰값을 **그대로** 옮긴 수치만 `[가정]`에서 `[측정: data/playtests.json#세션 id]`로 바꾼다. 데이터 파일(아이템·강화·적)은 `provenance`를 `{"kind": "measured", "source": "data/playtests.json#세션 id"}`로 둔다. 한 항목의 값 일부만 기록으로 뒷받침되면 항목 전체를 바꾸지 않고 `provenance.fields`에 그 값만 적는다(`{"kind": "assumed", "fields": {"kills.crawler": {"kind": "measured", "source": "data/playtests.json#pt_20261108_3"}}}`). 모든 수치 칸에 가정이 아닌 출처가 붙으면 그 항목은 게이트에서 빠진다.
+관찰값을 **그대로** 옮긴 수치만 `[가정]`에서 `[측정: data/playtests.json#세션 id]`로 바꾼다. 데이터 파일(아이템·강화·적)은 `provenance`를 `{"kind": "measured", "source": "data/playtests.json#세션 id"}`로 둔다. 한 항목의 값 일부만 기록으로 뒷받침되면 항목 전체를 바꾸지 않고 `provenance.fields`에 그 값만 적는다([numeric-provenance의 규칙](../numeric-provenance/SKILL.md#규칙) 9번).
 
 - 평균·비율을 새로 계산한 값은 `[계산: 스크립트 또는 결과 파일]`이다. 계산한 스크립트가 없으면 올리지 않는다.
 - 판정 기준의 문턱값(예: `80% [가정]`)과 `test`의 시험 설계 값(표본, 구간)은 측정값이 아니다. 무엇이 틀림인지를 정하는 잣대라 측정으로 올리지 않는다. 사용자가 그 값을 정했으면 `[결정: 사용자 2026-11-09]`로 바꾼다. 에이전트가 정한 값은 `[가정]` 그대로다([numeric-provenance](../numeric-provenance/SKILL.md), [브리프](../concept-exploration/references/brief.md)).
@@ -110,6 +110,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 | 선택한 컨셉을 되돌린다 | [컨셉을 되돌릴 때](references/changes.md#컨셉을-되돌릴-때) |
 | 사용자가 판정 제안과 다르게 정하거나 다시 판정한다 | [사용자가 제안과 다르게 정할 때](references/changes.md#사용자가-제안과-다르게-정할-때) |
 | 다른 시스템이 바뀌어 지난 기록을 함께 세면 안 된다 | [다른 시스템이 바뀌어 지난 기록과 합치지 않을 때](references/changes.md#다른-시스템이-바뀌어-지난-기록과-합치지-않을-때) |
+| 판정 뒤 새 내용(직업, 스킬)으로 길을 바꾼다 | 브리프를 고치기 전에 [content-ideas](../content-ideas/SKILL.md)를 권한다 |
 
 ## 보고
 
