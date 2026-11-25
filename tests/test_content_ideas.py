@@ -246,7 +246,7 @@ class ThirdReview(unittest.TestCase):
         self.main = self.called.split("## 본 게임에서 불려 왔을 때", 1)[1]
 
     def test_verdicts_are_checked_by_state_not_by_timing_1(self):
-        self.assertIn("hypothesis <컨셉>.<가설>", step(self.text, 1))
+        self.assertIn("](references/when-called.md#가설에-판정이-있을-때)", step(self.text, 1))
         self.assertNotIn("판정 뒤에 불려 왔", self.text)
         self.assertNotIn("## 판정 뒤에 불려 왔을 때", self.called)
 
@@ -272,6 +272,53 @@ class ThirdReview(unittest.TestCase):
     def test_handed_on_hypotheses_carry_the_concept_7(self):
         handed = read(RECORD).split("## 넘긴 곳", 1)[1].split("```", 1)[0]
         self.assertIn("<컨셉>.<가설>", handed)
+
+
+class FieldTest408(unittest.TestCase):
+    """408: 현장 시험 세션이 진행 표의 '아직'을 믿고 틀림 확정 판정을 보지 않았다."""
+
+    def test_step_one_runs_check_first_and_trusts_the_verdict_record(self):
+        s1 = step(read(SKILL), 1)
+        line = next(l for l in s1.splitlines() if "`check .`" in l)
+        self.assertTrue(line.startswith("- [`check .`]"), line)   # 묻히지 않게 따로 한 줄, 맨 앞
+        self.assertIn("production.md", line)
+        self.assertIn("원본", line)
+        self.assertLess(s1.index("`check .`"), s1.index("씨앗"))
+
+    def test_verdict_pointer_lives_in_step_one_only(self):
+        table = section(read(SKILL), "## 이럴 때 읽을 곳")
+        self.assertNotIn("가설에-판정이-있을-때", table)
+
+
+class Review408(unittest.TestCase):
+    """408 수정을 먼저 검토해 찾은 다섯 건."""
+
+    def test_refuted_is_told_in_the_first_report_1(self):
+        part = read(CALLED).split("## 가설에 판정이 있을 때", 1)[1].split("\n## ", 1)[0]
+        self.assertRegex(part, r"틀림.{0,60}1단계.{0,40}(첫 보고|처음)")
+
+    def test_recheck_table_has_no_verdict_cell_2(self):
+        record = read(ROOT / "skills/production-handoff/references/production-record.md")
+        table = record.split("## 본 게임 빌드에서 다시 확인", 1)[1].split("\n## ", 1)[0]
+        header = next(l for l in table.splitlines() if l.startswith("| 원래 가설"))
+        self.assertNotIn("판정", header)
+        self.assertNotIn("| 아직 |", table)
+        self.assertIn("data/playtests.json", table)
+        self.assertIn("hypothesis", table)
+
+    def test_source_of_verdicts_is_named_3(self):
+        line = next(l for l in step(read(SKILL), 1).splitlines() if "`check .`" in l)
+        self.assertIn("data/playtests.json", line)
+        self.assertNotIn("이것이 원본", line)
+
+    def test_check_points_at_the_tool_4(self):
+        line = next(l for l in step(read(SKILL), 1).splitlines() if "`check .`" in l)
+        self.assertIn("../studio-data/SKILL.md", line)
+
+    def test_roadmap_does_not_claim_the_fix_is_verified_5(self):
+        row = next(l for l in read(ROOT / "docs/architecture.md").splitlines() if l.startswith("| 8 |"))
+        self.assertNotIn("1차 완료", row)
+        self.assertIn("408", row)
 
 
 class Research(unittest.TestCase):
