@@ -315,10 +315,9 @@ class Review408(unittest.TestCase):
         line = next(l for l in step(read(SKILL), 1).splitlines() if "`check .`" in l)
         self.assertIn("../studio-data/SKILL.md", line)
 
-    def test_roadmap_does_not_claim_the_fix_is_verified_5(self):
+    def test_roadmap_says_how_the_fix_was_verified_5(self):
         row = next(l for l in read(ROOT / "docs/architecture.md").splitlines() if l.startswith("| 8 |"))
-        self.assertNotIn("1차 완료", row)
-        self.assertIn("408", row)
+        self.assertRegex(row, r"408 고친 뒤 (통과|시험 전)")   # 고친 뒤 시험했는지를 적는다
 
 
 class Research(unittest.TestCase):
