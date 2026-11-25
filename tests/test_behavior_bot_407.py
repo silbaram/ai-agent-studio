@@ -56,7 +56,7 @@ class Review(unittest.TestCase):
         skill = read(ROOT / "skills/playtest-verdict/SKILL.md")
         step1 = skill.split("### 1.", 1)[1].split("### 2.", 1)[0]
         self.assertIn("문턱을 기준선과 견준다", step1)
-        self.assertIn("양쪽 값", step1)
+        self.assertIn("행동을 뺀 봇", step1)
         self.assertLess(len(skill.encode("utf-8")), 20000)
 
     def test_example_is_generic_4(self):
