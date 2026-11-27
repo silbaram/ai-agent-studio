@@ -51,7 +51,7 @@
 | 2++ | 재미 검증 게이트의 기록 쪽: 플레이 기록·가설 판정 (`playtest-verdict`), 읽기 전용 판정 에이전트와 데이터 검사 훅 (`studio.py setup claude`) | 1차 완료 (Claude Code + WSL 실제 세션 확인, Windows 미확인) |
 | 3 | **밸런스 기획** (아래 B1~B5) | 1차 완료 |
 | 4 | **레벨·시스템 설계** (아래 L1~S1) | 1차 완료 |
-| 5 | 뼈대 도구 시험(spec-kit vs OpenSpec, [결과](research/lifecycle-trial-2026-11.md))과 OpenSpec 연결, 범위 이탈 차단 훅 (`scope-guard`) | 1차 완료 |
+| 5 | 뼈대 도구 시험(spec-kit vs OpenSpec, [결과](research/lifecycle-trial-2026-11.md): OpenSpec만으로는 범위 밖 변경도 `validate --strict`와 `archive`를 통과하고 설계가 바뀐 것을 모른다)과 OpenSpec 연결, 범위 이탈 차단 훅 (`scope-guard`) | 1차 완료 |
 | 5+ | 본 게임으로 넘어가기: 가설이 버틴 뒤 엔진을 조건과 시험으로 고르고, 시험판을 버릴지 키울지 정하고, 본 게임 빌드에서 가설을 작게 다시 확인 (`production-handoff`, 절차 문서만. [조사](research/engine-and-production-2026-11.md)) | 1차 완료 (검사기 없음, 사본 현장 시험과 my-cards 실제 넘어가기 7단계까지) |
 | 6 | 그래픽 인계: 본 게임 화면을 만들기 전에 화면에서 읽혀야 하는 것(가설의 말과 규칙에서, 기대는 가설과 함께)과 그릴 것(데이터 id에서)을 모아 game-art-skills `art-direction`(읽힘)과 `asset-sourcing`(그릴 것)에 넘긴다 (`art-handoff`, 절차 문서만) | 1차 완료 (my-cards 실제와 사본 현장 시험) |
 | 7 | 본 게임 완성까지: 알파(기능 완료), 콘텐츠 늘리기, 베타(콘텐츠 동결과 숫자 다듬기), 출시 후보 게이트(무료 공개 기본, 판매 때 더함). 버팀 판정에 게임 데이터 지문(`data`)을 남겨 데이터가 바뀌면 게이트가 막고, 같은 시드 봇 회귀 뒤 사용자가 다시 플레이나 이어 감(`carried`)을 정한다 (`production-milestones`, [조사](research/release-2026-11.md)) | 1차 완료 (사본 현장 시험 2회, 394~396 고침) |

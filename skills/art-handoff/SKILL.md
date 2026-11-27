@@ -8,8 +8,6 @@ license: MIT
 
 설계 층이 아는 것 중 그림을 그리는 쪽이 알아야 할 것을 `design/art-handoff.md` 한 파일에 모은다. 그림체와 색은 정하지 않는다. 그것은 그림 쪽의 일이다(game-art-skills를 쓰면 그 `art-direction` 스킬). 이 스킬은 절차 문서이고 검사기가 없다.
 
-도구 명령은 게임 프로젝트 폴더에서 Claude Code 설치 기준(`.claude/skills/…`)으로 적었다. Codex는 `.agents/skills/…`, Windows PowerShell은 `python3` 대신 `py`([실행 경로](../studio-data/SKILL.md#실행)).
-
 ## 원칙
 
 - **읽힘은 가설에서 나온다.** 판정이 기댄 정보를 그림이 가리거나 바꾸면, 그 판정은 옛 화면의 것이 된다. 그래서 항목마다 기대는 가설을 적는다.

@@ -109,7 +109,7 @@ class Flow(unittest.TestCase):
         self.assertIn("[가정]", s5)                             # 수치는 데이터로
         self.assertIn("../stat-budget/SKILL.md", s5)
         self.assertIn("가설로 만들지 않는다", s5)               # 체력·속도 같은 나머지
-        self.assertIn("../scope-guard/SKILL.md", s5)
+        self.assertIn("브리프에 MVP 추가", read(ROOT / "skills/scope-guard/SKILL.md"))   # 정리 D: 원본은 scope-guard/SKILL.md '훅이 하는 일'
         self.assertIn("1단계에서 정한", s5)
 
     def test_no_verdict_or_gate_here(self):
@@ -162,9 +162,10 @@ class ReviewFixes(unittest.TestCase):
 
     def test_production_entry_covers_freeze_and_build_7(self):
         row = next(l for l in read(ROOT / "skills/production-milestones/SKILL.md").splitlines() if LINK in l)
-        self.assertIn("동결", row)
-        self.assertIn("#3-베타-콘텐츠-동결과-다듬기", row)
+        self.assertIn("when-called.md#본-게임에서-불려-왔을-때", row)   # 정리 B: 원본은 references/when-called.md
         called = read(CALLED)
+        self.assertIn("동결", called)
+        self.assertIn("#3-베타-콘텐츠-동결과-다듬기", called)
         self.assertIn("## 본 게임에서 불려 왔을 때", called)
         self.assertIn("../../production-handoff/SKILL.md#7-본-게임-빌드에서-가설을-다시-확인한다", called)
 
