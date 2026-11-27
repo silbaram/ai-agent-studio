@@ -51,6 +51,16 @@
 4. 모든 가설의 `sample.events`를 새 규칙으로 다시 어림한다. 바꾼 규칙이 다른 가설의 사건을 없앨 수 있다. 예: 보석이 깨져 부화가 없어지면 "부화가 있던 판의 사망"도 생기지 않는다. 그런 가설은 플레이 전에 어떻게 볼지 사용자와 정한다(사건을 바꾼다, 그쪽을 모름으로 둔다). 플레이한 뒤 센 세션에서 사건이 한 번도 나오지 않으면 `check`가 `event_never_seen` 참고 줄로 알린다. 그때도 판을 더 하기 전에 같은 것을 사용자와 정한다. 모름으로 두기로 정하면 그 판정의 `keep_unknown`에 결정과 날짜를 적는다([형식](playtest-record.md)).
 5. 시스템 설계를 고치고 새 변경으로 시험판에 넣는다.
 
+## 조정으로 돌릴 때
+
+틀리거나 모름인 가설이 하나를 바꾸면 끝나는 조정이었다(순간이동을 쓰는 때, 이동기의 종류, 그림 스타일). 기준은 브리프 작성법의 [재미가 무너지는 주장만 가설로 삼는다](../../concept-exploration/references/brief.md#가설-hypotheses-1개-이상)다. 판정 전이라도 사용자가 그렇다고 하면 같다.
+
+1. 틀리면 무엇을 다시 짜나를 한 줄로 보이고, 조정으로 돌릴지 사용자가 정한다. 필러나 핵심 루프를 다시 짜야 하면 이 절이 아니라 [다시 시험할 때](#다시-시험할-때)나 [컨셉을 되돌릴 때](#컨셉을-되돌릴-때)다.
+2. 가설에 `"tuning": {"date": "<오늘>", "why": "<사용자의 말>"}`을 적는다. 판정과 기준은 그대로 둔다. 지난 판정은 기록으로 남고, `check`는 '조정으로 돌림' 줄로 보인다(빼는 검사는 [검사 내용](playtest-record.md#검사-내용)). 판정도 관찰도 없는 가설이면 `tuning` 대신 브리프에서 지우고, `design/systems.json`의 `hypotheses`와 `prototype.success_criteria`·`scope`에서도 뺀다.
+3. 그 조정은 다시 시험하지 않는다. 시험판에 넣어 두고 사용자가 해 보며 바꾼다. 바꾼 수치는 `data/`에 두고 출처는 [numeric-provenance](../../numeric-provenance/SKILL.md)대로 적는다. 종류나 쓰임새가 바뀌면 [system-design](../../system-design/SKILL.md)의 규칙을 고친다.
+4. 그 가설만 이었던 MVP 시스템에는 `system_untested`가 난다. [system-design](../../system-design/SKILL.md#6-경고를-처리한다) 6단계대로 다른 가설을 잇거나 시험하지 않고 만드는 까닭을 적는다.
+5. 가설이 모두 조정으로 돌려지면 `no_active_hypothesis`가 난다. 이 게임의 재미를 시험하는 가설을 브리프 작성법대로 더한다. 직업, 스킬, 스테이지, 아이템 같은 내용에서 나오는 주장이면 [content-ideas](../../content-ideas/SKILL.md)로 짠다.
+
 ## 컨셉을 되돌릴 때
 
 1. 사용자에게 묻는다: 컨셉을 `proposed`로 둘지, 탈락 사유가 증명되었으면 `hard_reject`와 함께 `cut`으로 둘지([탈락 기준](../../concept-exploration/references/stress-policies.md)). 다음 후보는 이때 함께 정하지 않아도 된다.

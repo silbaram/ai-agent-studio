@@ -1,6 +1,6 @@
 ---
 name: playtest-verdict
-description: "Records prototype playtest sessions as data, has a read-only judge propose a verdict (holds, refuted, unknown) for each concept hypothesis from those records, promotes measured numbers from assumed to measured with a checkable source, and calibrates assumptions from recorded stage statistics: compares assumed levels, durations, kills, and income with the records, compares simulated stage clear rates with measured ones, and suggests survival curve values. Use after playing a prototype, when deciding whether a concept's hypotheses survived, before turning an assumed number into a measured one, or when checking balance assumptions against real runs."
+description: "Records prototype playtest sessions as data, has a read-only judge propose a verdict (holds, refuted, unknown) for each concept hypothesis from those records, promotes measured numbers from assumed to measured with a checkable source, and calibrates assumed stage statistics (levels, durations, kills, income, clear rates) against recorded runs and suggests survival-curve values. Use after playing a prototype, when deciding whether a concept's hypotheses survived, before turning an assumed number into a measured one, or when checking balance assumptions against real runs."
 license: MIT
 ---
 
@@ -28,7 +28,7 @@ license: MIT
 | `… hypothesis <컨셉>.<가설>` | 가설 하나의 기준·기준 이력·판정·근거 세션의 그 가설 관찰값과 메모, 그 가설의 `check` 줄만 모아 출력. 기록 전체를 읽지 않고 판정·기록할 때 먼저 본다. 파일에 쓰지 않는다 | 관찰값이 맞는가 |
 | `… calibrate data/meta_combat.json` | 가정값과 기록의 차이, 단계 통과율의 예측과 실측, 기록에 맞는 생존 곡선 값 제안 | 재미, 실제 난이도. 파일을 고치지 않는다 |
 
-Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.py setup claude .`를 실행해 판정 에이전트와 훅을 설치한다([setup](../studio-data/SKILL.md#claude-code-연결)). 스킬을 다시 설치한 뒤에도 다시 실행한다.
+Claude Code에서는 `… setup claude .`로 판정 에이전트와 훅을 설치한다([setup](../studio-data/SKILL.md#claude-code-연결)). 스킬을 다시 설치한 뒤에도 실행한다.
 
 ## 절차
 
@@ -94,7 +94,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 
 ### 6. 틀렸으면 되돌아간다
 
-`refuted`가 확정되면 둘 중 하나를 사용자에게 제안하고 사용자가 정한다: 가설이 기대는 규칙 하나를 바꿔 다시 시험한다([다시 시험할 때](references/changes.md#다시-시험할-때)), 컨셉을 되돌린다(`proposed`, 탈락 사유가 증명되었으면 `hard_reject`와 함께 `cut`. [컨셉을 되돌릴 때](references/changes.md#컨셉을-되돌릴-때)). 선택한 컨셉의 가설이 틀림으로 확정된 동안은 `approved_concept_refuted` 경고가 나고 `--fail-on-assumed`가 실패한다. `unknown`이면 무엇이 부족했는지(표본, 기록하지 못한 값)를 다음 세션 계획으로 남긴다.
+`refuted`가 확정되면 셋 중 하나를 사용자에게 제안하고 사용자가 정한다: 가설이 기대는 규칙 하나를 바꿔 다시 시험한다([다시 시험할 때](references/changes.md#다시-시험할-때)), 컨셉을 되돌린다(`proposed`, 탈락 사유가 증명되었으면 `hard_reject`와 함께 `cut`. [컨셉을 되돌릴 때](references/changes.md#컨셉을-되돌릴-때)), 틀린 것이 조정이면 조정으로 돌린다([조정으로 돌릴 때](references/changes.md#조정으로-돌릴-때)). `unknown`이면 무엇이 부족했는지(표본, 기록하지 못한 값)를 다음 세션 계획으로 남긴다.
 
 ## 기준이나 컨셉을 바꿀 때
 
@@ -106,6 +106,7 @@ Claude Code에서는 한 번 `python3 .claude/skills/studio-data/scripts/studio.
 | 판정한 가설의 문장을 고친다(맞춤법, 옮겨 적은 수치나 데이터 파일 경로 지우기) | [판정한 가설의 문장을 고칠 때](references/changes.md#판정한-가설의-문장을-고칠-때) |
 | 기준을 고칠 때 `criteria_history`를 남기지 못했다 | [이력을 나중에 남길 때](references/changes.md#이력을-나중에-남길-때) |
 | 틀림 뒤 규칙 하나를 바꿔 다시 시험한다 | [다시 시험할 때](references/changes.md#다시-시험할-때) |
+| 틀리거나 모르는 가설이 조정이었다(쓰임새, 종류, 스타일) | [조정으로 돌릴 때](references/changes.md#조정으로-돌릴-때) |
 | 선택한 컨셉을 되돌린다 | [컨셉을 되돌릴 때](references/changes.md#컨셉을-되돌릴-때) |
 | 사용자가 판정 제안과 다르게 정하거나 다시 판정한다 | [사용자가 제안과 다르게 정할 때](references/changes.md#사용자가-제안과-다르게-정할-때) |
 | 다른 시스템이 바뀌어 지난 기록을 함께 세면 안 된다 | [다른 시스템이 바뀌어 지난 기록과 합치지 않을 때](references/changes.md#다른-시스템이-바뀌어-지난-기록과-합치지-않을-때) |

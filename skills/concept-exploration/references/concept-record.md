@@ -70,12 +70,13 @@
 | `fixed_axis_mismatch` | 경고 | 제약으로 고정된 축에 다른 값을 적음 |
 | `unknown_policy` | 경고 | 목록에 없는 단순 전략인데 `definition`이 없음 |
 | `hypothesis_id_missing` | 경고 | 브리프 가설에 `id`가 없음. 기록과 판정은 가설 id로 가리키므로 플레이 전에 단다 |
+| `no_active_hypothesis` | 경고 | 선택한 컨셉의 가설이 모두 조정(`tuning`)으로 돌려져 재미를 시험하는 가설이 없음 |
 | `hypothesis_sample_missing` | 경고 | 브리프 가설에 최소 표본 `sample`이 없음. 판정에 필요한 사람 수와 판 수를 플레이 전에 정한다 |
 | `untagged_number` | 경고 | 선택한 컨셉의 판정 기준(가설의 `claim`, `failure_signal`, `test`와 `success_criteria`)에 태그 없는 수치. `--fail-on-assumed`에서도 막는다. 메시지는 앞 5개만 보이고, `--json`의 `values`에 전부 있다 |
 | `criteria_tag_mismatch` | 경고 | 한 가설의 두 칸(또는 가설과 `success_criteria`)에 같은 수치가 있는데 한쪽은 `[결정]`, 다른 쪽은 `[가정]`. 뜻이 다른 값이면 `acknowledged`에 `{"criteria_tag_mismatch": {"30초": 까닭}}`처럼 그 값만 적는다. 경고가 보인 값을 그대로 쓴다(가운뎃점 목록은 `0.5·1·2배` 전체). 예전 꼴 값(`2배`, `0.3`)으로 적은 확인은 이어 쓰고 참고 줄로 이름을 바꾸라고 알린다 |
 | `criteria_history_mismatch` | 오류 | 가설의 `criteria_history`에 적은 고치기 전 값으로 계산한 지문이 적힌 지문과 다름, 또는 기준이 바뀌지 않은 이력(태그·띄어쓰기만 바꿈). 이력은 오래된 것이 앞이다. 범위 훅은 이 오류로 게임 편집을 막지 않는다 |
 | `criteria_history_invalid` | 오류 | `criteria_history`의 형식이 틀림(배열이 아님, `date`가 달력에 없는 날, `stamp`가 지문 꼴이 아님, `before`가 비었거나 지문에 드는 칸이 아님, `why`가 빔) |
-| `criteria_points_to_data` | 경고 | 판정 기준 문장(`claim`, `failure_signal`, `test`, `success_criteria`)이 게임 데이터 파일의 경로를 적음("값은 data/growth.json의 …"). 종류는 내용으로, 파일이 없거나 게임 고유 형식이면 이름으로 본다. 판정 기록·컨셉·시스템 설계·시뮬레이터 설정·종류를 알 수 없는 JSON은 보지 않는다(출처 태그 안의 경로도). 경고가 없다고 그 파일을 가리켜도 된다는 뜻은 아니다. 그 파일은 다음 조정에서 바뀌어 문장이 다른 빌드를 가리키게 된다. 변경 이름이나 빌드 id(세션의 `build` 커밋, `game_build` 지문)로 가리킨다. 판정한 가설이면 `builds`를 새로 더하지 않고 문장의 변경 이름으로 가리키며(없으면 묻는다), 사용자와 확인한 뒤 고친다. 판정한 가설에 대한 이 안내는 가설 문장의 경고에만 붙는다(`success_criteria`는 지문에 들지 않는다)([playtest-verdict](../../playtest-verdict/references/changes.md#판정한-가설의-문장을-고칠-때)의 '판정한 가설의 문장을 고칠 때'). 그대로 두려면 `acknowledged`에 `{"criteria_points_to_data": {"data/growth.json": 까닭}}` |
+| `criteria_points_to_data` | 경고 | 판정 기준 문장(`claim`, `failure_signal`, `test`, `success_criteria`)이 게임 데이터 파일의 경로를 적음("값은 data/growth.json의 …"). 종류는 내용으로, 파일이 없거나 게임 고유 형식이면 이름으로 본다. 판정 기록·컨셉·시스템 설계·시뮬레이터 설정·종류를 알 수 없는 JSON은 보지 않는다(출처 태그 안의 경로도). 경고가 없다고 그 파일을 가리켜도 된다는 뜻은 아니다. 그 파일은 다음 조정에서 바뀌어 문장이 다른 빌드를 가리키게 된다. 변경 이름이나 빌드 id(세션의 `build` 커밋, `game_build` 지문)로 가리킨다. 판정한 가설이면 메시지가 '판정한 가설의 문장을 고칠 때'를 가리킨다. 판정한 가설에 대한 이 안내는 가설 문장의 경고에만 붙는다(`success_criteria`는 지문에 들지 않는다)([playtest-verdict](../../playtest-verdict/references/changes.md#판정한-가설의-문장을-고칠-때)의 '판정한 가설의 문장을 고칠 때'). 그대로 두려면 `acknowledged`에 `{"criteria_points_to_data": {"data/growth.json": 까닭}}` |
 | `success_criteria_misses_hypothesis` | 경고 | 선택한 컨셉의 `prototype.success_criteria`가 브리프의 가설 수와 다른 수를 말함("두 가설", "2개 가설", "가설 두 개", "가설 둘". 여럿이면 가장 큰 수. "한 가설"과 "가설 2" 같은 이름표, "가설 1개 이상"처럼 뒤에 이상·넘게·라도·만이 붙은 문턱은 수로 보지 않는다), 또는 가설이 둘 이상인데 가설 id를 몇 개만 적고 나머지를 뺌(id는 다른 낱말의 일부가 아닐 때만 센다). 맞게 쓴 문장이면 컨셉의 `acknowledged`에 까닭을 적는다 |
 | `near_duplicate` | 경고 | 활성 후보 둘의 구조 축이 80% 이상 같음(고정 축 제외, 공통 축 4개 이상일 때. `signature`가 없는 기존 게임 컨셉은 겹침·쏠림 비교에서 빠진다). 변이와 원본이면 원본을 `cut`으로 둘지 안내한다 |
 | `axis_collapse` | 경고 | 활성 후보 3개 이상이 한 축에서 모두 같은 값(고정 축 제외) |
@@ -84,4 +85,4 @@
 | `next_test_missing` | 경고 | 활성 후보에 다음 시험이 없음(기존 게임 컨셉은 보지 않는다. 다음 시험은 브리프의 `prototype`이다) |
 | `rejected_but_active` | 경고 | `hard_reject`가 있는데 `cut`이 아님 |
 
-`cut` 후보는 겹침·쏠림·다음 시험 검사에서 빠진다. 검사기는 재미나 우열을 판정하지 않고, 브리프의 구조만 본다. `--fail-on-assumed`는 선택한 컨셉의 브리프에 `[가정]` 태그가 남아 있으면 실패한다.
+`cut` 후보는 겹침·쏠림·다음 시험 검사에서 빠진다. 검사기는 재미나 우열을 판정하지 않고, 브리프의 구조만 본다. `--fail-on-assumed`는 선택한 컨셉의 브리프에 `[가정]` 태그가 남아 있으면 실패한다(조정으로 돌린 가설의 칸은 빼고).

@@ -10,7 +10,7 @@ from _studio import CHANGES, ROOT, STUDIO, changes_section
 SKILL = ROOT / "skills/playtest-verdict/SKILL.md"
 SECTIONS = ("표본을 줄이자는 말이 나올 때", "판정한 가설의 문장을 고칠 때", "이력을 나중에 남길 때",
             "다시 시험할 때", "컨셉을 되돌릴 때", "다른 시스템이 바뀌어 지난 기록과 합치지 않을 때",
-            "사용자가 제안과 다르게 정할 때")
+            "사용자가 제안과 다르게 정할 때", "조정으로 돌릴 때")
 
 
 def slug(heading: str) -> str:   # GitHub 제목 앵커: 소문자, 공백은 하이픈, 글자·숫자·하이픈·밑줄 밖은 뺀다
