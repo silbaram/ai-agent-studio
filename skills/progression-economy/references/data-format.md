@@ -184,7 +184,7 @@
 ```csv
 id,name,slot,tier,rarity,price,stat.attack,stat.armor,unique_effect,status,provenance_kind,provenance_source
 iron_sword,철검,weapon,2,uncommon,60,14,,,approved,assumed,
-chain_mail,사슬 갑옷,armor,2,uncommon,70,,5,,approved,measured,playtest-2026-11-03
+chain_mail,사슬 갑옷,armor,2,uncommon,70,,5,,approved,measured,data/playtests.json#pt_20261103_1
 lucky_coin,행운의 동전,relic,1,rare,90,,,true,proposed,assumed,
 ```
 

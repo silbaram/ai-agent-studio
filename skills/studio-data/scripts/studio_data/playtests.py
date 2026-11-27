@@ -458,7 +458,7 @@ def _check_data(v: dict, where: str, concepts: dict | None, warnings: list, erro
     info = concepts[v["concept"]] if concepts is not None else {}
     current = info.get("data", {}).get(v["hypothesis"])
     rechecked = _concepts.rechecked(set(info.get("hypotheses", ())), v["hypothesis"])
-    if v["result"] != "holds" or not info.get("approved", True) or not current or rechecked:
+    if v["result"] != "holds" or not info.get("approved", True) or not current or rechecked or v["hypothesis"] in info.get("tuning", {}):   # 조정으로 돌린 가설은 더 판정하지 않는다
         return []
     if "data" not in v:
         warnings.append({"code": "verdict_data_missing", "where": where,
@@ -682,6 +682,8 @@ def _never_seen(sessions: dict, concepts: dict, verdicts: dict) -> list:
     for cid, info in sorted(concepts.items()):
         for hid, need in info.get("samples", {}).items():
             where = f"{cid}.{hid}"
+            if hid in info.get("tuning", {}):   # 조정으로 돌린 가설은 사건을 더 기다리지 않는다
+                continue
             if verdicts.get(where, {}).get("result") in DECIDED or verdicts.get(where, {}).get("keep_unknown"):   # 모름으로 두기로 정했으면 다시 묻지 않는다
                 continue
             allowed = info.get("builds", {}).get(hid)
@@ -915,6 +917,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                            + (_after_results(concepts.get(v["concept"]), v["hypothesis"], seen) if concepts is not None and criteria == "ok" else "")}
 
     unverified: list = []
+    tuning: dict = {}   # 조정으로 돌린 가설 {컨셉.가설: {date, why}}
     unverified_reasons: dict = {}   # 확정 판정인데 게이트에 걸린 까닭. 데이터는 키 그대로 두고 화면(check 게이트 줄, 뷰어)이 붙인다
     refuted: list = []
     if concepts is not None:
@@ -922,6 +925,9 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
             if not info["approved"]:
                 continue
             for i, h in enumerate(info["hypotheses"]):
+                if h in info.get("tuning", {}):   # 조정으로 돌린 가설은 더 판정하지 않는다. 판정은 기록으로 남는다
+                    tuning[f"{cid}.{h}"] = info["tuning"][h]
+                    continue
                 key = f"{cid}.{h}" if h else f"{cid}.brief.hypotheses[{i}]"
                 got = verdicts.get(key)
                 decided = bool(got) and got["result"] in DECIDED and got["status"] == "approved"
@@ -945,6 +951,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
                        for w, x in verdicts.items() if x["keep_unknown"]})
     next_needs.update({w: {**old, "cut": True} for w, old in left.items()
                        if w not in next_needs and not (w in verdicts and verdicts[w]["result"] in DECIDED)})
+    next_needs = {w: x for w, x in next_needs.items() if w not in tuning}   # 조정으로 돌린 가설에는 다음 시험이 없다
     counts = {r: sum(1 for x in verdicts.values() if x["result"] == r) for r in RESULTS}
     reason = None
     if unchecked:
@@ -957,6 +964,7 @@ def validate(data: dict, concepts: dict | None = None, concepts_unreadable: bool
         "verdicts": verdicts,
         "unverified": unverified,
         "unverified_reasons": unverified_reasons,
+        "tuning": tuning,
         "refuted": refuted,
         "reverted": reverted,
         "next_needs": next_needs,
@@ -978,6 +986,8 @@ def print_extra(result: dict) -> None:
         print(verdict_line(where, v))
     for where, x in result.get("next_needs", {}).items():
         print(next_needs_line(where, x))
+    for where, x in result.get("tuning", {}).items():
+        print(f"조정으로 돌림({where}): {x['why']} ({x['date']}). 더 판정하지 않고 게이트에도 넣지 않습니다")
     for where, x in result.get("restamp", {}).items():
         print(f"참고: 판정 {where}의 기준 지문이 예전 꼴입니다(criteria {x['from']}, 태그까지 넣어 계산함). 기준은 그대로이니 criteria를 바꿔 둡니다(새 지문: {x['to']}). "
               "그러면 태그 없던 수치에 태그를 달거나 태그를 바꿔도 지문이 그대로입니다.")
@@ -1062,7 +1072,7 @@ def context(where: str, concepts_data: dict, data: dict, report: dict, stamp, ev
             sessions.append({**head, "earlier": True})
     sessions.sort(key=lambda s: (str(s.get("date")), str(s.get("id"))))
     return {"where": where, "approved": concept.get("status") == "approved",
-            "hypothesis": {k: hyp[k] for k in ("claim", "failure_signal", "test", "sample", "builds", "depends_on", "criteria_history") if k in hyp},
+            "hypothesis": {k: hyp[k] for k in ("claim", "failure_signal", "test", "sample", "builds", "depends_on", "criteria_history", "tuning") if k in hyp},
             "criteria": stamp(hyp),
             "data": ({"stamp": None, "files": [], "skipped": f"{hid}_main(본 게임 다시 확인)의 판정이 지금 데이터를 본다"}
                      if _concepts.rechecked({h.get("id") for h in brief.get("hypotheses") or [] if isinstance(h, dict)}, hid)
@@ -1082,6 +1092,8 @@ def print_context(got: dict) -> None:
     for key, label in (("claim", "주장"), ("failure_signal", "틀렸다는 신호"), ("test", "시험"), ("sample", "표본"), ("builds", "세는 빌드"), ("depends_on", "기대는 파일")):
         if key in h:
             print(f"{label}({key}): {_flat(h[key])}")
+    if _concepts.tuning_ok(h.get("tuning")):
+        print(f"조정으로 돌림(tuning): {h['tuning']['date']} · {h['tuning']['why']}")
     print(f"판정 기준 지문(지금): {got['criteria'] or '없음'}")
     if got.get("data"):
         d = got["data"]

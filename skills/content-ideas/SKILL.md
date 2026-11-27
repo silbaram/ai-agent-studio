@@ -1,12 +1,12 @@
 ---
 name: content-ideas
-description: "Proposes game content (classes, skills, cards, enemies, items) with the user. It first proposes design laws from genre research, each with sources, the pillar it serves and whether it is required, then offers two or three structurally different sets that follow the accepted laws, refines one with the user, and hands on only pillar-level claims as hypotheses, new rules to system design and numbers to data as [가정]. Use when the user asks what classes, skills, cards or other content a game should have, when the user throws a seed idea for a new kind of content, or before editing the brief or adding a hypothesis because of a new content direction."
+description: "Proposes game content (classes, skills, cards, stages, enemies, items) with the user, the main design step once the core loop holds. It proposes sourced genre laws first, then two or three structurally different sets that follow them, refines one with the user, and hands on pillar-level claims as hypotheses, rules to system design and numbers to data. Use when the core loop holds, when the user asks what classes, skills, stages or other content to have, throws a content seed, or before editing the brief or adding a hypothesis for a new content direction."
 license: MIT
 ---
 
 # 내용 제안
 
-게임에 넣을 내용(직업, 스킬, 카드 계열, 적, 아이템)을 함께 짠다. 에이전트는 장르를 조사해 좋은 내용이 지키는 **법칙**을 먼저 제안하고, 그 법칙을 따르는 안을 낸다. 사용자는 법칙과 안을 고치고 고른다.
+게임에 넣을 내용(직업, 고유 스킬, 카드 계열, 스테이지, 적, 아이템)을 함께 짠다. 에이전트는 장르를 조사해 좋은 내용이 지키는 **법칙**을 먼저 제안하고, 그 법칙을 따르는 안을 낸다. 사용자는 법칙과 안을 고치고 고른다.
 
 ## 원칙
 
@@ -66,9 +66,9 @@ license: MIT
 
 **브리프를 먼저 맞춘다.** 범위는 1단계에서 정한 대로 [concept-exploration](../concept-exploration/SKILL.md)에서 고친다. 고른 벌이 필러를 바꾸면 사용자에게 묻는다. 필러 이름을 바꾸면 `design/systems.json`의 `pillars`도 함께 고친다. OpenSpec을 쓰면 [scope-guard](../scope-guard/SKILL.md)가 그 변경을 본다. 그다음 고른 벌을 넷으로 가른다. 무거운 검증 길은 첫째에만 쓴다.
 
-1. **필러를 건드리는 주장.** 플레이어가 이렇게 할 것이라는 주장이고, 필러가 거기에 기대며, 틀리면 이 내용을 다시 짜야 하는 것이다. 예: "직업마다 이동의 역할이 다르다". 브리프에 이미 있는 가설이 같은 행동을 보면 새 가설을 만들지 않고 그 가설로 시험한다. 없을 때만 [가설의 모양](../concept-exploration/references/brief.md#가설-hypotheses-1개-이상)대로 더하자고 사용자에게 묻는다. 여럿이면 가장 위험한 하나부터 권한다.
+1. **필러를 건드리는 주장.** 플레이어가 이렇게 할 것이라는 주장이고, 필러가 거기에 기대며, 틀리면 이 내용을 다시 짜야 하는 것이다. 예: "직업마다 고르는 이유가 다르다". 브리프에 이미 있는 가설이 같은 행동을 보면 새 가설을 만들지 않고 그 가설로 시험한다. 없을 때만 [가설의 모양](../concept-exploration/references/brief.md#가설-hypotheses-1개-이상)대로, '재미가 무너지는 주장만 가설로 삼는다'를 지켜 더하자고 사용자에게 묻는다. 여럿이면 가장 위험한 하나부터 권한다.
 2. **새 규칙.** [system-design](../system-design/SKILL.md)의 `rules`로 옮긴다.
-3. **수치.** 체력, 속도, 쿨다운 같은 값이다. `data/`에 `[가정]`으로 둔다([numeric-provenance](../numeric-provenance/SKILL.md#태그)). 티어 곡선이 있으면 [stat-budget](../stat-budget/SKILL.md)의 초안으로 시작한다.
+3. **수치.** 체력, 속도, 쿨다운 같은 값이다. 종류나 쓰임새를 바꾸는 조정은 2로 간다. `data/`에 `[가정]`으로 둔다([numeric-provenance](../numeric-provenance/SKILL.md#태그)). 티어 곡선이 있으면 [stat-budget](../stat-budget/SKILL.md)의 초안으로 시작한다.
 4. **나머지.** 생김새, 이름, 화면에서 무엇으로 구분되는지 같은 것이다. 기록에만 남기고 가설로 만들지 않는다. 화면 구분은 나중에 [art-handoff](../art-handoff/SKILL.md)가 모은다.
 
 넘긴 곳은 기록의 '넘긴 곳'에 적는다.
@@ -84,4 +84,3 @@ license: MIT
 
 - 검사기가 없다. `check`는 기록 파일을 보지 않는다.
 - 법칙은 장르의 통념이다. 이 게임에서 맞는지는 플레이가 가린다.
-- 출처의 질은 에이전트가 고른다.

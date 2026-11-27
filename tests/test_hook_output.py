@@ -241,7 +241,7 @@ class Docs(unittest.TestCase):
         self.assertIn("이미 보인 경고", text)
         self.assertIn("session_id", text)
         self.assertIn("SessionStart", text)
-        self.assertIn("경고 줄이기는 실제 세션에서 확인하지 않았다", text)
+        self.assertIn("경고 줄이기는 실제 세션에서 `session_id`가 넘어오고", text)   # 411 A18: 294 실제 세션 확인
 
 
 if __name__ == "__main__":

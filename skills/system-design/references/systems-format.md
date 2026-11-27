@@ -79,7 +79,7 @@
 | `scope_mismatch` | 경고 | `mvp`인데 MVP 항목이 없음(기반 시스템 제외), `mvp`가 아닌데 MVP 항목을 맡음, `out`인데 범위 밖 항목이 없음(이름·의도·규칙 글에 나오는 범위 밖 항목이 있으면 메시지에 적는다) |
 | `system_without_pillar` | 경고 | `out`이 아닌데 필러가 없음(기반 시스템 제외) |
 | `system_without_rules` | 경고 | `out`이 아닌데 규칙이 없음 |
-| `system_untested` | 경고 | 범위가 `mvp`인데 `hypotheses`가 없음(기반 시스템 제외). 브리프에 id가 있는 가설이 없으면 보지 않는다. 시험하지 않기로 했으면 그 시스템에서 `{"system_untested": 까닭}`으로 확인한다. 확인해도 `check`의 '가설 없이 만드는 MVP 시스템' 줄에 남는다 |
+| `system_untested` | 경고 | 범위가 `mvp`인데 `hypotheses`가 없거나 모두 조정으로 돌린 가설(`tuning`)임(기반 시스템 제외). 브리프에 id가 있는 가설이 없으면 보지 않는다. 시험하지 않기로 했으면 그 시스템에서 `{"system_untested": 까닭}`으로 확인한다. 확인해도 `check`의 '가설 없이 만드는 MVP 시스템' 줄에 남는다 |
 | `duplicate_item` | 경고 | `pillars`, `mvp`, `out_of_scope`, `depends_on`, `hypotheses`에 같은 항목이 두 번 있음 |
 
 형식 오류가 난 시스템은 계산과 표에서 빠지고, `check`가 빠진 시스템과 그 수를 적는다. 시스템 수는 빠진 것도 센다. 상태별 수는 id와 상태를 읽은 시스템만 센다(형식 오류로 빠졌어도 id와 상태가 맞으면 센다). 빠진 시스템이 있으면 그 시스템에 대한 의존을 없는 시스템으로 말하지 않고, `pillar_unserved`와 `mvp_unserved`를 보지 않는다.

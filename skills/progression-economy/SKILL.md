@@ -20,7 +20,7 @@ license: MIT
 | `studio.py check` (적) | 구역이 오를수록, 등급(일반 → 정예 → 보스)이 오를수록 위협도가 줄지 않는가, 드랍 테이블이 아이템 데이터에 있는가 | 패턴이 공정한가, 실제 난이도 |
 | `studio.py simulate` | 정해 둔 모델에서 몇 번째 런에 강화를 사고 보스를 넘는가, 진척이 멈추는 구간이 있는가 | 실제 조작 난이도, 손맛, 재미 |
 
-점수(아이템)와 위협도(적)는 Σ(스탯 × 가중치)다. 가중치는 설계 가정이고, 같은 묶음 안에서만 비교한다. 아이템을 갖춘 플레이어가 적을 몇 번·몇 초에 잡는지처럼 **요소 사이**를 계산하려면 [combat-balance](../combat-balance/SKILL.md)를 쓴다. 같은 원본 데이터를 그대로 참조한다. 티어·구역을 넘어 곡선으로 비교하거나 새 항목을 곡선에서 만들려면 [stat-budget](../stat-budget/SKILL.md)을 쓴다. `stat_weights`·`threat_weights`는 같은 묶음 안 비교용이고, 예산 원가는 그와 따로 `budget.json`에 둔다. 아이템 강화와 합성, 아이템을 얻는 경로는 [crafting-balance](../crafting-balance/SKILL.md)가, 판 안의 수입과 구매 시점은 [economy-flow](../economy-flow/SKILL.md)가 다룬다. 메타 성장 시뮬레이터는 지는 판까지 포함한 판 수를, economy-flow는 매 판을 끝까지 깬 경우의 최소 판 수를 낸다. 시뮬레이터 결과는 **입력 파라미터가 맞다는 가정 아래의 계산값**이다.
+점수(아이템)와 위협도(적)는 Σ(스탯 × 가중치)다. 가중치는 설계 가정이고, 같은 묶음 안에서만 비교한다. 아이템을 갖춘 플레이어가 적을 몇 번·몇 초에 잡는지처럼 **요소 사이**를 계산하려면 [combat-balance](../combat-balance/SKILL.md)를 쓴다. 같은 원본 데이터를 그대로 참조한다. 티어·구역을 넘어 곡선으로 비교하거나 새 항목을 곡선에서 만들려면 [stat-budget](../stat-budget/SKILL.md)을 쓴다. `data/budget.json`이 있으면 가중치 대신 그 원가로 점수를 낸다. 아이템 강화와 합성, 아이템을 얻는 경로는 [crafting-balance](../crafting-balance/SKILL.md)가, 판 안의 수입과 구매 시점은 [economy-flow](../economy-flow/SKILL.md)가 다룬다. 메타 성장 시뮬레이터는 지는 판까지 포함한 판 수를, economy-flow는 매 판을 끝까지 깬 경우의 최소 판 수를 낸다. 시뮬레이터 결과는 **입력 파라미터가 맞다는 가정 아래의 계산값**이다.
 
 ## 단일 원본 규칙
 
@@ -34,9 +34,9 @@ license: MIT
 
 "이런 아이템(강화, 적)이 있으면 좋겠어" 같은 요청은 다음 순서로 처리한다.
 
-1. 요청을 해당 원본 파일의 항목으로 바꾼다. `status: "proposed"`, `provenance: {"kind": "assumed", "note": "요청 기반 초안"}`로 넣는다. 수치는 에이전트 제안이므로 가정이다.
+1. 요청을 해당 원본 파일의 항목으로 바꾼다. `data/budget.json`이 있으면 [stat-budget 4단계](../stat-budget/SKILL.md#4-새-항목은-초안에서-시작한다)의 `draft`로 시작하고 출처도 그쪽대로 적는다. 없으면 `status: "proposed"`, `provenance: {"kind": "assumed", "note": "요청 기반 초안"}`로 넣는다. 수치는 에이전트 제안이므로 가정이다.
 2. 숫자로 비교할 수 없는 효과는 `effect`에 적는다(아이템은 `unique_effect: true`도 붙인다). 왜 넣는지 `intent`에 한 줄로 적는다.
-3. `python3 .claude/skills/studio-data/scripts/studio.py check data/`로 검사한다. 적의 드랍 테이블 참조까지 확인된다. 경고가 나오면 함께 보고한다.
+3. `python3 .claude/skills/studio-data/scripts/studio.py check .`로 검사한다. 적의 드랍 테이블 참조까지 확인된다. 경고가 나오면 함께 보고한다.
 4. 대화에는 **새로 추가되거나 바뀐 행만** 표로 보여 준다. 전체 목록은 뷰어로 안내한다.
 5. 사용자가 승인하면 `approved`로 바꾼다. 거절하면 지우지 말고 `cut`으로 두고 `intent`에 뺀 이유를 남긴다. `cut` 항목은 비교, 합계, 시뮬레이션, 게이트에서 빠진다.
 6. 사용자 승인 없이 `approved`로 바꾸지 않는다.
@@ -46,7 +46,7 @@ license: MIT
 1. **데이터를 단일 원본으로 둔다.** 수치가 게임 코드에만 있으면(시험판 등) 다른 점검 전에 값을 바꾸지 않고 `data/*.json`으로 옮겨 코드가 그 파일을 읽게 한다. 옮긴 뒤 빌드 지문과 시뮬레이션 결과가 있으면 옮기기 전과 같은지 확인한다. 게임이 읽는 JSON/CSV 파일을 도구도 그대로 읽는다. 게임이 그 파일을 직접 읽지 못하면(`file://`로 여는 HTML 등) JSON을 원본으로 두고 게임 파일에는 옮긴 값만 둔다. 게임 테스트가 두 값을 비교해 어긋나면 실패하게 한다. 게임 파일에서 JSON을 만들어 내지 않는다. 밸런스 스킬이 고친 값이 다음에 만들 때 덮인다.
 2. **검사한다.**
    ```bash
-   python3 .claude/skills/studio-data/scripts/studio.py check data/ --out reports/data-check.json
+   python3 .claude/skills/studio-data/scripts/studio.py check . --out reports/data-check.json
    ```
    - 폴더를 주면 아이템·강화·적을 한 번에 검사하고, 적의 드랍 테이블은 함께 읽은 아이템 데이터로 확인한다.
    - 오류(형식, 중복 id, 없는 참조, 순환, 삭제된 선행 조건)는 먼저 고친다.

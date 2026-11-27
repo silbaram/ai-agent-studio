@@ -1,12 +1,12 @@
 ---
 name: production-handoff
-description: "Guides the step after a concept's hypotheses hold: checks that the playtest gate really passed, has the user choose the engine from must-have conditions tied to the brief and the hypothesis tests plus a small identical engine trial (exact version, recorded as a user decision), decides whether the greybox prototype is thrown away or grown (growing keeps the original and compares the same bot run on both builds), lists what carries over to the real game and what is dropped, keeps run logs and bots in a dev build, and re-checks each held hypothesis on the real build with a small sample. Records everything in design/production.md. Use when the user asks which engine to use, wants to start the real game after playtests, or wants to turn the prototype into the product."
+description: "Guides the step after a concept's hypotheses hold: checks that the playtest gate really passed, has the user choose the engine from must-have conditions tied to the brief and the hypothesis tests plus a small identical engine trial (exact version, recorded as a user decision), decides whether the greybox prototype is thrown away or grown (comparing the same bot run on both builds), lists what carries over to the real game and what is dropped, keeps run logs and bots in a dev build, and re-checks each held hypothesis on the real build with a small sample. Records everything in design/production.md. Use when the user asks which engine to use, wants to start the real game after playtests, or wants to turn the prototype into the product."
 license: MIT
 ---
 
 # 본 게임으로 넘어가기
 
-가설이 버틴 뒤 엔진을 정하고, 그림 없는 시험판에서 본 게임으로 넘어간다. 이 스킬은 절차 문서다. 검사기가 따로 없으므로 아래 확인을 건너뛰면 아무도 알려 주지 않는다.
+가설이 버틴 뒤 엔진을 정하고, 그림 없는 시험판에서 본 게임으로 넘어간다. 이 스킬은 절차 문서다(검사기가 없다. 아래 '한계').
 
 도구 명령은 게임 프로젝트 폴더에서 Claude Code 설치 기준(`.claude/skills/…`)으로 적었다. Codex는 `.agents/skills/…`, Windows PowerShell은 `python3` 대신 `py`([실행 경로](../studio-data/SKILL.md#실행)).
 
@@ -24,6 +24,7 @@ license: MIT
 - 가설이 아직 판정되지 않았다: [playtest-verdict](../playtest-verdict/SKILL.md)로 먼저 판정한다.
 - 시험판 가설이 틀렸다: [playtest-verdict](../playtest-verdict/SKILL.md#6-틀렸으면-되돌아간다)의 되돌아가기를 따른다.
 - 시험판 안의 규칙을 바꿔 다시 시험한다: [다시 시험할 때](../playtest-verdict/references/changes.md#다시-시험할-때).
+- 핵심 가설은 버텼는데 내용(직업·스킬·스테이지·아이템)을 아직 짜지 않았다: [content-ideas](../content-ideas/SKILL.md).
 
 ## 이럴 때 읽을 곳
 
@@ -118,11 +119,11 @@ git grep -n "<찾을 경로>" -- <본 게임 코드 폴더>
 
 시험판에서 버틴 가설이 본 게임에서도 버티는지 작은 표본으로 다시 본다. 지난 판정은 고치지 않는다. 시험판 빌드의 근거로 그대로 남는다. 화면을 만들기 전에 [art-handoff](../art-handoff/SKILL.md)를 한다.
 
-1. 버틴 가설마다 다시 확인할 가설을 브리프에 더한다. id는 원래 id 뒤에 `_main`을 붙인다. `claim`과 `failure_signal`은 원래 문장을 그대로 옮긴다.
+1. 버틴 가설마다(조정으로 돌린 가설은 빼고) 다시 확인할 가설을 브리프에 더한다. `design/art-handoff.md`가 있으면 원래 가설이 적힌 항목에 `_main` id도 더한다. id는 원래 id 뒤에 `_main`을 붙인다. `claim`과 `failure_signal`은 원래 문장을 그대로 옮긴다.
 2. `test`도 옮기되, 시험판 빌드에 묶인 것만 본 게임 빌드에 맞춘다: 시험판 빌드로 낸 기준선 파일(본 게임 빌드에서 다시 내고 그 경로로 바꾼다), 세션 id, 문장 안의 표본 수. 판정 방법과 문턱은 바꾸지 않는다. 바꿔야 하면 다시 확인이 아니라 새 가설이므로 사용자와 정한다.
-3. `builds`에 본 게임 빌드 이름을 적는다. `builds`는 세션의 `build`(커밋)나 `game_build`(판 로그의 빌드 지문) 중 하나라도 맞으면 센다. 빌드 지문을 데이터만으로 만들면 같은 데이터를 읽는 시험판과 본 게임의 지문이 같아져 시험판 세션이 섞인다. 본 게임의 판 로그는 시험판 세션에 없는 이름을 `game_build`로 남기게 한다(예: 지문 앞에 `main-`). 그 이름을 `builds`에 적는다. 화면만 바꾸면 데이터가 같아 지문도 같다. 키워 간 직후의 빌드와 가르도록 `game_build`에 화면 판을 넣는다(예: `main-ui1-<지문>`). 화면 판은 다시 확인할 화면을 만들기 시작할 때 정해 `builds`에 적고, 플레이 중에 화면을 고쳐도 바꾸지 않는다.
+3. `builds`에 본 게임 빌드 이름을 적는다. 빌드 지문을 데이터만으로 만들면 같은 데이터를 읽는 시험판과 본 게임의 지문이 같아져 시험판 세션이 섞인다. 본 게임의 판 로그는 시험판 세션에 없는 이름을 `game_build`로 남기게 한다(예: 지문 앞에 `main-`). 그 이름을 `builds`에 적는다. 화면만 바꾸면 데이터가 같아 지문도 같다. 키워 간 직후의 빌드와 가르도록 `game_build`에 화면 판을 넣는다(예: `main-ui1-<지문>`). 화면 판은 다시 확인할 화면을 만들기 시작할 때 정해 `builds`에 적고, 플레이 중에 화면을 고쳐도 바꾸지 않는다.
 4. `sample`은 원래보다 작게 사용자와 정하고 `[결정: 사용자 날짜]`로 적는다. 얼마나 작게 할지는 사용자가 정한다. 원래 표본을 넘지 않는다. 정하기 전에 고를 크기마다 시험판 판을 그 크기로 묶어 같은 판정을 내 보고 사용자에게 보인다. 묶는 법과 적을 곳은 [다시 확인 표본](references/recheck-sample.md#시험판-판을-묶어-보기)이다.
-5. 브리프 `prototype.success_criteria`에 더한 `_main` 가설을 적는다(예: "본 게임 빌드에서 `<id>_main`이 버틴다"). 적지 않으면 `check`가 `success_criteria_misses_hypothesis` 경고를 낸다.
+5. 브리프 `prototype.success_criteria`에 더한 `_main` 가설을 적는다(예: "본 게임 빌드에서 `<id>_main`이 버틴다").
 6. 핵심 루프와 판 로그를 갖추고 본 게임에서 바꿀 화면과 조작이 들어간 빌드로 플레이하고 [playtest-verdict](../playtest-verdict/SKILL.md)로 기록·판정한다.
 
 키워 간 직후의 빌드는 화면과 조작이 시험판과 같아 다시 확인의 세션으로 세지 않는다(시험판 시험을 되풀이한다). 사용자가 시험판의 화면과 조작을 그대로 본 게임에 쓰기로 했으면 다시 확인할 변화 없음이다. `_main` 가설을 더하지 않고 기록의 '본 게임 빌드에서 다시 확인'에 그 까닭과 `[결정: 사용자 날짜]`를 적는다. 플레이어에게 보이는 정보를 더하면(예: 고를 카드의 효과 미리 보기) 가설 결과가 달라질 수 있으므로 본 게임에 넣을 정보는 다시 확인 전에 넣는다. 규칙이나 숫자를 바꾸면 빌드가 바뀌므로 `test`의 기준선과 `builds`를 다시 맞춘다.

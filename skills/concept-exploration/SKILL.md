@@ -132,7 +132,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check design/concepts.json 
 
 ## 다음 단계
 
-[system-design](../system-design/SKILL.md)으로 브리프를 시스템과 규칙으로 옮긴다. 프로토타입을 플레이하고 [playtest-verdict](../playtest-verdict/SKILL.md)로 기록과 판정을 남긴다. 틀렸다는 신호가 나오면 브리프를 고치거나 다른 후보로 돌아간다(이 스킬의 7단계 선택으로). 가설이 버티면 아이템·강화·적 데이터를 [progression-economy](../progression-economy/SKILL.md)로 시작한다. 엔진을 정하고 본 게임으로 넘어갈 때는 [production-handoff](../production-handoff/SKILL.md)를 따른다.
+[system-design](../system-design/SKILL.md)으로 브리프를 시스템과 규칙으로 옮긴다. 프로토타입을 플레이하고 [playtest-verdict](../playtest-verdict/SKILL.md)로 기록과 판정을 남긴다. 틀렸다는 신호가 나오면 브리프를 고치거나 다른 후보로 돌아간다(이 스킬의 7단계 선택으로). 핵심 재미의 가설이 버티면 직업·고유 스킬·스테이지·아이템·적 같은 내용을 [content-ideas](../content-ideas/SKILL.md)로 짠다. 게임을 재미있게 만드는 일은 대부분 여기서 한다. 정한 내용의 숫자는 그 뒤 [progression-economy](../progression-economy/SKILL.md)로 시작한다. 엔진을 정하고 본 게임으로 넘어갈 때는 [production-handoff](../production-handoff/SKILL.md)를 따른다.
 
 검사와 뷰어는 공용 도구 [studio-data](../studio-data/SKILL.md)에 있다. 이 스킬과 함께 설치한다. 기록을 보기 좋게 보려면 문서를 따로 만들지 않고 뷰어를 연다.
 

@@ -9,6 +9,7 @@ import unicodedata
 
 from . import common as c
 from .common import add_issue as _err, did_you_mean
+from . import concepts as _concepts   # 조정으로 돌린 가설 판별(tuned)은 컨셉 쪽 한 곳에 있다
 
 SCOPES = {"mvp": "MVP", "later": "나중", "out": "범위 밖"}
 TOP_FIELDS = {"concept", "systems", "note"}
@@ -59,7 +60,9 @@ def _brief_items(concept: dict | None, errors: list) -> dict | None:
     texts = {k: [_nfc(x) for x in brief.get(k) or [] if isinstance(x, str)] if isinstance(brief.get(k) or [], list) else [] for k in ("mvp", "out_of_scope")}
     hyps = brief.get("hypotheses")
     ids = [h["id"] for h in hyps if isinstance(h, dict) and isinstance(h.get("id"), str)] if isinstance(hyps, list) else []
-    return {"pillars": [_nfc(p["name"]) for p in pillars if isinstance(p, dict) and isinstance(p.get("name"), str)] if isinstance(pillars, list) else [], **texts, "hypotheses": ids}
+    tuning = [h["id"] for h in hyps if isinstance(h, dict) and isinstance(h.get("id"), str) and _concepts.tuned(h)] if isinstance(hyps, list) else []
+    return {"pillars": [_nfc(p["name"]) for p in pillars if isinstance(p, dict) and isinstance(p.get("name"), str)] if isinstance(pillars, list) else [], **texts,
+            "hypotheses": ids, "tuning": tuning}
 
 
 def _text_list(s: dict, key: str, errors: list) -> bool:
@@ -177,7 +180,8 @@ def _untested(live: dict, items: dict | None) -> list:
     """가설이 닿지 않는 MVP 시스템(기반 제외). 브리프에 가설 id가 없으면 이을 것이 없어 묻지 않는다."""
     if not items or not items["hypotheses"]:
         return []
-    return [s for s in live.values() if s["scope"] == "mvp" and not s.get("foundation", False) and not s.get("hypotheses")]
+    return [s for s in live.values() if s["scope"] == "mvp" and not s.get("foundation", False)
+            and not [h for h in s.get("hypotheses") or [] if h not in items.get("tuning", [])]]   # 조정으로 돌린 가설은 재미를 시험하지 않는다
 
 
 def _check_dependencies(live: dict, cut: set, known: set, lost: set, errors: list, warnings: list) -> None:

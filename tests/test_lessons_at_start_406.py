@@ -80,7 +80,7 @@ class Page(unittest.TestCase):
 
     def test_scope_says_the_start_line_is_unconfirmed_3(self):
         text = (ROOT / "skills/studio-data/SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("시작 알림은 실제 세션에서 확인하지 않았다", text)
+        self.assertIn("시작 알림도 실제 세션에서 확인했다", text)   # 411 A18: 406 실사용 시험 통과
 
 
 if __name__ == "__main__":

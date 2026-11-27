@@ -22,8 +22,7 @@ class RuleChecksAreNotPlaytests(unittest.TestCase):
     """393번: 같은 입력이면 같은 결과가 나오는 규칙 성질은 플레이 전 계산으로 보고, 가설은 사람이 고르거나 느끼는 것을 잰다."""
 
     def test_checklist_sends_rule_properties_to_pre_play_checks(self):
-        first = hypothesis_checklist().split("\n- ")[1]
-        self.assertTrue(first.startswith("**사람이 해야 아는 것을 잰다.**"), first[:80])
+        first = next(x for x in hypothesis_checklist().split("\n- ")[1:3] if x.startswith("**사람이 해야 아는 것을 잰다.**"))   # 411: 무엇을 가설로 삼나가 맨 앞이다
         self.assertIn("같은 입력이면 같은 결과", first)
         self.assertIn("stress-policies.md", first)
         self.assertIn("기준선", first)

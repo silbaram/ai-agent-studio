@@ -189,7 +189,7 @@ class JudgedKeepsTheChangeName(unittest.TestCase):
         msg = pointers(changed("test", REAL))[0]["message"]
         self.assertIn("세션의 build 커밋", msg)   # 세션에 늘 있는 칸. game_build는 선택 칸이다
         self.assertIn("game_build", msg)
-        self.assertIn("판정한 가설이면 builds를 새로 더하지 않고", msg)
+        self.assertIn("판정한 가설이면 고치기 전에 사용자와 확인합니다", msg)   # 411 A5: 할 일의 원본은 changes.md
 
     def test_success_criteria_gets_no_judged_hypothesis_advice(self):   # 지문에 들지 않고 builds도 없다
         msg = pointers(changed("success_criteria", "data/items.json의 값으로 본다", proto))[0]["message"]
@@ -201,9 +201,8 @@ class JudgedKeepsTheChangeName(unittest.TestCase):
         brief = self.read("skills/concept-exploration/references/brief.md")
         rule = next(line for line in brief.splitlines() if line.startswith("- **세는 빌드는 이름으로 가리킨다.**"))
         self.assertIn("세션의 `build` 커밋이나 `game_build`", rule)
-        self.assertIn("이미 판정한 가설을 고칠 때는 `builds`를 새로 더하지 않고", rule)
-        self.assertIn("변경 이름이 없으면", rule)
-        self.assertIn("사용자에게 묻는다", rule)
+        self.assertIn("이미 판정한 가설을 고칠 때는 [playtest-verdict]", rule)   # 411 A5: 원본은 changes.md 한 곳
+        self.assertIn("판정한-가설의-문장을-고칠-때", rule)
 
     def test_the_verdict_step_and_record_table_say_so(self):
         step = next(line for line in changes_section("판정한 가설의 문장을 고칠 때").splitlines()
@@ -213,7 +212,7 @@ class JudgedKeepsTheChangeName(unittest.TestCase):
         self.assertIn("이미 센 세션이 모두 그 빌드", step)      # 그때는 뜻이 같은 고침이 될 수 있다
         row = next(line for line in self.read("skills/concept-exploration/references/concept-record.md").splitlines()
                    if line.startswith(f"| `{CODE}`"))
-        self.assertIn("`builds`를 새로 더하지 않고", row)
+        self.assertIn("'판정한 가설의 문장을 고칠 때'를 가리킨다", row)   # 411 A5
         self.assertIn("세션의 `build` 커밋", row)
 
 

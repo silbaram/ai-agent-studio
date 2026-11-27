@@ -340,6 +340,16 @@ def data_stamp(root: Path | None, depends_on=None) -> str | None:
     return stamp_from_digests({**{rel: "없음" for rel in files}, **have}, depends_on)
 
 
+def tuning_ok(v) -> bool:
+    """가설의 tuning: 사용자가 조정으로 돌린 날과 까닭."""
+    return isinstance(v, dict) and set(v) == {"date", "why"} and valid_date(v.get("date")) and _text(v.get("why"))
+
+
+def tuned(h) -> bool:
+    """조정으로 돌린 가설인가. 게이트와 틀림 경고, 시스템을 시험하는 가설에서 뺀다. 형식이 틀리면 돌리지 않은 것으로 본다(오류가 따로 난다)."""
+    return isinstance(h, dict) and tuning_ok(h.get("tuning"))
+
+
 def rechecked(ids, hid) -> bool:
     """본 게임 다시 확인 가설(<hid>_main)이 같은 브리프에 있는가. 있으면 원래 가설의 판정은 시험판 빌드의 기록이라 데이터 지문을 보지 않는다.
     지문 줄(check), 게이트(플레이 기록 검사), hypothesis 출력이 모두 이것으로 가른다."""
@@ -470,6 +480,10 @@ def check_brief(c: dict, where: str, errors: list, warnings: list | None = None)
             warnings.append({"code": "hypothesis_sample_missing", "where": where,
                              "message": f"brief.hypotheses[{n}]({h.get('id') or '이름 없음'})에 최소 표본(sample: {{players, runs}})이 없습니다. "
                                         "판정에 필요한 사람 수와 판 수를 플레이 전에 정해 둡니다."})
+        if "tuning" in h and not tuning_ok(h["tuning"]):
+            errors.append({"code": "schema", "where": where,
+                           "message": f"brief.hypotheses[{n}].tuning은 조정으로 돌린 날과 사용자의 까닭입니다: {{\"date\": \"YYYY-MM-DD\", \"why\": \"…\"}} "
+                                      f"(playtest-verdict references/changes.md의 '조정으로 돌릴 때'): {h['tuning']!r}"})
         if "builds" in h and not (isinstance(h["builds"], list) and h["builds"] and all(_text(x) for x in h["builds"])):
             errors.append({"code": "schema", "where": where,
                            "message": f"brief.hypotheses[{n}].builds는 이 가설이 세는 빌드(세션의 build나 game_build) 문자열 배열입니다: {h['builds']!r}"})
@@ -482,6 +496,10 @@ def check_brief(c: dict, where: str, errors: list, warnings: list | None = None)
             errors.append({"code": "schema", "where": where,
                            "message": f"brief.hypotheses[{n}].id는 소문자·숫자·밑줄로 쓰고 컨셉 안에서 겹치지 않아야 합니다: {hid!r}"})
         seen_ids.add(hid)
+    if isinstance(hyps, list) and hyps and all(tuned(h) for h in hyps):
+        warnings.append({"code": "no_active_hypothesis", "where": where,
+                         "message": "가설이 모두 조정으로 돌려져 이 게임의 재미를 시험하는 가설이 없습니다. 틀리면 게임을 다시 짜야 하는 주장을 가설로 더합니다"
+                                    "(concept-exploration references/brief.md의 '가설 (`hypotheses`, 1개 이상)' 절, '재미가 무너지는 주장만 가설로 삼는다')."})
     proto = b.get("prototype")
     need(isinstance(proto, dict) and _text(proto.get("scope")) and _text(proto.get("success_criteria"))
          and isinstance(proto.get("duration_days"), (int, float)) and not isinstance(proto.get("duration_days"), bool)
@@ -552,6 +570,7 @@ def _strings(obj, path: str):
             yield from _strings(v, f"{path}[{i}]")
 
 
+HYPOTHESIS_PATH = re.compile(r"^brief\.hypotheses\[(\d+)\]")   # 가설 하나 안의 칸
 CRITERIA_TEXT = re.compile(r"^brief\.hypotheses\[(\d+)\]\.(claim|failure_signal|test)$")   # 지문에 드는 가설 문장
 
 
@@ -597,7 +616,7 @@ POINTS_TO_DATA = ("게임 데이터 파일을 가리킵니다({file}). 그 파�
                   "변경 이름이나 빌드 id(세션의 build 커밋, 판 로그의 game_build 지문)로 가리킵니다.{judged} "
                   "그대로 두려면 컨셉의 acknowledged에 "
                   '{{"criteria_points_to_data": {{"{file}": 까닭}}}}을 적습니다.')
-POINTS_TO_DATA_JUDGED = (" 판정한 가설이면 builds를 새로 더하지 않고 사용자와 확인한 뒤 고칩니다"
+POINTS_TO_DATA_JUDGED = (" 판정한 가설이면 고치기 전에 사용자와 확인합니다. builds를 더하면 세는 판이 바뀔 수 있습니다"
                          "(playtest-verdict references/changes.md '판정한 가설의 문장을 고칠 때').")   # 가설 문장만 지문에 든다
 
 
@@ -662,7 +681,9 @@ def check_brief_numbers(c: dict, errors: list, warnings: list, root: Path | None
     for path, text in _strings(c["brief"], "brief"):
         if HISTORY_PATH.search(path):   # 고치기 전 문장은 지난 기록이다. 태그·수치·출처를 다시 재지 않고 게이트에도 넣지 않는다
             continue
-        criteria_text = _is_criteria_text(path)
+        hm = HYPOTHESIS_PATH.match(path)
+        skip = bool(hm) and int(hm.group(1)) < len(hyps) and tuned(hyps[int(hm.group(1))])   # 조정으로 돌린 가설은 더 판정하지 않으므로 잣대 경고와 게이트에서 뺀다(형식 오류는 알린다)
+        criteria_text = _is_criteria_text(path) and not skip
         r = provenance.check_text(text, path, base_dirs=[root] if root else None, check_paths=root is not None, bare_numbers=criteria_text)
         for f in r.findings:
             if f.level == "error":
@@ -674,6 +695,8 @@ def check_brief_numbers(c: dict, errors: list, warnings: list, root: Path | None
             hid = hyps[int(m.group(1))].get("id") if m and isinstance(hyps[int(m.group(1))], dict) else None
             warnings.append({"code": "criteria_points_to_data", "where": c["id"], "part": rel,
                              "message": f"{path}{f'({hid})' if hid else ''}: " + POINTS_TO_DATA.format(file=rel, judged=POINTS_TO_DATA_JUDGED if m else "")})
+        if skip:
+            continue
         left = [t.near for t in r.tags if t.kind == "assumed"]
         bare = r.untagged if criteria_text else []
         if left or bare:
@@ -762,7 +785,7 @@ def _approved_data(valid: list, root: Path | None) -> dict:
         hyps = (c.get("brief") or {}).get("hypotheses") if c.get("status") == "approved" and isinstance(c.get("brief"), dict) else None
         ids = {h.get("id") for h in hyps if isinstance(h, dict)} if isinstance(hyps, list) else set()
         for h in hyps if isinstance(hyps, list) else []:
-            if (isinstance(h, dict) and isinstance(h.get("id"), str) and not rechecked(ids, h["id"])   # 지금 데이터는 다시 확인 가설의 판정이 본다
+            if (isinstance(h, dict) and isinstance(h.get("id"), str) and not rechecked(ids, h["id"]) and not tuned(h)   # 지금 데이터는 다시 확인 가설의 판정이 본다. 조정으로 돌린 가설은 더 판정하지 않는다
                     and not ("depends_on" in h and depends_on_problem(h["depends_on"], root))):
                 got = data_stamp(root, h.get("depends_on"))
                 if got:
@@ -880,7 +903,9 @@ def hypothesis_index(data: dict, root: Path | None = None) -> dict:
         data_now = {h["id"]: (None if "depends_on" in h and depends_on_problem(h["depends_on"], root) else data_stamp(root, h.get("depends_on")))
                     for h in named} if root is not None else {}
         depends = {h["id"]: list(h["depends_on"]) for h in named if "depends_on" in h and not depends_on_problem(h["depends_on"], None)}
+        tuning = {h["id"]: h["tuning"] for h in named if tuned(h)}
         out[c["id"]] = {"approved": c.get("status") == "approved", "hypotheses": ids, "samples": samples, "criteria": criteria, "data": data_now,
+                        "tuning": tuning,
                         "depends_on": depends,
                         "legacy_criteria": {k: v for k, v in legacy.items() if v}, "builds": builds, "history": history}
     return out

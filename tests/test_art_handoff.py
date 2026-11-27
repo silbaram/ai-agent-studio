@@ -145,7 +145,8 @@ class Flow(unittest.TestCase):
         text = read(CHANGE)
         judged = text[text.index("**판정이 있다:**"):]
         self.assertIn("design/production.md", judged)
-        self.assertIn('판정 칸을 "아직"으로 되돌린다', judged)
+        self.assertNotIn('"아직"', judged)   # 411 A1: 판정 칸은 408에서 뺐다
+        self.assertIn("본 게임 빌드 칸", judged)
 
     def test_art_change_on_leaned_items_goes_to_the_user(self):
         text = read(CHANGE)
