@@ -27,10 +27,10 @@ git diff --stat <근거 세션의 build 커밋> -- data/
 2. **판정 에이전트가 제안한다.** 회귀 파일과 가설을 주고 둘 중 하나를 받는다. Claude Code는 `studio-judge`, 판정 에이전트가 없는 환경은 같은 기준을 직접 따르고 분리되지 않았다고 보고한다.
    - **다시 플레이:** 지금 값이 시드 범위 밖에서 문턱 쪽으로 움직였다. 또는 회귀로 볼 지표가 없다(봇 기준선이 없는 가설, 자기 보고만 재는 가설). 사람이 다시 플레이하고 [playtest-verdict](../../playtest-verdict/SKILL.md)로 새로 판정한다. 플레이 전에 가설의 `builds`와 `test`의 기준선을 지금 빌드로 맞춘다([본 게임 빌드에서 다시 확인](../../production-handoff/SKILL.md#7-본-게임-빌드에서-가설을-다시-확인한다)의 2·3번). 기준 지문이 바뀌므로 [판정한 가설의 문장을 고칠 때](../../playtest-verdict/references/changes.md#판정한-가설의-문장을-고칠-때)대로 이력을 남긴다.
    - **이어 감:** 지금 값이 문턱 쪽으로 시드 범위 밖까지 움직이지 않았다. 문턱에서 먼 쪽으로 움직인 것도 이어 감이다.
-3. **사용자가 정한다.** 제안과 회귀 값을 보이고 묻는다. 이어 감을 고르면 사람이 플레이한 판정을 `cut`으로 돌리고(`cut_reason`에 날짜와 까닭) 같은 편집에서 이어 간 판정을 넣는다. 결과(`holds`), 근거 세션, `criteria`는 사람이 플레이한 판정 그대로이고, `data`는 지금 지문이다. `carried.proposed`에는 판정 에이전트의 제안을 적는다. 이어 감 제안이면 판정 에이전트가 돌려준 판정을 `"status": "proposed"`로 넣고 사용자가 확인하면 `approved`로 바꾼다. 다시 플레이 제안인데 사용자가 이어 가기로 하면 `"proposed": "replay"`로 적고, `reason` 앞에 사용자의 결정과 날짜를 적어 `approved`로 넣는다. `check`의 판정 줄에 그 제안이 보이고, 출시 게이트 전에는 사람이 지금 빌드를 해 본다.
+3. **사용자가 정한다.** 제안과 회귀 값을 보이고 묻는다. 이어 감을 고르면 사람이 플레이한 판정을 `cut`으로 돌리고(`cut_reason`에 날짜와 까닭) 같은 편집에서 이어 간 판정을 넣는다. 가설(`hypothesis`, 본 게임 빌드에서 다시 확인한 가설이면 `<가설 id>_main`), 결과(`holds`), 근거 세션, `criteria`는 사람이 플레이한 판정 그대로이고, `data`는 지금 지문이다. `carried.proposed`에는 판정 에이전트의 제안을 적는다. 이어 감 제안이면 판정 에이전트가 돌려준 판정을 `"status": "proposed"`로 넣고 사용자가 확인하면 `approved`로 바꾼다. 다시 플레이 제안인데 사용자가 이어 가기로 하면 `"proposed": "replay"`로 적고, `reason` 앞에 사용자의 결정과 날짜를 적어 `approved`로 넣는다. `check`의 판정 줄에 그 제안이 보이고, 출시 게이트 전에는 사람이 지금 빌드를 해 본다.
 
 ```json
-{ "concept": "<컨셉 id>", "hypothesis": "<가설 id>_main", "result": "holds", "sessions": ["<사람이 플레이한 세션 id>"],
+{ "concept": "<컨셉 id>", "hypothesis": "<가설 id>", "result": "holds", "sessions": ["<사람이 플레이한 세션 id>"],
   "reason": "<더한 것> 뒤 같은 시드 봇의 <지표> <지금 값>(앞 <값>, 시드 범위 <낮은 값>~<높은 값>, 문턱 <값>). 문턱 쪽으로 범위 밖까지 움직이지 않았다",
   "criteria": "<그대로>", "data": "<지금 지문>",
   "carried": { "from": "<사람이 플레이한 판정의 data>", "regression": "playtests/regression_20261130/result.json", "proposed": "carry" },

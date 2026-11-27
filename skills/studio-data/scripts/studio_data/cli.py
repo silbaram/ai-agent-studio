@@ -548,10 +548,6 @@ def cmd_hook(args) -> int:
     if out:
         sys.stdout.write(out)
     if err:
-        try:
-            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError):
-            pass
         sys.stderr.write(err if err.endswith("\n") else err + "\n")
     return code
 
@@ -657,9 +653,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    try:
-        sys.stdout.reconfigure(errors="replace")
-    except (AttributeError, ValueError):
-        pass
+    # Windows 파이프의 기본 인코딩(cp949 등)으로 쓰면 Bash 도구가 UTF-8로 읽어 한글이 깨진다. 훅 출력도 UTF-8이다.
+    # 옛 콘솔 모드(PYTHONLEGACYWINDOWSSTDIO)를 켠 cmd에서 직접 보면 한글이 깨지는 것은 감수한다.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     args = build_parser().parse_args(argv)
     return args.func(args)
