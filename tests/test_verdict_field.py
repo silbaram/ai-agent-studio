@@ -398,8 +398,10 @@ class Docs(unittest.TestCase):
 
     def test_a_delegated_decision_is_written_down_255(self):
         text = self.read("skills/stat-budget/SKILL.md")
-        self.assertIn("처리를 맡겼", text)
-        self.assertIn("날짜", text)
+        self.assertIn("../studio-data/SKILL.md#실행", text)
+        ack = next(l for l in self.read("skills/studio-data/SKILL.md").splitlines() if l.startswith("- **확인한 경고.**"))
+        self.assertIn("처리를 맡겼", ack)   # 정리 검토 2: 맡긴 확인은 모든 밸런스 스킬에 해당해 studio-data 한 곳에
+        self.assertIn("날짜", ack)   # 정리 B: 이유의 꼴은 studio-data/SKILL.md '확인한 경고'에
 
     def test_result_files_print_their_definitions_258(self):
         for rel in ("skills/playtest-verdict/SKILL.md", "skills/studio-data/assets/claude/studio-judge.md"):

@@ -50,8 +50,9 @@ class Flow(unittest.TestCase):
 
     def test_two_paths_for_the_prototype(self):
         text = read(DOC)
-        for word in ("버리고 새로", "키워 가기", "원본", "같은 시드"):
+        for word in ("버리고 새로", "키워 가기", "원본"):
             self.assertIn(word, text, word)
+        self.assertIn("같은 시드", read(GROW))   # 정리 B: 원본은 references/grow-prototype.md
 
     def test_hypotheses_are_rechecked_on_the_real_build(self):
         text = read(DOC)
@@ -318,7 +319,9 @@ class FieldTestFixes(unittest.TestCase):
 
     def test_substituted_trial_marker(self):
         step2 = read(DOC).split("### 2.")[1].split("### 3.")[0]
-        self.assertIn("대신한 확인은 `통과(시험판)`", step2)
+        self.assertIn("엔진 시험을 대신하고", step2)
+        step3 = read(DOC).split("### 3.")[1].split("### 4.")[0]
+        self.assertIn("시험판(코드, 판 로그, 사용자의 플레이)으로 확인한 것은 `통과(시험판)`", step3)   # 정리 B: 원본은 3단계의 표시 정의
 
     def test_substituted_trial_does_not_grade_knowledge(self):
         risk = read(TRIAL).split("## 지식 위험")[1].split("\n## ")[0]

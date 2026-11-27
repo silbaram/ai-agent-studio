@@ -4,14 +4,14 @@
 
 ## 판정의 데이터 지문
 
-`check`는 선택한 컨셉의 가설 중 지문을 보는 가설마다 `버팀으로 판정할 때 적을 데이터 지문:` 줄을 보인다. `hypothesis <컨셉>.<가설>`은 `데이터 지문(지금)`과 본 파일을 보인다. 버팀 판정을 기록할 때 이 값을 판정의 `data`에 적는다. 판정 에이전트가 기준 지문(`criteria`)과 함께 돌려준다. 세션을 기록할 때는 데이터를 고치기 전에 `세션에 적을 게임 데이터 지문:` 줄을 세션의 `data`에 옮긴다. 판정의 지문은 마지막 근거 세션을 플레이한 데이터와 같아야 한다(다르면 `verdict_data_not_played`). 플레이한 뒤 판정 전에 데이터를 고쳤으면 그 판정은 처음부터 낡은 판정이다. 판정 뒤에 그 파일의 값이 바뀌면 `verdict_data_changed`이고 확정 판정이어도 게이트를 넘지 못한다. 지문을 무엇으로 내는지(뺀 칸, 본 파일)는 [플레이 기록 형식](../../playtest-verdict/references/playtest-record.md#판정-verdicts)의 `data` 줄이다.
+`check`는 선택한 컨셉의 가설 중 지문을 보는 가설마다 `버팀으로 판정할 때 적을 데이터 지문:` 줄을 보인다. `hypothesis <컨셉>.<가설>`은 `데이터 지문(지금)`과 본 파일을 보인다. 버팀 판정을 기록할 때 이 값을 판정의 `data`에 적는다. 판정 에이전트가 기준 지문(`criteria`)과 함께 돌려준다. 세션을 기록할 때는 데이터를 고치기 전에 `세션에 적을 게임 데이터 지문:` 줄을 세션의 `data`에 옮긴다. 플레이한 뒤 판정 전에 데이터를 고쳤으면 그 판정은 처음부터 낡은 판정이다. 지문을 무엇으로 내는지(뺀 칸, 본 파일)는 [플레이 기록 형식](../../playtest-verdict/references/playtest-record.md#판정-verdicts)의 `data` 줄, 지문이 맞지 않을 때의 코드(`verdict_data_*`, `session_data_missing`)는 [검사 내용](../../playtest-verdict/references/playtest-record.md#검사-내용)이다.
 
 - **기대는 파일을 좁힌다.** 가설이 기대지 않는 데이터(소리 설정, 화면 문구 파일)를 자주 바꾸면 가설에 `depends_on`을 적는다([브리프](../../concept-exploration/references/brief.md)). 좁히면 지문이 바뀌므로, 판정한 가설에 더할 때는 판정 뒤 그 파일들이 바뀌지 않았는지 먼저 본다(아래 '지문 없는 판정'과 같은 방법). 확실하지 않으면 좁히지 않는다.
 - **규칙 코드도 적을 수 있다.** 규칙이 데이터 밖 코드에 있으면 그 파일을 `depends_on`에 넣는다. 그때는 `data/` 파일도 함께 적는다(적은 파일만 본다).
 
 ## 지문 없는 판정
 
-`verdict_data_missing`(판정에 지문 없음)과 `session_data_missing`(세션에 지문 없음)은 데이터 지문을 남기기 전에 확정한 버팀 판정이다. 근거 세션을 플레이한 뒤 데이터를 바꾸지 않았을 때만 지금 지문을 판정과 근거 세션에 적는다. 바꾸지 않았는지는 가장 이른 근거 세션의 `build` 커밋과 지금을 견준다.
+`verdict_data_missing`과 `session_data_missing`은 데이터 지문을 남기기 전에 확정한 버팀 판정이다. 근거 세션을 플레이한 뒤 데이터를 바꾸지 않았을 때만 지금 지문을 판정과 근거 세션에 적는다. 바꾸지 않았는지는 가장 이른 근거 세션의 `build` 커밋과 지금을 견준다.
 
 ```bash
 git diff --stat <근거 세션의 build 커밋> -- data/
@@ -30,8 +30,8 @@ git diff --stat <근거 세션의 build 커밋> -- data/
 3. **사용자가 정한다.** 제안과 회귀 값을 보이고 묻는다. 이어 감을 고르면 사람이 플레이한 판정을 `cut`으로 돌리고(`cut_reason`에 날짜와 까닭) 같은 편집에서 이어 간 판정을 넣는다. 결과(`holds`), 근거 세션, `criteria`는 사람이 플레이한 판정 그대로이고, `data`는 지금 지문이다. `carried.proposed`에는 판정 에이전트의 제안을 적는다. 이어 감 제안이면 판정 에이전트가 돌려준 판정을 `"status": "proposed"`로 넣고 사용자가 확인하면 `approved`로 바꾼다. 다시 플레이 제안인데 사용자가 이어 가기로 하면 `"proposed": "replay"`로 적고, `reason` 앞에 사용자의 결정과 날짜를 적어 `approved`로 넣는다. `check`의 판정 줄에 그 제안이 보이고, 출시 게이트 전에는 사람이 지금 빌드를 해 본다.
 
 ```json
-{ "concept": "card_duel", "hypothesis": "family_synergy_main", "result": "holds", "sessions": ["pt_20261201_1"],
-  "reason": "카드 6장을 더한 뒤 같은 시드 봇의 계열 보너스 차이 12.1(앞 12.8, 시드 범위 11.6~13.4, 문턱 10). 문턱 쪽으로 범위 밖까지 움직이지 않았다",
+{ "concept": "<컨셉 id>", "hypothesis": "<가설 id>_main", "result": "holds", "sessions": ["<사람이 플레이한 세션 id>"],
+  "reason": "<더한 것> 뒤 같은 시드 봇의 <지표> <지금 값>(앞 <값>, 시드 범위 <낮은 값>~<높은 값>, 문턱 <값>). 문턱 쪽으로 범위 밖까지 움직이지 않았다",
   "criteria": "<그대로>", "data": "<지금 지문>",
   "carried": { "from": "<사람이 플레이한 판정의 data>", "regression": "playtests/regression_20261130/result.json", "proposed": "carry" },
   "status": "proposed" }

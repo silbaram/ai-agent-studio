@@ -631,7 +631,7 @@ class Docs(unittest.TestCase):
 
     def test_grades_and_the_economy_route_meet(self):  # 94
         self.assertIn("대표 등급", self.skill)   # 스테이지 선택형은 game-shapes.md
-        self.assertIn("대표 등급", self.economy)
+        self.assertIn("game-shapes.md#스테이지-선택형", self.economy)   # 정리 B: 원본은 level-design/references/game-shapes.md
 
     def test_turn_based_path_is_written(self):  # 95
         self.assertIn("턴제", self.skill)

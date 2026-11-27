@@ -6,7 +6,7 @@ license: MIT
 
 # 본 게임 완성까지
 
-[production-handoff](../production-handoff/SKILL.md)의 넘어가기 판정이 "진행"이면 본 게임을 만든다. 이 스킬은 그 뒤부터 출시 후보까지를 세 이정표(알파, 베타, 출시 후보)로 나눈다. 절차 문서이고, 도구가 보는 것은 판정의 데이터 지문과 숫자 출처 게이트뿐이다. 나머지 확인을 건너뛰면 아무도 알려 주지 않는다.
+[production-handoff](../production-handoff/SKILL.md)의 넘어가기 판정이 "진행"이면 본 게임을 만든다. 이 스킬은 그 뒤부터 출시 후보까지를 세 이정표(알파, 베타, 출시 후보)로 나눈다. 절차 문서다(도구가 보는 것은 아래 '한계'). 나머지 확인을 건너뛰면 아무도 알려 주지 않는다.
 
 도구 명령은 게임 프로젝트 폴더에서 Claude Code 설치 기준(`.claude/skills/…`)으로 적었다. Codex는 `.agents/skills/…`, Windows PowerShell은 `python3` 대신 `py`([실행 경로](../studio-data/SKILL.md#실행)).
 
@@ -29,7 +29,7 @@ license: MIT
 | 이럴 때 | 읽을 곳 |
 |---|---|
 | 콘텐츠를 더할 때, `check`가 `verdict_data_changed`나 `verdict_data_missing`을 낼 때 | [references/content-growth.md](references/content-growth.md) |
-| 새 종류의 내용(새 직업, 새 카드 계열)을 넣거나, 무엇을 더할지 정한다 | [content-ideas](../content-ideas/SKILL.md). 숫자와 묶음은 위 줄. 동결 뒤면 [베타](#3-베타-콘텐츠-동결과-다듬기)대로 먼저 정한다 |
+| 새 종류의 내용(새 직업, 새 카드 계열)을 넣거나, 무엇을 더할지 정한다 | [content-ideas](../content-ideas/SKILL.md)의 [본 게임에서 불려 왔을 때](../content-ideas/references/when-called.md#본-게임에서-불려-왔을-때) |
 | 출시 후보 게이트를 볼 때 | [references/release-gate.md](references/release-gate.md) |
 | `design/production.md`에 이정표를 적을 때 | [references/milestone-record.md](references/milestone-record.md) |
 
@@ -53,10 +53,8 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --fail-on-assumed
 ```
 
 - `design/systems.json`의 MVP 시스템마다 본 게임에서 그것을 만든 곳(OpenSpec 변경 이름이나 코드 경로)을 적는다. 찾지 못하면 `[?]`다. production.md의 '가설 없이 만드는 MVP 시스템'도 같이 본다.
-- `== data/playtests.json` 아래 gate 줄에 남은 가설이 모두 모름으로 둔 가설(`keep_unknown`)이다. 줄에 `(데이터 지문 없음)`이 붙은 가설이 있으면 [지문 없는 판정](references/content-growth.md#지문-없는-판정)을, `(데이터 바뀜)`이면 [낡은 판정 풀기](references/content-growth.md#낡은-판정-풀기)를 따른다.
-- 같은 곳에 "틀림으로 확정된 가설(선택한 컨셉)" gate 줄이 없다.
-
-데이터 파일의 gate 줄(숫자의 `[가정]`)은 알파의 조건이 아니다. 3단계에서 다듬는다.
+- 플레이 기록의 gate 줄이 [넘어갈 준비](../production-handoff/SKILL.md#1-넘어갈-준비가-됐는지-본다)의 첫 두 줄을 지킨다. 이제는 `_main` 가설도 남지 않는다. 숫자의 `[가정]` 줄은 거기서처럼 조건이 아니고 3단계에서 다듬는다.
+- 가설에 `(데이터 지문 없음)`이나 `(플레이 때 지문 없음)`이 붙었으면 [지문 없는 판정](references/content-growth.md#지문-없는-판정)을, `(데이터 바뀜)`이나 `(플레이한 데이터와 다름)`이면 [낡은 판정 풀기](references/content-growth.md#낡은-판정-풀기)를 따른다.
 
 ### 2. 콘텐츠를 늘린다
 
@@ -96,5 +94,5 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --fail-on-assumed
 ## 한계
 
 - 도구가 보는 것은 버팀 판정의 데이터 지문과 이어 간 판정([검사 내용](../playtest-verdict/references/playtest-record.md#검사-내용)), 숫자 출처 게이트뿐이다. 시스템을 만들었는지, 계획한 수, 출시 게이트의 줄은 도구가 보지 않는다.
-- 데이터 지문은 데이터 파일만 본다([판정의 `data`](../playtest-verdict/references/playtest-record.md#판정-verdicts)). 규칙 코드만 바꾸면 알지 못한다. 그 가설의 `depends_on`에 규칙 코드 파일을 적거나 [규칙을 바꿀 때](../production-handoff/references/rule-change.md)를 따른다.
+- 데이터 지문은 데이터 파일만 본다([판정의 `data`](../playtest-verdict/references/playtest-record.md#판정-verdicts)). 규칙 코드만 바꾸면 알지 못한다([규칙 코드도 적을 수 있다](references/content-growth.md#판정의-데이터-지문), [규칙을 바꿀 때](../production-handoff/references/rule-change.md)).
 - 엔진별 빌드, 스토어 등록, 플랫폼 심사 절차는 다루지 않는다.

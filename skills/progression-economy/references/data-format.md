@@ -4,18 +4,12 @@
 
 ## 공통 필드
 
-세 종류 모두 아래 필드를 쓸 수 있다.
+세 종류 모두 [데이터 공통 규칙의 공통 필드](../../studio-data/references/data-rules.md#공통-필드)(`id`, `name`, `intent`, `status`, `provenance`, `acknowledged`)에 더해 아래 필드를 쓸 수 있다.
 
 | 필드 | 필수 | 뜻 |
 |---|---|---|
-| `id` | 예 | 소문자·숫자·밑줄. 같은 파일 안에서 중복 금지. 표시 이름(한글 등)은 `name`에 |
-| `name` | 아니오 | 표시 이름. 뷰어에 id와 함께 보인다 |
 | `stats` | 아니오 | `{스탯 이름: 수}` |
 | `effect` | 아니오 | 숫자로 표현하기 어려운 효과 설명 |
-| `intent` | 아니오 | 왜 있는가(설계 의도) 한 줄. `cut`이면 뺀 이유 |
-| `status` | 아니오 | `proposed`(제안) / `approved`(승인) / `cut`(삭제). `cut`은 비교·합계·시뮬레이션·게이트에서 빠진다 |
-| `provenance` | 아니오 | `{"kind": "assumed" 또는 "computed" 또는 "measured", "source": "...", "note": "..."}`. 한글 `가정`/`계산`/`측정`도 된다. `computed`·`measured`는 `source` 필수 |
-| `acknowledged` | 아니오 | 확인을 마친 경고 `{경고 코드: 확인한 이유}`. 이 항목에 난 그 코드의 경고는 경고 수와 `--strict`에서 빠지고, '확인한 경고'로 이유와 함께 따로 보인다. 오류에는 쓰지 못한다. 예: `{"tier_inversion": "초반 함정 아이템으로 의도"}` |
 
 최상위의 `*_labels`(`stat_labels`, `slot_labels`, `rarity_labels`, `track_labels`, `zone_labels`)는 뷰어 표시 이름이다(예: `{"attack": "공격력"}`). 지정하지 않으면 키를 그대로 보여 주고, 흔한 부위·희귀도·등급 키는 한글로 보여 준다.
 
@@ -105,7 +99,7 @@
 | 필드 | 필수 | 뜻 |
 |---|---|---|
 | `cost` | 예 | 0 이상의 수. 메타 재화 가격 |
-| `power` | 아니오 | 메타 성장 시뮬레이터의 추상 힘 증가량. 없으면 `power_missing` 경고, 시뮬레이터는 실행 거부 |
+| `power` | 아니오 | 메타 성장 시뮬레이터의 추상 힘 증가량([meta-model](meta-model.md#설정)). 없으면 `power_missing` 경고 |
 | `requires` | 아니오 | 선행 강화 id 배열. CSV에서는 `;`로 구분 |
 | `track` | 아니오 | 묶음(뷰어에서 표를 나누는 기준) |
 | `level` | 아니오 | 트랙 안 단계(정수). 뷰어 정렬에 쓴다 |
@@ -164,7 +158,7 @@
 
 ## 효과가 규칙인 콘텐츠
 
-카드처럼 효과가 규칙이라 스탯으로 비교할 수 없는 콘텐츠는 아이템(`items`) 형식에 넣어 목록·상태·출처·뷰어를 쓴다. 비교는 시뮬레이터로 한다([판정 규칙](../SKILL.md#판정-규칙)).
+카드처럼 효과가 규칙이라 스탯으로 비교할 수 없는 콘텐츠는 아이템(`items`) 형식에 넣어 목록·상태·출처·뷰어를 쓴다. 비교는 시뮬레이터로 한다([효과가 규칙인 콘텐츠의 비교](../../studio-data/references/data-rules.md#효과가-규칙인-콘텐츠의-비교)).
 
 | 칸 | 넣는 값 |
 |---|---|
@@ -173,7 +167,7 @@
 | `unique_effect` | 키워드·연계처럼 효과가 규칙인 카드는 `true`(열위 판정에서 빠진다) |
 | `stats` | 숫자로 적을 수 있는 효과(피해, 방어)만 |
 
-판단에 쓰지 않는 가중치(`stat_weights`, `threat_weights`)는 만들지 않는다(없으면 1). 적도 같다. 그래도 가중치 1로 더한 위협도에서 `zone_inversion`·`rank_inversion`이, 같은 slot 카드에서 `dominated`가 날 수 있다. 시뮬레이터 결과로 실제로 약한지 보고, 아니면 사용자와 확인한 뒤 `acknowledged`에 "규칙 콘텐츠, 시뮬레이터로 비교"처럼 까닭을 적는다([확인한 경고](../SKILL.md#작업-순서)).
+판단에 쓰지 않는 가중치(`stat_weights`, `threat_weights`)는 만들지 않는다(없으면 1). 적도 같다. 그래도 가중치 1로 더한 위협도에서 `zone_inversion`·`rank_inversion`이, 같은 slot 카드에서 `dominated`가 날 수 있다. 시뮬레이터 결과로 실제로 약한지 보고, 아니면 사용자와 확인한 뒤 `acknowledged`에 "규칙 콘텐츠, 시뮬레이터로 비교"처럼 까닭을 적는다([확인한 경고](../../studio-data/SKILL.md#실행)).
 
 ## CSV
 
@@ -188,11 +182,3 @@ chain_mail,사슬 갑옷,armor,2,uncommon,70,,5,,approved,measured,data/playtest
 lucky_coin,행운의 동전,relic,1,rare,90,,,true,proposed,assumed,
 ```
 
-## 엔진과 연결
-
-권장 방식은 이 파일을 게임 데이터의 단일 원본으로 두고 엔진이 직접 읽게 하는 것이다. 그러면 내보내기 단계가 사라지고 도구와 게임이 어긋나지 않는다. 아래는 일반적인 방법이며 이 저장소에서 엔진별로 검증한 것은 아니다.
-
-- **Godot**: `FileAccess`로 읽고 `JSON.parse_string()`으로 파싱한다.
-- **Unity**: `TextAsset`으로 불러 `JsonUtility` 또는 JSON 라이브러리로 파싱한다. `JsonUtility`는 최상위 배열을 직접 받지 못하므로 위처럼 객체로 감싼 형식이 맞다.
-- **Unreal**: DataTable은 CSV·JSON 가져오기를 지원하지만 열 이름이 행 구조체 필드와 같아야 한다. `stat.attack` 같은 열 이름은 변환이 필요할 수 있다.
-- **Roblox**: JSON 문자열을 `HttpService:JSONDecode()`로 읽거나, Rojo 같은 도구로 JSON을 ModuleScript로 동기화한다.

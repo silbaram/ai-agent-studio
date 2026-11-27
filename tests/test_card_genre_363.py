@@ -8,7 +8,8 @@ from _studio import ROOT
 from studio_data import provenance
 
 SKILLS = ROOT / "skills"
-RULE_LINK = "../progression-economy/SKILL.md#판정-규칙"
+RULE_LINK = "../studio-data/references/data-rules.md#효과가-규칙인-콘텐츠의-비교"   # 정리 B: 원본은 studio-data/references/data-rules.md
+RULES = "studio-data/references/data-rules.md"
 
 
 def read(rel):
@@ -29,39 +30,43 @@ class PrototypeNumbersInData(unittest.TestCase):
         text = read("system-design/SKILL.md")
         line = next(l for l in text.splitlines() if "그래픽 없는 프로토타입" in l)
         self.assertIn("코드에 적지 않고", line)
-        self.assertIn("../progression-economy/SKILL.md#단일-원본-규칙", line)
+        self.assertIn("../studio-data/references/data-rules.md#단일-원본-규칙", line)
 
     def test_single_source_rule_names_prototype_code(self):
-        rule = section(read("progression-economy/SKILL.md"), "단일 원본 규칙")
+        rule = section(read(RULES), "단일 원본 규칙")   # 정리 B: 원본은 studio-data/references/data-rules.md
         self.assertIn("시험판", rule)
-        self.assertIn("작업 순서 1", rule)
-        self.assertNotIn("코드가 그 파일을 읽", rule)   # 할 일은 작업 순서 1에만 둔다
+        self.assertIn("#수치를-코드에서-데이터로-옮기기", rule)
+        self.assertNotIn("코드가 그 파일을 읽", rule)   # 할 일은 '수치를 코드에서 데이터로 옮기기'에만 둔다
+        self.assertIn("코드가 그 파일을 읽", section(read(RULES), "수치를 코드에서 데이터로 옮기기"))
 
 
 class RuleBasedContent(unittest.TestCase):
     """364: 효과가 규칙인 콘텐츠(카드)는 게임 규칙 코드로 만든 시뮬레이터로 비교한다."""
 
     def test_single_source_rule_only_links_to_field_mapping(self):
-        rule = section(read("progression-economy/SKILL.md"), "단일 원본 규칙")
+        rule = section(read("progression-economy/SKILL.md"), "원본 파일")   # 정리 B: 공통 규칙은 data-rules.md, 여기는 아이템 칸 맞추기 링크만
         self.assertIn("카드", rule)
         self.assertIn("references/data-format.md#효과가-규칙인-콘텐츠", rule)
         self.assertNotIn("unique_effect", rule)
         self.assertNotIn("게임 규칙 코드", rule)
 
     def test_comparison_method_is_a_verdict_rule_once(self):
-        text = read("progression-economy/SKILL.md")
-        rule = section(text, "판정 규칙")
+        text = read(RULES)   # 정리 B: 원본은 studio-data/references/data-rules.md
+        rule = section(text, "효과가 규칙인 콘텐츠의 비교")
         self.assertIn("게임 규칙 코드", rule)
         self.assertIn("game_build", rule)
         self.assertIn("결과 파일", rule)
         self.assertIn("[계산: reports/…]", rule)
         self.assertEqual(text.count("게임 규칙 코드"), 1)
+        guide = read("progression-economy/SKILL.md")
+        self.assertNotIn("게임 규칙 코드", guide)
+        self.assertIn("data-rules.md#효과가-규칙인-콘텐츠의-비교", section(guide, "판정 규칙"))
 
     def test_data_format_maps_cards_to_item_fields(self):
         part = section(read("progression-economy/references/data-format.md"), "효과가 규칙인 콘텐츠")
         for word in ("`slot`", "비용", "`tier`", "`unique_effect`", "`threat_weights`", "acknowledged", "dominated"):
             self.assertIn(word, part, word)
-        self.assertIn("../SKILL.md#판정-규칙", part)
+        self.assertIn("data-rules.md#효과가-규칙인-콘텐츠의-비교", part)   # 정리 B: 원본은 studio-data/references/data-rules.md
 
     def test_other_balance_skills_link_instead_of_repeating(self):
         for rel in ("combat-balance/SKILL.md", "run-growth/SKILL.md"):

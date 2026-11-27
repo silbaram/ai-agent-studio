@@ -62,17 +62,17 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table systems
 
 ### 6. 경고를 처리한다
 
-- `pillar_unserved`: 범위가 MVP인 시스템이 맡지 않는 필러다. 이대로 만들면 그 필러를 시험할 수 없다. 시스템에 잇거나, 필러가 맞는지 사용자와 다시 본다. 일부러 뒤로 미룬 것이면 어느 시스템의 `acknowledged`에든 `{"pillar_unserved": {필러 이름: 이유}}`로 적는다.
-- `mvp_unserved`: 어떤 시스템도 맡지 않는 MVP 항목이다. 확인하는 길은 위와 같다.
-- `scope_mismatch`: 시스템의 범위가 브리프와 다르다. 브리프를 바꾸는 일이면 사용자에게 묻는다.
-- `out_of_scope_claimed`(오류): 범위 밖 항목을 시스템이 맡거나 글에 넣었다. 확인으로 끄지 못한다. 브리프를 바꾸려면 사용자에게 묻는다.
-- `scope_dependency`(오류): MVP 시스템이 나중이나 범위 밖 시스템에 기댄다. 그대로면 만들 수 없다. 범위를 맞추거나 의존을 끊는다.
-- `dependency_cycle`(오류): 먼저 만들 수 있는 쪽이 없다. 의존을 끊거나 한 시스템으로 합친다.
-- `concept_not_approved`: 승인되지 않은 컨셉에 이었다. 브리프가 확정되기 전이라 연결도 확정이 아니다. 선택했던 컨셉을 되돌렸으면([playtest-verdict](../playtest-verdict/references/changes.md#컨셉을-되돌릴-때)의 '컨셉을 되돌릴 때') 다음 컨셉을 고를 때까지 연결과 데이터를 그대로 두고, 고른 뒤 그 컨셉에 다시 잇는다. 되돌리며 `cut`했으면 같은 경우에 `cut_referenced`가 난다.
-- `system_without_pillar`: 필러를 돕지 않는 시스템이다. 기반이면 `foundation`을 적고, 아니면 만들 이유를 다시 본다.
-- `foundation_unused`: 기대는 시스템이 없는 기반이다. 의존을 적거나 표시를 뺀다.
-- `system_without_rules`: 규칙이 없어 구현할 수 없다.
-- `system_untested`: 가설이 닿지 않는 MVP 시스템이다. 이 시스템의 재미를 시험하는 가설이 있는데 빠뜨렸으면 `hypotheses`에 적는다(기준은 [형식 문서의 `systems`](references/systems-format.md#systems)). 없으면 사용자에게 길을 묻는다: [concept-exploration](../concept-exploration/SKILL.md)에서 브리프에 가설을 더해 시험하거나, 시험하지 않고 만든다. 이 게임만의 주장이 걸린 시스템이면 가설을 더하는 쪽을 권한다. 시험하지 않으면 그 시스템의 `acknowledged`에 `{"system_untested": "까닭 [결정: 사용자 YYYY-MM-DD]"}`로 적는다. 까닭의 예: 장르에서 흔한 규칙이다, 시험판에서 뺐다, 더 플레이해 시험하지 않는다. 까닭을 받는 법은 [studio-data의 '확인한 경고'](../studio-data/SKILL.md#실행)다.
+조건과 확인하는 모양은 [형식 문서의 '검사'](references/systems-format.md#검사) 표에 있다. 오류는 확인으로 끄지 못한다. 코드마다 할 일:
+
+- `pillar_unserved`, `mvp_unserved`: 시스템에 잇거나, 필러·MVP 항목이 맞는지 사용자와 다시 본다. 일부러 뒤로 미룬 것이면 표의 모양으로 확인한다.
+- `scope_mismatch`, `out_of_scope_claimed`: 시스템을 브리프에 맞춘다. 브리프를 바꾸는 일이면 사용자에게 묻는다.
+- `scope_dependency`: 범위를 맞추거나 의존을 끊는다.
+- `dependency_cycle`: 의존을 끊거나 한 시스템으로 합친다.
+- `concept_not_approved`, `cut_referenced`: 선택했던 컨셉을 [되돌렸으면](../playtest-verdict/references/changes.md#컨셉을-되돌릴-때) 다음 컨셉을 고를 때까지 연결과 데이터를 그대로 두고, 고른 뒤 그 컨셉에 다시 잇는다.
+- `system_without_pillar`: 기반이면 `foundation`을 적고, 아니면 만들 이유를 다시 본다.
+- `foundation_unused`: 의존을 적거나 표시를 뺀다.
+- `system_without_rules`: 규칙을 적는다.
+- `system_untested`: 이 시스템의 재미를 시험하는 가설이 있는데 빠뜨렸으면 `hypotheses`에 적는다(기준은 [형식 문서의 `systems`](references/systems-format.md#systems)). 없으면 사용자에게 길을 묻는다: [concept-exploration](../concept-exploration/SKILL.md)에서 브리프에 가설을 더해 시험하거나, 시험하지 않고 만든다. 이 게임만의 주장이 걸린 시스템이면 가설을 더하는 쪽을 권한다. 시험하지 않으면 그 시스템의 `acknowledged`에 `{"system_untested": "까닭 [결정: 사용자 YYYY-MM-DD]"}`로 적는다. 까닭의 예: 장르에서 흔한 규칙이다, 시험판에서 뺐다, 더 플레이해 시험하지 않는다. 까닭을 받는 법은 [studio-data의 '확인한 경고'](../studio-data/SKILL.md#실행)다.
 
 ## 보고
 
@@ -95,6 +95,6 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table systems
 
 ## 다음 단계
 
-OpenSpec으로 구현을 관리하면 [scope-guard](../scope-guard/SKILL.md)로 변경을 시스템에 잇는다. 순서대로 구현하고, 레벨은 [level-design](../level-design/SKILL.md)으로, 수치는 코드에 적지 않고 처음부터 데이터 파일에 두며([단일 원본 규칙](../progression-economy/SKILL.md#단일-원본-규칙)), 값은 밸런스 스킬로 정한다. 그래픽 없는 프로토타입을 플레이하고 [playtest-verdict](../playtest-verdict/SKILL.md)로 기록한다.
+OpenSpec으로 구현을 관리하면 [scope-guard](../scope-guard/SKILL.md)로 변경을 시스템에 잇는다. 순서대로 구현하고, 레벨은 [level-design](../level-design/SKILL.md)으로, 수치는 코드에 적지 않고 처음부터 데이터 파일에 두며([단일 원본 규칙](../studio-data/references/data-rules.md#단일-원본-규칙)), 값은 밸런스 스킬로 정한다. 그래픽 없는 프로토타입을 플레이하고 [playtest-verdict](../playtest-verdict/SKILL.md)로 기록한다.
 
 예시: `studio-data/assets/sample-project/design/systems.json` (실제 게임 시스템이 아니다).

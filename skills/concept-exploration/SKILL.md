@@ -16,7 +16,7 @@ license: MIT
 - **결정은 사용자가 한다.** 에이전트는 후보·근거·다음 시험을 제시하고, 선택과 승인은 사용자가 한다. 선호는 증거가 아니다.
 - **기록은 한 곳.** 모든 후보와 판단은 `design/concepts.json`에 남긴다. 탈락한 안도 지우지 않고 `cut`과 이유를 남긴다. 형식은 [references/concept-record.md](references/concept-record.md).
 
-도구 명령은 게임 프로젝트 폴더에서 Claude Code 설치 기준(`.claude/skills/…`)으로 적었다. Codex는 `.agents/skills/…`, Windows PowerShell은 `python3` 대신 `py`([실행 경로](../studio-data/SKILL.md#실행)).
+도구 명령은 게임 프로젝트 폴더에서 Claude Code 설치 기준(`.claude/skills/…`)이다. Codex(`.agents/skills/…`)와 Windows는 [실행 경로](../studio-data/SKILL.md#실행).
 
 ## 쓰지 않을 때
 
@@ -40,7 +40,7 @@ license: MIT
 - 피하고 싶은 것(장르, 메커니즘, 분위기)
 - 좋아하는 참고 게임 — 영감용이며 베끼지 않는다
 
-답을 `design/concepts.json`의 `constraints`에 적는다. 파일을 처음 만들 때는 후보가 아직 없어도 `"concepts": []`를 함께 넣는다. 없으면 검사기가 컨셉 파일로 읽지 못한다.
+답을 `design/concepts.json`의 `constraints`에 적는다. 파일을 처음 만들 때의 꼴은 [기록 형식](references/concept-record.md#최상위).
 
 - **사용자 응답을 받을 수 없는 실행(비대화형)**: 질문하지 않는다. 사용자가 준 값만 쓰고, 진행에 꼭 필요한 값(한 판 길이 등)만 기본값으로 정해 `constraints.assumed`에 적는다. 원하는 감정, 참고 게임, 피할 것은 지어내지 않고 비워 둔다.
 - **제약으로 고정된 축**: 사용자 제약 때문에 모든 후보가 같은 값을 갖는 축(예: "판 안 빌드 + 판 사이 성장"이면 `progression: both`)은 `constraints.fixed_axes`에 `{축: 값}`으로 적는다. 검사기는 그 축을 겹침·쏠림 비교에서 뺀다.
@@ -111,11 +111,11 @@ python3 .claude/skills/studio-data/scripts/studio.py check design/concepts.json 
 - 필러 2~5개. 각각 "A와 B 중 이 게임은 __를 고른다" 형태의 설계 테스트
 - 안티필러(이 게임이 하지 않을 것) 1개 이상
 - 루프: 30초 / 한 판 / 판 사이 성장
-- 반증 가능한 가설 1개 이상: id, 주장, 틀렸다는 신호, 확인 방법, 최소 표본(드문 사건에 기대면 사건 수도). 틀렸다는 신호에는 반대 방향의 결과도 넣고, 지표를 함께 움직이는 변수와 절차를 어긴 판을 셀지를 확인 방법에 적는다
-- 가장 작은 프로토타입: 범위, 기간(일), 성공 기준. 프로토타입 범위의 원본은 여기다. 앞에서 쓴 `next_test`와 다르면 `next_test`를 맞춘다
+- 반증 가능한 가설 1개 이상: id, 주장, 틀렸다는 신호, 확인 방법, 최소 표본(드문 사건에 기대면 사건 수도)
+- 가장 작은 프로토타입: 범위, 기간(일), 성공 기준
 - MVP 7개 이하, 범위 밖 목록 1개 이상
 
-판정 기준 문장(가설의 `claim`, `failure_signal`, `test`와 `success_criteria`)의 수치에는 출처 태그를 붙인다. 예: `5판 [가정] 동안`. 규칙은 [numeric-provenance](../numeric-provenance/SKILL.md)와 같고, 검사기가 태그 없는 수치를 경고하며 게이트가 막는다.
+판정 기준 문장의 수치에는 출처 태그를 붙인다([브리프 작성법](references/brief.md#가설-hypotheses-1개-이상)).
 
 검사기는 `approved` 컨셉의 브리프가 빠짐없는지 확인한다. 통과하지 못하면 프로토타입 단계로 넘기지 않는다. 검사기는 **구조**(빠진 항목, 개수, 틀렸다는 신호의 유무, 가설의 id와 최소 표본)만 본다. 필러 테스트가 실제로 무언가를 걸러내는지, 가설이 정말 반증 가능한지는 사람이 본다. 검사 통과를 브리프 품질 보증으로 보고하지 않는다.
 

@@ -64,9 +64,9 @@
 | `zone_rule` | 아니오 | `first_seen`(기본): 위와 같다 / `up_to`: `zone`이 이 값 이하인 적, 곧 이 구역까지 나온 적을 모두 계산(앞 구역의 적이 모두 계속 나오는 게임. 일부만 이어지면 `enemies` 목록을 쓴다). `up_to`는 `zone`이 수여야 한다 |
 | `targets` | 아니오 | 이 단계에만 쓰는 목표. 형식은 `combat.targets`와 같고, 적은 등급·지표만 덮어쓴다. 처치가 원래 느린 직업의 변형 단계처럼 같은 등급에 다른 기준이 맞는 단계에 쓴다 |
 | `variant_of` | 아니오 | 이 파일의 다른 단계 id. 무기나 직업 하나만 든 기준 장비를 따로 볼 때 쓰는 **변형 단계**다. 처치·버팀과 원가 제안만 계산하고, 레벨 구성·판 안 성장·재화 흐름·메타 성장의 단계 순서에는 들지 않는다. 레벨, 재화 흐름 단계, `level_at`은 원래 단계에 잇는다 |
-| `status`, `provenance`, `acknowledged` | 아니오 | 공통 필드 ([data-format](../../progression-economy/references/data-format.md#공통-필드)) |
+| `status`, `provenance`, `acknowledged` | 아니오 | 공통 필드 ([데이터 공통 규칙](../../studio-data/references/data-rules.md#공통-필드)) |
 
-`acknowledged`는 단계에 적는다. `{코드: "이유"}`는 그 단계와 그 단계의 모든 행(`단계.적`)에서 난 그 코드 경고에 적용된다(나중에 생기는 다른 적의 경고도 덮는다). `{코드: {적 id: "이유"}}`는 그 적의 행 경고만 덮는다. 의도한 이탈은 적 단위로 확인한다. 공식·목표·역할 쪽 경고(`target_unchecked`, `stat_not_found`)는 단계 확인으로 끌 수 없다.
+`acknowledged`는 단계에 적는다. `{코드: "이유"}`는 그 단계와 그 단계의 모든 행(`단계.적`)에서 난 그 코드 경고에 적용된다. `{코드: {적 id: "이유"}}`는 그 적의 행 경고만 덮는다([확인한 경고](../../studio-data/SKILL.md#실행)). 의도한 이탈은 적 단위로 확인한다. 공식·목표·역할 쪽 경고(`target_unchecked`, `stat_not_found`)는 단계 확인으로 끌 수 없다.
 
 ## 계산 결과 (`check --json`의 `report`)
 
