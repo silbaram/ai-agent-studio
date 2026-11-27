@@ -10,11 +10,11 @@ license: MIT
 
 조우는 그 게임이 플레이어를 적과 맞붙이는 단위다. 방, 웨이브, 무리, 시간 구간 어느 것이든 된다. 쉬는 방이나 상점처럼 적이 없는 구간도 조우로 적어 순서에 넣는다.
 
-위협도는 스탯으로 낸 **설계 가정**이다. 적을 더한 값이므로 적의 조합, 지형, 동시에 몰리는 정도는 반영하지 않는다. 실제 난이도나 재미를 판정하지 않는다.
+위협도는 스탯으로 낸 **설계 가정**이다(넣지 않는 것은 [한계](#한계)). [밸런스 공통 원칙](../studio-data/SKILL.md#밸런스-공통-원칙)을 따른다.
 
 ## 도구
 
-공용 스킬 [studio-data](../studio-data/SKILL.md)의 `studio.py`로 한다. 이 스킬과 함께 설치한다. 명령은 게임 프로젝트 폴더에서 Claude Code 설치 기준으로 적었다. Codex는 `.agents/skills/…`, Windows PowerShell은 `python3` 대신 `py`([실행 경로](../studio-data/SKILL.md#실행)).
+명령은 공용 스킬 [studio-data](../studio-data/SKILL.md)의 `studio.py`로 하고, Claude Code 설치 기준으로 적었다(다른 설치는 [실행](../studio-data/SKILL.md#실행)).
 
 | 명령 | 하는 일 |
 |---|---|
@@ -22,7 +22,7 @@ license: MIT
 | `… check . --table levels` | 조우 표, 단계 표, 페이싱을 적었으면 리듬 표와 구간 표, 그레이박스 확인 표, 재화 흐름에 옮길 처치 수(마크다운). 검사 보고는 그대로 나온다 |
 | `… view .` | 레벨 구성 탭: 단계 표, 페이싱 구간, 레벨별 조우, 위협도와 예산 범위, 그레이박스 확인 |
 
-데이터는 `data/levels.json` 한 파일이다. 형식은 [references/levels-format.md](references/levels-format.md). 적은 [progression-economy](../progression-economy/SKILL.md)의 원본에서, 위협도의 가중치는 [stat-budget](../stat-budget/SKILL.md)의 적 원가에서(없으면 `threat_weights`), 단계는 [combat-balance](../combat-balance/SKILL.md)에서 가져온다. 프로젝트 폴더(`check .`)로 검사해야 참조를 확인한다. 적이나 전투 계산을 함께 넘기지 않으면 `INCOMPLETE`다.
+데이터는 `data/levels.json` 한 파일이다. 형식은 [references/levels-format.md](references/levels-format.md). 적은 [progression-economy](../progression-economy/SKILL.md)의 원본에서, 위협도의 가중치는 [stat-budget](../stat-budget/SKILL.md)의 적 원가에서(없으면 `threat_weights`), 단계는 [combat-balance](../combat-balance/SKILL.md)에서 가져온다.
 
 ## 절차
 
@@ -61,14 +61,14 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table levels
 
 먼저 단계 표를 읽는다. 예산 판정보다 계획을 바꾸는 답이 여기서 나온다. 열마다 무엇을 계산했는지는 [형식의 계산](references/levels-format.md#계산)에 있다. 볼 곳은 이렇다.
 
-- **처치 시간 ÷ 길이**: 1배를 넘으면 한 마리씩 잡아서는 단계 안에 다 잡지 못한다(`kill_time_over_length`). 메우는 것이 판 안 성장이면 **성장 반영** 칸(빌드마다 같은 값을 낸 범위, 들어설 때와 나갈 때 레벨)을 근거로 대고, 범위 공격이나 관통이면 표에 없으니 근거를 따로 댄다. 단계끼리 비교해 유독 빡빡한 곳을 찾는다. 플레이어 스탯이 바뀌면 이 값도 바뀐다. "이상"이 붙으면 처치 시간을 모르는 적을 뺀 값이라 실제로는 더 빡빡하다.
+- **처치 시간 ÷ 길이**: 1배를 넘으면 한 마리씩 잡아서는 단계 안에 다 잡지 못한다(`kill_time_over_length`). 메우는 것의 근거는 판 안 성장이면 **성장 반영** 칸에서, 범위 공격이나 관통이면 따로 댄다([검사 표](references/levels-format.md#검사)). 단계끼리 비교해 유독 빡빡한 곳을 찾는다. 플레이어 스탯이 바뀌면 이 값도 바뀐다.
 - **평범한 조우의 적 수**: 단계가 오를수록 무리가 커지기를 바라는지와 맞는지 본다.
 - **앞 조우 대비**(조우 표), **앞 단계 대비**(단계 표): 앞보다 몇 배 센가. **위협도 합**(단계 표): 그 단계에서 만나는 위협도의 총량이다. 앞 단계보다 줄면 참고 줄이 나온다. 플레이어가 단계의 순서를 고르면 [게임 형태별](references/game-shapes.md#스테이지-선택형)을 먼저 본다. 위협도 합이 `–`이거나 판 전체 위협도 줄이 없으면 빠진 레벨이나 조우가 없는 단계가 있는 것이다. 일부만 더한 값을 내지 않는다.
 - **처치 수 대조**(참고 줄): 몇 단계나 맞춰 봤는가. 재화 흐름에 처치 수가 없는 단계는 대조하지 않은 것이다. 대조하지 않는 경우는 [형식의 계산](references/levels-format.md#계산)의 처치 수 줄에 있다.
 
 경고마다 무엇을 고치고 언제 확인하는지는 [형식의 검사 표](references/levels-format.md#검사)에 있다. 공통 원칙:
 
-- 숫자를 손으로 맞춰 경고를 없애지 않는다. 곡선, 배수, 페이싱 상한을 고쳐 경고를 지우지 않는다. 한 번에 하나만 바꾸고 전·후 표를 남긴다.
+- [밸런스 공통 원칙](../studio-data/SKILL.md#밸런스-공통-원칙)대로 하나씩 바꾸고, 곡선, 배수, 페이싱 상한을 고쳐 경고를 지우지 않는다.
 - 의도한 것이면 `acknowledged`에 무엇이 메우는지나 왜 그런지 적는다. 플레이 기록이 반대로 말하면 확인하지 않는다.
 - 고칠 후보가 여럿이면 후보마다 전·후 표를 보여 주고 사용자가 고른다. 프로토타입이 그 값을 옮겨 쓰면(회색 상자의 설정 파일) 함께 바뀌어 진행 중인 시험의 빌드가 달라진다는 것도 말한다.
 
@@ -107,21 +107,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table levels
 | 회복이 없는 게임 | [게임 형태별로 적는 법](references/game-shapes.md#회복이-없는-게임) |
 | 경고가 났다 | [형식의 검사 표](references/levels-format.md#검사) |
 | 표의 값이 어떻게 계산되는가 | [형식의 계산](references/levels-format.md#계산) |
-
-## 같은 사실의 원본
-
-한 사실을 여러 파일에 적으므로 어느 쪽이 원본인지 정해 둔다.
-
-| 사실 | 원본 | 맞추는 쪽 |
-|---|---|---|
-| 단계 id | 전투 계산 `stages` | 레벨, 재화 흐름, 판 안 성장의 `level_at`, 시뮬레이터 설정 |
-| 어떤 적이 어느 단계에 나오는가 | 전투 계산의 단계. 적의 `zone`은 처음 나오는 구역이다 | 조우의 `enemies` |
-| 처치 수 | 레벨이 있으면 조우가 **처치 수의 원본**이다. 측정값이 있으면 측정값이 앞선다 | 재화 흐름의 `kills`. `--table levels` 끝의 값을 옮긴다 |
-| 단계 길이 | 재화 흐름의 `duration` | 단계 표의 길이, 조우의 `at`·`duration` |
-| 구매 시점 | 재화 흐름의 구매 계획 | 조우의 `purchases`가 놓인 시각 |
-| 단계의 기준 장비 | 재화 흐름의 구매 계획(사는 것이면) | 전투 단계의 `player.items`. 늦게 사는 장비를 넣으면 `gear_before_purchase`가 난다 |
-
-처치 수를 플레이 기록으로 보정하면(`calibrate`는 재화 흐름의 `kills`와 비교한다) 조우의 `repeat`도 그 값에 맞게 다시 본다.
+| 처치 수·단계 길이처럼 여러 파일에 적는 사실은 어느 쪽이 원본인가 | [같은 사실의 원본](../studio-data/references/data-rules.md#같은-사실의-원본) |
 
 ## 보고
 

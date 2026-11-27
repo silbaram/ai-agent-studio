@@ -8,6 +8,7 @@ from pathlib import Path
 from _studio import ROOT, SAMPLE, run_cli, section
 
 GUIDE = ROOT / "skills/progression-economy/SKILL.md"
+RULES = ROOT / "skills/studio-data/references/data-rules.md"   # 정리 B: 데이터 공통 규칙의 원본
 NOTE = "게임 수치 데이터 파일이 없습니다"
 
 
@@ -42,8 +43,9 @@ class NoGameDataNote(unittest.TestCase):
         self.assertEqual(code, 0, out)
         line = next(l for l in out.splitlines() if NOTE in l)
         self.assertTrue(line.startswith("참고: "), line)
-        self.assertIn("progression-economy SKILL.md", line)
-        self.assertIn("'작업 순서' 1", line)
+        self.assertIn("studio-data references/data-rules.md", line)   # 정리 B: 원본은 studio-data/references/data-rules.md
+        self.assertIn("'수치를 코드에서 데이터로 옮기기'", line)
+        self.assertIn("\n## 수치를 코드에서 데이터로 옮기기\n", RULES.read_text(encoding="utf-8"))   # 메시지가 가리키는 절이 있다
 
     def test_note_is_in_json_payload(self):
         with Project() as root:
@@ -97,11 +99,12 @@ class Docs(unittest.TestCase):
         step1 = next(l for l in steps.splitlines() if l.startswith("1. "))
         self.assertIn("코드에만", step1)
         self.assertIn("다른 점검 전에", step1)
-        self.assertIn("빌드 지문", step1)
+        self.assertIn("data-rules.md#수치를-코드에서-데이터로-옮기기", step1)   # 정리 B: 원본은 studio-data/references/data-rules.md
+        self.assertIn("빌드 지문", section(RULES, "수치를 코드에서 데이터로 옮기기"))
 
     def test_single_source_rule_covers_reports_and_tags(self):
         """366: 보고서에도 항목 수치를 옮겨 적지 않고, 옮긴 값에 [계산]을 붙이지 않는다."""
-        rule = section(GUIDE, "단일 원본 규칙")
+        rule = section(RULES, "단일 원본 규칙")   # 정리 B: 원본은 studio-data/references/data-rules.md
         line = next(l for l in rule.splitlines() if "`id`로만" in l)
         self.assertIn("보고서", line)
         self.assertIn("[계산", line)

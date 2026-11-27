@@ -747,7 +747,7 @@ class SimulatorFieldTest(tmc.Workspace):
     def test_docs_explain_how_to_start_the_survival_curve_51(self):
         text = (ROOT / "skills/progression-economy/references/meta-model.md").read_text(encoding="utf-8")
         section = text[text.index("### 생존 곡선의 처음 값"):]
-        for word in ("margin_none", "decided_by", "even_margin", "slope", "B5c"):
+        for word in ("margin_none", "decided_by", "even_margin", "slope", "calibrate"):   # 정리 C: 로드맵 id(B5c)는 architecture.md에만
             self.assertIn(word, section)
 
 

@@ -124,7 +124,7 @@ class GameNumbers(unittest.TestCase):
     """343번: 수치가 게임 코드에 있는 기존 게임."""
 
     def test_the_source_rule_lives_in_progression_economy(self):
-        rule = (ROOT / "skills/progression-economy/SKILL.md").read_text(encoding="utf-8")
+        rule = (ROOT / "skills/studio-data/references/data-rules.md").read_text(encoding="utf-8")   # 정리 B: 원본은 studio-data/references/data-rules.md
         self.assertIn("file://", rule)
         self.assertIn("만들어 내지 않는다", rule)   # 게임 파일에서 생성하면 밸런스 스킬이 고친 값이 덮인다
         self.assertIn("테스트", rule)
@@ -132,7 +132,7 @@ class GameNumbers(unittest.TestCase):
     def test_the_existing_game_doc_points_there(self):
         doc = ROOT / "skills/concept-exploration/references/existing-game.md"
         text = section(doc, "수치가 게임 코드에 있을 때")
-        self.assertIn("progression-economy", text)
+        self.assertIn("data-rules.md#수치를-코드에서-데이터로-옮기기", text)   # 정리 B: 원본은 studio-data/references/data-rules.md
         self.assertNotIn("만들어 내지 않는다", text)   # 한 규칙은 한 곳에만
         self.assertIn("수치가 게임 코드에 있을 때", section(doc, "순서"))
 

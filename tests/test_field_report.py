@@ -60,9 +60,10 @@ class InstalledCommands(unittest.TestCase):
         self.assertEqual(offenders, [], "스킬 문서는 python3와 설치 위치(.claude/skills/…) 기준으로 적는다")
 
     def test_every_skill_points_to_the_install_path_note_1_2(self):
+        # 정리 B: 설치 위치(.agents/skills/…, py)는 studio-data/SKILL.md '실행'에만 두고, 각 스킬은 그곳을 가리킨다
+        self.assertIn(".agents/skills/", (ROOT / "skills/studio-data/SKILL.md").read_text(encoding="utf-8"))
         for name in ("concept-exploration", "numeric-provenance", "progression-economy"):
             text = (ROOT / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
-            self.assertIn(".agents/skills/", text, name)
             self.assertIn("../studio-data/SKILL.md#실행", text, name)
 
 

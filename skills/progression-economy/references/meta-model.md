@@ -21,7 +21,7 @@
    - `cheapest_first`: 선행 조건을 만족한 것 중 가장 싼 것부터 산다.
 7. 시행마다 `skill`은 평균 `skill`, 표준편차 `skill_spread`의 정규분포에서 한 번 뽑는다. 플레이어 간 실력 차이를 흉내 낸다.
 
-설정 파일을 고치지 않고 구매 정책만 바꾸려면 `--policy cheapest_first`, 두 정책을 한 번에 돌려 나란히 보려면 `--compare-policies`를 쓴다. 같은 seed·trials·max_runs로 돌고, 결과에 설정 파일 해시가 그대로 남는다.
+설정 파일을 고치지 않고 구매 정책만 바꾸려면 `--policy cheapest_first`, 정책들을 한 번에 돌려 나란히 보려면 `--compare-policies`를 쓴다(설정에 재화 흐름 연결 `economy`가 있으면 `economy` 정책도 넣는다). 같은 seed·trials·max_runs로 돌고, 결과에 설정 파일 해시가 그대로 남는다.
 
 "힘"은 공격력, 체력, 회피를 하나로 뭉친 추상값이다. 실제 게임의 어떤 수치와 일대일로 대응하지 않는다.
 
@@ -144,11 +144,11 @@
 1. `even_margin`을 비우고(기본 1) 한 번 돌린다. `survival_by_stage`에서 단계마다 그 단계를 정한 적(`decided_by_growth`와 그 적의 등급)과 첫 판의 새 플레이어의 여유(`margin_growth`: 영구 강화 없이 판 안 성장 평균)를 본다. 판 안 성장을 설정하지 않았으면 `margin_none`과 같다. `margin_none`(성장도 없음)으로 맞추면 실제 첫 판보다 어려운 상태에 맞춘 것이 된다.
 2. 등급마다 "새 플레이어가 첫 판에 절반쯤 넘기길 바라는" 단계의 `margin_growth`를 그 등급의 `even_margin`으로 둔다(예: 첫 보스 단계의 보스 여유). 바라는 확률이 절반이 아니면 `skill`로 옮긴다(+1이면 약 73%). 정예나 보스가 단계를 정하는데 그 등급의 기준을 비워 두거나 수 하나로 적으면 `simulate`가 참고 줄을 낸다. 여유는 버티는 타수 ÷ 처치 타수라 그 등급은 설계대로여도 작게 나오므로, 기준을 잡기 전의 낮은 통과율로 적을 고치지 않는다.
 3. 계획한 강화를 모두 산 뒤(`p_all`) 그 단계를 얼마나 넘기길 바라는지로 `slope`를 정한다. 클수록 강화의 효과가 크게 보인다.
-4. 정한 값과 이유를 설정의 `_note`나 기획 문서에 `[가정]`으로 적는다. 플레이 기록이 생기면 `calibrate`로 보정한다([playtest-verdict](../../playtest-verdict/references/calibration.md), 로드맵 B5c).
+4. 정한 값과 이유를 설정의 `_note`나 기획 문서에 `[가정]`으로 적는다. 플레이 기록이 생기면 `calibrate`로 보정한다([playtest-verdict](../../playtest-verdict/references/calibration.md)).
 
 ### 재화 흐름과 같은 원본 쓰기
 
-[economy-flow](../../economy-flow/SKILL.md)의 판 사이 재화에 `meta_config`로 이 설정을 이어 두면, 재화 흐름 검사가 두 정의를 맞춰 본다. 이 설정이 `economy` 연결로 수입을 읽고 구매 정책이 `economy`이면 수입과 순서가 같은 원본이라 비교할 것이 없다. 이렇게 두면 시뮬레이터의 판 수와 재화 흐름의 판 수(매 판 끝까지 깬 최소값) 차이는 지는 판 때문이다.
+[economy-flow](../../economy-flow/SKILL.md)의 판 사이 재화에 `meta_config`로 이 설정을 이어 두면, 재화 흐름 검사가 두 정의를 맞춰 본다. 이 설정이 `economy` 연결로 수입을 읽고 구매 정책이 `economy`이면 수입과 순서가 같은 원본이라 비교할 것이 없다. 두 판 수의 차이를 읽는 법은 [재화 흐름 형식](../../economy-flow/references/economy-format.md#메타-성장-설정과-맞춰-보기-meta_config).
 
 ## 한계
 

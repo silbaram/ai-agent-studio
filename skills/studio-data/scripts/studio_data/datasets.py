@@ -170,7 +170,7 @@ def missing_data_notes(entries: list[dict], targets: list[Path]) -> list[str]:
         if folder.is_dir() and any(f.suffix.lower() in (".json", ".csv") and f.resolve() not in read for f in folder.iterdir() if f.is_file()):
             return []
     return ["게임 수치 데이터 파일이 없습니다(아이템·적·전투 계산 등). 시스템 설계는 있으니, 수치가 게임 코드에만 있으면 밸런스 점검 전에 "
-            "data/*.json으로 옮기고 코드가 그 파일을 읽게 합니다(progression-economy SKILL.md '작업 순서' 1). 수치 데이터가 없는 게임이면 이 줄은 무시합니다."]
+            "data/*.json으로 옮기고 코드가 그 파일을 읽게 합니다(studio-data references/data-rules.md '수치를 코드에서 데이터로 옮기기'). 수치 데이터가 없는 게임이면 이 줄은 무시합니다."]
 
 
 def _config_sourced(config: dict | None) -> bool:
