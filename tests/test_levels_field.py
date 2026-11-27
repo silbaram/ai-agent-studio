@@ -794,7 +794,9 @@ class Docs(unittest.TestCase):
         self.assertIn("simulate", self.skill)
 
     def test_source_of_each_shared_fact_is_named(self):
-        self.assertIn("처치 수의 원본", self.skill)
+        rules = (STUDIO / "references/data-rules.md").read_text(encoding="utf-8")   # 정리 B: 원본은 studio-data/references/data-rules.md
+        self.assertIn("처치 수의 원본", rules)
+        self.assertIn("data-rules.md#같은-사실의-원본", self.skill)
 
     def test_stage_select_grades_are_documented(self):
         self.assertIn("등급", self.fmt)

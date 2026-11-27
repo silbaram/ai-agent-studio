@@ -484,7 +484,7 @@ class Docs(unittest.TestCase):
 
     def test_stage_unit_of_a_round_game_is_decided_by_the_kit(self):  # 109
         self.assertIn("기준 장비가 라운드마다 바뀌면", self.skill)
-        self.assertIn("기준 장비가 라운드마다 바뀌면", self.combat)
+        self.assertIn("game-shapes.md#라운드로-나뉜-게임의-단계", self.combat)   # 정리 B: 원본은 level-design/references/game-shapes.md
 
     def test_several_economy_stages_on_one_combat_stage_are_documented(self):  # 109
         self.assertIn("재화 흐름 단계 여럿", self.fmt)
@@ -497,7 +497,9 @@ class Docs(unittest.TestCase):
         self.assertIn("처치 속도로 정해지면", self.skill)
 
     def test_stage_kit_is_in_the_source_table(self):  # 114
-        self.assertIn("단계의 기준 장비", self.skill)
+        rules = (STUDIO / "references/data-rules.md").read_text(encoding="utf-8")   # 정리 B: 원본은 studio-data/references/data-rules.md
+        self.assertIn("단계의 기준 장비", rules)
+        self.assertIn("data-rules.md#같은-사실의-원본", self.skill)
 
     def test_gear_warning_is_documented_and_labelled(self):  # 114
         self.assertIn("`gear_before_purchase`", self.economy_fmt)

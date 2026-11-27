@@ -18,7 +18,7 @@
 | `level_ratio` | 같은 방어라도 단계가 오를수록 효과가 준다. 오래된 장비가 자연히 밀려난다 | 레벨·구역 성장이 아주 큰 게임 | World of Warcraft, Diablo 3 |
 | `percent` | 단순하지만 쌓으면 무적이 되므로 상한이 필수다. 여러 출처를 곱할지 더할지도 정해야 한다 | 방어 스탯 없이 저항 %만 쓰는 게임 | Darkest Dungeon, Hades |
 
-이 도구가 지원하지 않는 형태: 공격/방어 비(Pokémon, Dark Souls 계열), 타격 크기에 따라 감소율이 달라지는 형태(Path of Exile). 필요하면 로드맵에 올린다.
+이 도구가 지원하지 않는 형태: 공격/방어 비(Pokémon, Dark Souls 계열), 타격 크기에 따라 감소율이 달라지는 형태(Path of Exile).
 
 ## 상수 정하기
 

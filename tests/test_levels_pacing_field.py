@@ -536,8 +536,8 @@ class Docs(unittest.TestCase):
         self.assertIn("레벨에서 `{\"time_gap\"", fmt)   # 경고를 확인하는 자리는 형식의 검사 표에 있다
         self.assertIn("시각(수)", eco)
         flow = (ROOT / "skills/economy-flow/SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("그 시각을 적는다", flow)
-        self.assertIn("`after`의 단계나 시각", flow)
+        self.assertIn("그 단계나 시각을 `after`에 적는다", flow)
+        self.assertIn("`after`의 단계가 시작하는 시점이나 그 시각", eco)   # 정리 B: 계산의 원본은 economy-format.md
         ack_row = next(x for x in fmt.splitlines() if x.startswith("| `status`, `provenance`, `acknowledged` |"))
         self.assertIn("첫 조우~끝 조우", ack_row)
         self.assertIn("그 묶음 뒤에 끊는다", fmt)

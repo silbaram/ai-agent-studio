@@ -8,11 +8,11 @@ license: MIT
 
 재화가 어디서 얼마나 들어오고(수입), 무엇에 언제 쓰이며(지출), 판이 끝날 때 얼마나 남는지를 계산한다. 목적은 "보상을 올리면 상점 아이템을 몇 초 일찍 사나", "영구 강화 2단계는 몇 번째 판에 사나", "골드가 남아도나"를 감 대신 계산으로 답하는 것이다.
 
-계산은 **기대값**이다. 처치 수·드랍 횟수는 "한 판을 평범하게 깬 경우"의 가정이며, 실제 체감이나 재미를 판정하지 않는다.
+계산은 **기대값**이다(넣지 않는 것은 [한계](#한계)). [밸런스 공통 원칙](../studio-data/SKILL.md#밸런스-공통-원칙)을 따른다.
 
 ## 도구
 
-공용 스킬 [studio-data](../studio-data/SKILL.md)의 `studio.py`로 한다. 이 스킬과 함께 설치한다. 명령은 게임 프로젝트 폴더에서 Claude Code 설치 기준으로 적었다. Codex는 `.agents/skills/…`, Windows PowerShell은 `python3` 대신 `py`([실행 경로](../studio-data/SKILL.md#실행)).
+명령은 공용 스킬 [studio-data](../studio-data/SKILL.md)의 `studio.py`로 하고, Claude Code 설치 기준으로 적었다(다른 설치는 [실행](../studio-data/SKILL.md#실행)).
 
 | 명령 | 하는 일 |
 |---|---|
@@ -20,7 +20,7 @@ license: MIT
 | `… check . --table economy` | 단계 수입 표와 구매 계획 표(마크다운) |
 | `… view .` | 재화 흐름 탭: 단계별 수입(출처별), 구매 계획(목표 이탈·살 수 없음 강조), 남는 재화 |
 
-데이터는 `data/economy.json` 한 파일이다. 형식은 [references/economy-format.md](references/economy-format.md). 적 보상·드랍 테이블·아이템 가격은 [progression-economy](../progression-economy/SKILL.md)의 원본에서, 강화·합성 비용은 [crafting-balance](../crafting-balance/SKILL.md)에서 그대로 가져온다. 프로젝트 폴더(`check .`)로 검사해야 참조를 확인한다. 쓰는 데이터를 함께 넘기지 않으면 `INCOMPLETE`다.
+데이터는 `data/economy.json` 한 파일이다. 형식은 [references/economy-format.md](references/economy-format.md). 적 보상·드랍 테이블·아이템 가격은 [progression-economy](../progression-economy/SKILL.md)의 원본에서, 강화·합성 비용은 [crafting-balance](../crafting-balance/SKILL.md)에서 그대로 가져온다. 여러 파일에 적는 사실의 원본은 [같은 사실의 원본](../studio-data/references/data-rules.md#같은-사실의-원본).
 
 ## 절차
 
@@ -28,7 +28,7 @@ license: MIT
 
 `economy.currencies`에 재화를 적는다. 판이 끝나면 사라지는 재화(골드 등)와 판 사이에 남는 재화(`carry: true`, 메타 재화)를 구분한다. 처치 보상(`kill_reward`, 적 데이터 `reward`의 재화는 여기서 정한다), 드랍을 팔 때의 재화와 비율(`sell`), 가격 출처별 재화(`prices`: 아이템·강화·합성·영구 강화)를 정한다.
 
-메타 성장 시뮬레이터(`simulate`)의 설정 파일이 있으면 그 판 사이 재화에 `meta_config`로 이어 둔다. 시뮬레이터의 전투 계산 모델은 이 파일의 단계 수입과 구매 계획 순서를 그대로 읽을 수 있다(`economy` 연결, 구매 정책 `economy`). 한 판 수입과 영구 강화 구매 순서가 두 파일에서 다르면 경고한다.
+메타 성장 시뮬레이터(`simulate`)의 설정 파일이 있으면 그 판 사이 재화에 `meta_config`로 잇거나, 시뮬레이터가 이 파일을 원본으로 읽게 한다([메타 성장 설정과 맞춰 보기](references/economy-format.md#메타-성장-설정과-맞춰-보기-meta_config)).
 
 ### 2. 단계를 적는다
 
@@ -43,16 +43,7 @@ license: MIT
 
 ### 3. 구매 계획을 적는다
 
-플레이어가 보통 사는 순서대로 `purchases`에 적는다. 가격은 직접 적거나(`amount` + `currency`) 원본에서 가져온다.
-
-| 가격 | 적는 법 |
-|---|---|
-| 아이템 | `{"item": "iron_sword"}` → 아이템 `price` |
-| 강화 | `{"enhance": "weapon_plus", "level": 3, "from": 2}` → +2에서 +3까지의 기대 비용(`from` 기본 0) |
-| 합성 | `{"recipe": "forge_iron"}` → 합성 비용 ÷ 성공률(재료는 빼고 재화만) |
-| 영구 강화 | `{"upgrade": "weapon_1"}` → 영구 강화 `cost` |
-
-구매마다 `target`([최소, 최대])으로 의도한 시점을 적을 수 있다. 판 안 재화는 시간(`time_unit`), 판 사이 재화는 판 수다. 상점이나 제작대가 특정 단계부터 열리면 `after`에 그 단계를 적고, 단계 중간에 열리면 그 시각을 적는다. 그 전에는 돈이 있어도 사지 않는다.
+플레이어가 보통 사는 순서대로 `purchases`에 적는다. 가격은 직접 적거나 아이템·강화·합성·영구 강화의 원본에서 가져온다. 의도한 시점은 `target`에, 상점이나 제작대가 늦게 열리면 그 단계나 시각을 `after`에 적는다. 키는 [형식의 purchases](references/economy-format.md#purchases-사는-순서대로)에 있다.
 
 ### 4. 계산하고 읽는다
 
@@ -60,15 +51,13 @@ license: MIT
 python3 .claude/skills/studio-data/scripts/studio.py check . --table economy
 ```
 
-- **구매 시점**: 판 안 재화는 누적 수입이 (앞선 구매 + 이 구매)에 닿는 시점, `after`의 단계나 시각, 앞 구매 시점 중 가장 늦은 때. 단계 안에서는 고르게 들어온다고 본다.
-- `requirement_missing`: 영구 강화를 선행 조건보다 먼저 사는 계획이다. 순서를 고친다.
-- `duplicate_purchase`·`enhance_gap`: 같은 영구 강화를 두 번 사거나, 같은 강화의 단계를 건너뛰거나 겹쳐 사는 계획이다.
-- 시점이 "앞 구매를 계산하지 못해 미확인"이면 앞의 오류·미확인 구매부터 고친다. 그 재화는 남는 양도 내지 않는다.
-- **판 수**: 판 사이 재화는 (앞선 구매 + 이 구매) ÷ 한 판 수입을 올림한 값. 한 판을 끝까지 깬다고 가정한 최소값이다. 중간에 지는 판을 반영한 판 수는 메타 성장 시뮬레이터(`simulate`)로 본다. 두 결과를 비교하기 전에 `meta_income_differs`·`meta_order_differs`가 없는지 본다. 있으면 차이의 원인은 지는 판이 아니라 수입·순서 정의다.
-- `unaffordable`: 한 판 수입으로 살 수 없다. 구매 순서·가격·수입을 사용자와 정한다.
-- `target_out_of_range`: 의도한 시점을 벗어났다.
-- `currency_piles_up`: 판 끝에 남는 재화가 `leftover_max`(수입 대비 비율)를 넘는다. 쓸 곳이 모자라거나 수입이 많다.
-- 숫자를 손으로 맞춰 경고를 없애지 않는다. 한 번에 하나만 바꾸고 전·후 표를 남긴다.
+- `requirement_missing`·`duplicate_purchase`·`enhance_gap`: 살 수 없거나 겹치는 계획이다. 순서와 단계를 고친다.
+- 시점이 "앞 구매를 계산하지 못해 미확인"이면 앞의 오류·미확인 구매부터 고친다.
+- `unaffordable`·`target_out_of_range`: 구매 순서·가격·수입·목표 중 무엇을 고칠지 사용자와 정한다.
+- `currency_piles_up`: 쓸 곳이 모자라거나 수입이 많다.
+- 판 사이 재화의 판 수를 메타 성장 시뮬레이터의 판 수와 견주기 전에 [메타 성장 설정과 맞춰 보기](references/economy-format.md#메타-성장-설정과-맞춰-보기-meta_config)를 읽는다.
+
+구매 시점과 판 수의 계산은 [형식의 purchases](references/economy-format.md#purchases-사는-순서대로), 코드마다의 조건은 [검사 내용](references/economy-format.md#검사-내용)에 있다.
 
 ## 보고
 
@@ -82,10 +71,9 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --table economy
 ## 한계
 
 - 기대값만 낸다. 운에 따른 분산(드랍이 몰리거나 안 나오는 판)은 없다.
-- 판 사이 재화의 판 수는 매 판을 끝까지 깬다고 본 최소값이다.
 - 합성 가격은 재화 비용만 센다. 재료 아이템을 사는 비용은 따로 구매로 적는다.
 - 드랍 판매 기대값은 희귀도 칸이면 그 희귀도 아이템 가격의 평균이다(천장은 반영하지 않는다).
-- 단계 안에서는 수입이 고르게 들어온다고 본다. 라운드 사이에만 사는 게임은 `purchase_timing: "stage_end"`를 적는다. 구매가 돈이 모인 단계의 끝으로 옮겨지고 그 장비는 다음 단계부터 쓴다.
-- 단계의 누적은 적은 순서대로 지난다고 본다. 스테이지를 골라서 하는 게임은 대표 경로 하나를 순서로 적는다. 어려움 등급을 전투 단계로 나눈 게임도 대표 등급 하나만 적는다.
+- 단계 안에서는 수입이 고르게 들어온다고 본다. 라운드 사이에만 사는 게임의 `purchase_timing`은 [게임 형태별](../level-design/references/game-shapes.md#라운드로-나뉜-게임의-단계)대로 적는다.
+- 단계의 누적은 적은 순서대로 지난다고 본다. 스테이지를 골라서 하는 게임은 대표 경로 하나를 순서로 적는다([게임 형태별](../level-design/references/game-shapes.md#스테이지-선택형)).
 
 예시: `studio-data/assets/sample-project/data/economy.json` (실제 게임 수치가 아니다).

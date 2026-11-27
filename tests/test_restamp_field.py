@@ -141,6 +141,7 @@ class GameValues316(unittest.TestCase):
         rule = (ROOT / "skills/numeric-provenance/SKILL.md").read_text(encoding="utf-8")
         self.assertIn("게임 수치를 `test`에 옮겨 적지 않는다", brief)
         self.assertIn("빌드 id", rule)
+        self.assertIn("brief.md#가설-hypotheses-1개-이상", rule)   # 정리 B: 원본은 concept-exploration/references/brief.md
 
 
 class BriefSources317(unittest.TestCase):
@@ -194,7 +195,7 @@ class BriefSources317(unittest.TestCase):
         self.assertEqual([e for e in r["errors"] if e["code"] == "provenance"], [])
 
     def test_brief_sources_are_documented_317(self):
-        rule = (ROOT / "skills/numeric-provenance/SKILL.md").read_text(encoding="utf-8")
+        rule = (ROOT / "skills/numeric-provenance/references/check.md").read_text(encoding="utf-8")   # 정리 B: 검사기 조건의 원본은 numeric-provenance/references/check.md
         self.assertIn("브리프의 `[계산]`·`[측정]` 출처", rule)
 
 
