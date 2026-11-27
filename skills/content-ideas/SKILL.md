@@ -64,7 +64,7 @@ license: MIT
 
 ### 5. 가르고 넘긴다
 
-**브리프를 먼저 맞춘다.** 범위는 1단계에서 정한 대로 [concept-exploration](../concept-exploration/SKILL.md)에서 고친다. 고른 벌이 필러를 바꾸면 사용자에게 묻는다. 필러 이름을 바꾸면 `design/systems.json`의 `pillars`도 함께 고친다. OpenSpec을 쓰면 [scope-guard](../scope-guard/SKILL.md)가 그 변경을 본다. 그다음 고른 벌을 넷으로 가른다. 무거운 검증 길은 첫째에만 쓴다.
+**브리프를 먼저 맞춘다.** 범위는 1단계에서 정한 대로 [concept-exploration](../concept-exploration/SKILL.md)에서 고친다. 고른 벌이 필러를 바꾸면 사용자에게 묻는다. 필러 이름을 바꾸면 `design/systems.json`의 `pillars`도 함께 고친다. 그다음 고른 벌을 넷으로 가른다. 무거운 검증 길은 첫째에만 쓴다.
 
 1. **필러를 건드리는 주장.** 플레이어가 이렇게 할 것이라는 주장이고, 필러가 거기에 기대며, 틀리면 이 내용을 다시 짜야 하는 것이다. 예: "직업마다 고르는 이유가 다르다". 브리프에 이미 있는 가설이 같은 행동을 보면 새 가설을 만들지 않고 그 가설로 시험한다. 없을 때만 [가설의 모양](../concept-exploration/references/brief.md#가설-hypotheses-1개-이상)대로, '재미가 무너지는 주장만 가설로 삼는다'를 지켜 더하자고 사용자에게 묻는다. 여럿이면 가장 위험한 하나부터 권한다.
 2. **새 규칙.** [system-design](../system-design/SKILL.md)의 `rules`로 옮긴다.
