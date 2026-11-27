@@ -150,7 +150,7 @@ python3 .claude/skills/studio-data/scripts/studio.py calibrate data/meta_combat.
 
 - 기록의 값을 그대로 옮긴 값은 측정값이다: `{"kind": "measured", "source": "data/playtests.json#세션 id"}`.
 - 여러 세션의 평균이나 `calibrate`의 제안은 계산값이다: `{"kind": "computed", "source": "reports/calibrate.json"}`. `--out`으로 저장한 파일을 출처로 쓴다.
-- 시뮬레이터 설정은 최상위 `provenance`에 적는다. 그러면 `simulate`의 주의 문구가 "보정값"과 그 출처로 바뀌고, `check --fail-on-assumed`의 게이트에서 빠진다(출처가 가정이거나 비어 있거나, `simulate`가 거부할 형식이거나, 파일이 깨져 읽지 못한 시뮬레이터 설정은 게이트가 실패시킨다).
+- 시뮬레이터 설정은 최상위 `provenance`에 적는다. 그러면 `simulate`의 주의 문구가 "보정값"과 그 출처로 바뀌고, `check --fail-on-assumed`의 게이트에서 빠진다(그래도 실패하는 설정은 [studio-data의 '실행'](../../studio-data/SKILL.md#실행)).
 - 기획 목표(전투 계산의 목표 범위, 재화 흐름의 `target` 등)는 측정값으로 바꾸지 않는다. 의도이기 때문이다.
 
 ## 한계
