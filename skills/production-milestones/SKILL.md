@@ -54,7 +54,7 @@ python3 .claude/skills/studio-data/scripts/studio.py check . --fail-on-assumed
 
 - `design/systems.json`의 MVP 시스템마다 본 게임에서 그것을 만든 곳(OpenSpec 변경 이름이나 코드 경로)을 적는다. 찾지 못하면 `[?]`다. production.md의 '가설 없이 만드는 MVP 시스템'도 같이 본다.
 - 플레이 기록의 gate 줄이 [넘어갈 준비](../production-handoff/SKILL.md#1-넘어갈-준비가-됐는지-본다)의 첫 두 줄을 지킨다. 이제는 `_main` 가설도 남지 않는다. 숫자의 `[가정]` 줄은 거기서처럼 조건이 아니고 3단계에서 다듬는다.
-- 가설에 `(데이터 지문 없음)`이나 `(플레이 때 지문 없음)`이 붙었으면 [지문 없는 판정](references/content-growth.md#지문-없는-판정)을, `(데이터 바뀜)`이면 [낡은 판정 풀기](references/content-growth.md#낡은-판정-풀기)를 따른다.
+- 가설에 `(데이터 지문 없음)`이나 `(플레이 때 지문 없음)`이 붙었으면 [지문 없는 판정](references/content-growth.md#지문-없는-판정)을, `(데이터 바뀜)`이나 `(플레이한 데이터와 다름)`이면 [낡은 판정 풀기](references/content-growth.md#낡은-판정-풀기)를 따른다.
 
 ### 2. 콘텐츠를 늘린다
 

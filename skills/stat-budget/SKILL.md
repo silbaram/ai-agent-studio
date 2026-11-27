@@ -45,7 +45,7 @@ license: MIT
 
 ### 3. 벗어난 항목을 읽는다
 
-- `over_budget` / `under_budget`: 의도한 예외(초반 함정 아이템, 특수한 정예)면 사용자가 확인한 뒤 **그 항목의** `acknowledged`에 적는다. 사용자가 그 값을 정했거나 경고 처리를 맡겼으면 확인으로 본다. 이유의 꼴은 [studio-data의 '확인한 경고'](../studio-data/SKILL.md#실행)를 따르고, 확인한 것을 보고한다.
+- `over_budget` / `under_budget`: 의도한 예외(초반 함정 아이템, 특수한 정예)면 사용자가 확인한 뒤 **그 항목의** `acknowledged`에 적는다. 이유의 꼴은 [studio-data의 '확인한 경고'](../studio-data/SKILL.md#실행)를 따르고, 확인한 것을 보고한다.
 - `stat_without_cost`: 원가를 정하거나, 예산 밖 효과라면 그 항목에 `unique_effect: true`를 붙인다(비교에서 빠진다).
 
 코드마다의 조건은 [검사 내용](references/budget-format.md#검사-내용), 비교하지 않는 항목은 [비교 규칙](references/budget-format.md#비교-규칙)에 있다.
